@@ -63,6 +63,8 @@ export default function FeedInventoryTab({
   const [subView, setSubView] = useState<'balances' | 'products' | 'transactions'>('balances');
   const [searchQuery, setSearchQuery] = useState('');
   const [categoryFilter, setCategoryFilter] = useState('');
+  const [txTypeFilter, setTxTypeFilter] = useState<'ALL' | 'STOCK_IN' | 'STOCK_OUT'>('ALL');
+  const [batchFilter, setBatchFilter] = useState('');
   const [balanceViewMode, setBalanceViewMode] = useState<'consolidated' | 'specific_batch'>('specific_batch');
 
   // Pagination States for SubViews
@@ -75,12 +77,16 @@ export default function FeedInventoryTab({
   const [txPage, setTxPage] = useState(1);
   const [txPageSize, setTxPageSize] = useState(10);
 
+  // Date Range Filter State for Movement Ledger
+  const [startDate, setStartDate] = useState('');
+  const [endDate, setEndDate] = useState('');
+
   // Reset page when filters change
   React.useEffect(() => {
     setBalancePage(1);
     setProductPage(1);
     setTxPage(1);
-  }, [searchQuery, categoryFilter, selectedFarm, balanceViewMode, balancePageSize, productPageSize, txPageSize]);
+  }, [searchQuery, categoryFilter, txTypeFilter, batchFilter, selectedFarm, balanceViewMode, balancePageSize, productPageSize, txPageSize, startDate, endDate]);
 
   // Modal States
   const [isProductModalOpen, setIsProductModalOpen] = useState(false);
@@ -277,7 +283,16 @@ export default function FeedInventoryTab({
       b.farmLocation.toLowerCase().includes(q) ||
       (b.activeBatchName && b.activeBatchName.toLowerCase().includes(q));
     const matchesCategory = !categoryFilter || products.find(p => p.id === b.productId)?.category === categoryFilter;
-    return matchesSearch && matchesCategory;
+
+    let matchesBatch = true;
+    if (batchFilter) {
+      const bq = batchFilter.toLowerCase().trim();
+      const batchName = b.activeBatchName ? b.activeBatchName.toLowerCase() : '';
+      const batchesList = b.activeBatches ? b.activeBatches.map(x => x.toLowerCase()) : [];
+      matchesBatch = batchName.includes(bq) || batchesList.some(x => x.includes(bq));
+    }
+
+    return matchesSearch && matchesCategory && matchesBatch;
   });
 
   const filteredProducts = products.filter(p => {
@@ -287,18 +302,27 @@ export default function FeedInventoryTab({
     return matchesSearch && matchesCategory;
   });
 
-  // Date Range Filter State for Movement Ledger
-  const [startDate, setStartDate] = useState('');
-  const [endDate, setEndDate] = useState('');
-
   const filteredTransactions = transactions.filter(t => {
     const q = searchQuery.toLowerCase().trim();
     const matchesSearch = !q || 
       t.productName.toLowerCase().includes(q) || 
       (t.sourceFarm && t.sourceFarm.toLowerCase().includes(q)) || 
       (t.targetFarm && t.targetFarm.toLowerCase().includes(q)) ||
-      (t.referenceNo && t.referenceNo.toLowerCase().includes(q));
+      (t.referenceNo && t.referenceNo.toLowerCase().includes(q)) ||
+      (t.notes && t.notes.toLowerCase().includes(q));
+
     const matchesFarm = !effectiveFarm || t.sourceFarm === effectiveFarm || t.targetFarm === effectiveFarm;
+    const matchesTxType = txTypeFilter === 'ALL' || t.type === txTypeFilter;
+    const matchesCategory = !categoryFilter || products.find(p => p.id === t.productId)?.category === categoryFilter;
+
+    let matchesBatch = true;
+    if (batchFilter) {
+      const bq = batchFilter.toLowerCase().trim();
+      const tBatchId = (t as any).targetBatchId ? (t as any).targetBatchId.toLowerCase() : '';
+      const tBatchName = (t as any).targetBatchName ? (t as any).targetBatchName.toLowerCase() : '';
+      const tNotes = t.notes ? t.notes.toLowerCase() : '';
+      matchesBatch = tBatchId.includes(bq) || tBatchName.includes(bq) || tNotes.includes(bq);
+    }
 
     let matchesDate = true;
     if (t.date) {
@@ -307,7 +331,7 @@ export default function FeedInventoryTab({
       if (endDate && txDate > endDate) matchesDate = false;
     }
 
-    return matchesSearch && matchesFarm && matchesDate;
+    return matchesSearch && matchesFarm && matchesTxType && matchesBatch && matchesCategory && matchesDate;
   });
 
   // Paginated Slices
@@ -506,9 +530,9 @@ export default function FeedInventoryTab({
           </button>
         </div>
 
-        {/* Search & Category Filter */}
-        <div className="flex items-center gap-2">
-          <div className="relative w-64">
+        {/* Search & Category & Type & Batch Filter */}
+        <div className="flex flex-wrap items-center gap-2">
+          <div className="relative w-56">
             <Search className="absolute left-3 top-2.5 h-3.5 w-3.5 text-slate-400" />
             <Input
               placeholder="Search feed product / farm..."
@@ -517,7 +541,8 @@ export default function FeedInventoryTab({
               className="h-9 pl-9 text-xs font-semibold rounded-xl bg-white border border-slate-200"
             />
           </div>
-          <div className="flex items-center gap-1.5">
+          <div className="flex flex-wrap items-center gap-1.5">
+            {/* Feed Category / Type filter */}
             <select
               value={categoryFilter}
               onChange={e => setCategoryFilter(e.target.value)}
@@ -528,6 +553,53 @@ export default function FeedInventoryTab({
                 <option key={c} value={c}>{c}</option>
               ))}
             </select>
+
+            {/* Movement Type Filter (for Movement Ledger) */}
+            {subView === 'transactions' && (
+              <select
+                value={txTypeFilter}
+                onChange={e => setTxTypeFilter(e.target.value as 'ALL' | 'STOCK_IN' | 'STOCK_OUT')}
+                className="h-9 rounded-xl border border-slate-200 bg-white px-3 text-xs font-bold text-slate-700 focus:outline-none cursor-pointer"
+              >
+                <option value="ALL">🔄 All Types</option>
+                <option value="STOCK_IN">📥 Stock In (នាំចូល)</option>
+                <option value="STOCK_OUT">📤 Stock Out (ប្រើប្រាស់)</option>
+              </select>
+            )}
+
+            {/* Batch Filter (for Movement Ledger & Balances) */}
+            {(subView === 'transactions' || subView === 'balances') && (
+              <select
+                value={batchFilter}
+                onChange={e => setBatchFilter(e.target.value)}
+                className="h-9 rounded-xl border border-slate-200 bg-white px-3 text-xs font-bold text-slate-700 focus:outline-none cursor-pointer"
+              >
+                <option value="">🎯 All Batches (គ្រប់ក្រុមគោ)</option>
+                {(data.batches || []).map(b => (
+                  <option key={b.id} value={b.name}>{b.id} - {b.name}</option>
+                ))}
+              </select>
+            )}
+
+            {/* Reset Filters */}
+            {(searchQuery || categoryFilter || txTypeFilter !== 'ALL' || batchFilter || startDate || endDate) && (
+              <button
+                type="button"
+                onClick={() => {
+                  setSearchQuery('');
+                  setCategoryFilter('');
+                  setTxTypeFilter('ALL');
+                  setBatchFilter('');
+                  setStartDate('');
+                  setEndDate('');
+                }}
+                className="h-9 px-3 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-slate-600 font-bold text-xs flex items-center gap-1 cursor-pointer transition-colors shadow-2xs"
+                title="Reset All Filters"
+              >
+                ✕ Reset
+              </button>
+            )}
+
             {hasPermission(currentUser, 'feed_manage') && (
               <button
                 type="button"
