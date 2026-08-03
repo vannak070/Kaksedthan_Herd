@@ -42,6 +42,19 @@ export const BatchModal: React.FC<BatchModalProps> = ({
   const [selectedCowIds, setSelectedCowIds] = useState<string[]>([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
+  // Unassigned Cows Filtering States
+  const [searchQuery, setSearchQuery] = useState('');
+  const [breedFilter, setBreedFilter] = useState('');
+  const [sexFilter, setSexFilter] = useState('');
+
+  const filteredUnassignedCows = unassignedCows.filter(cow => {
+    const q = searchQuery.toLowerCase().trim();
+    const matchesSearch = !q || cow.id.toLowerCase().includes(q) || cow.breed.toLowerCase().includes(q);
+    const matchesBreed = !breedFilter || cow.breed === breedFilter;
+    const matchesSex = !sexFilter || (cow.sex && cow.sex.toLowerCase().trim() === sexFilter.toLowerCase().trim());
+    return matchesSearch && matchesBreed && matchesSex;
+  });
+
   useEffect(() => {
     if (isOpen) {
       if (initialBatch) {
@@ -284,9 +297,38 @@ export const BatchModal: React.FC<BatchModalProps> = ({
                 </span>
               </div>
 
+              {/* Search & Breed & Sex Filter Bar */}
+              <div className="grid grid-cols-3 gap-2 pb-1">
+                <Input
+                  placeholder="Search ID / breed..."
+                  value={searchQuery}
+                  onChange={e => setSearchQuery(e.target.value)}
+                  className="h-7 text-xs"
+                />
+                <select
+                  value={breedFilter}
+                  onChange={e => setBreedFilter(e.target.value)}
+                  className="h-7 rounded-lg border border-slate-200 bg-white px-2 text-xs font-bold text-slate-700 focus:outline-none cursor-pointer"
+                >
+                  <option value="">🐄 All Breeds</option>
+                  {Array.from(new Set(unassignedCows.map(c => c.breed).filter(Boolean))).map(b => (
+                    <option key={b} value={b}>{b}</option>
+                  ))}
+                </select>
+                <select
+                  value={sexFilter}
+                  onChange={e => setSexFilter(e.target.value)}
+                  className="h-7 rounded-lg border border-slate-200 bg-white px-2 text-xs font-bold text-slate-700 focus:outline-none cursor-pointer"
+                >
+                  <option value="">🚻 All Sexes</option>
+                  <option value="M">Male (M / ឈ្មោល)</option>
+                  <option value="F">Female (F / ញី)</option>
+                </select>
+              </div>
+
               <div className="max-h-40 overflow-y-auto space-y-1.5 border border-slate-200 p-2 rounded-xl bg-slate-50/50">
-                {unassignedCows.length > 0 ? (
-                  unassignedCows.map(cow => {
+                {filteredUnassignedCows.length > 0 ? (
+                  filteredUnassignedCows.map(cow => {
                     const isChecked = selectedCowIds.includes(cow.id);
                     return (
                       <div
@@ -300,7 +342,7 @@ export const BatchModal: React.FC<BatchModalProps> = ({
                       >
                         <div>
                           <span className="font-black text-slate-800">{cow.id}</span>
-                          <span className="ml-2 text-slate-500">{cow.breed} • {cow.weight} kg</span>
+                          <span className="ml-2 text-slate-500">{cow.breed} • {cow.weight} kg • {cow.sex}</span>
                         </div>
                         {isChecked && <CheckCircle2 className="h-4 w-4 text-emerald-600" />}
                       </div>
@@ -308,7 +350,7 @@ export const BatchModal: React.FC<BatchModalProps> = ({
                   })
                 ) : (
                   <p className="text-xs text-center text-slate-400 py-6 font-medium">
-                    គ្មានគោទំនេរដាច់ដោយឡែកក្នុងស្តុកឡើយ។
+                    {unassignedCows.length === 0 ? 'គ្មានគោទំនេរដាច់ដោយឡែកក្នុងស្តុកឡើយ។' : 'មិនមានគោត្រូវនឹងការតម្រងឡើយ (No cows match filter).'}
                   </p>
                 )}
               </div>

@@ -158,6 +158,7 @@ export default function BatchTab({
   // Search/Filters for unallocated cows
   const [searchUnassigned, setSearchUnassigned] = useState('');
   const [breedFilter, setBreedFilter] = useState('');
+  const [sexFilter, setSexFilter] = useState('');
   const [filterFarm, setFilterFarm] = useState('');
   const [selectedCowIds, setSelectedCowIds] = useState<string[]>([]);
   const [isInitializingHerd, setIsInitializingHerd] = useState(false);
@@ -259,8 +260,9 @@ export default function BatchTab({
       cow.breed.toLowerCase().includes(query) ||
       cow.location.toLowerCase().includes(query);
     const matchesBreed = !breedFilter || cow.breed === breedFilter;
+    const matchesSex = !sexFilter || (cow.sex && cow.sex.toLowerCase().trim() === sexFilter.toLowerCase().trim());
     const matchesFarm = !filterFarm || cow.location === filterFarm;
-    return matchesSearch && matchesBreed && matchesFarm;
+    return matchesSearch && matchesBreed && matchesSex && matchesFarm;
   });
 
   const handleSelectAllFiltered = () => {
@@ -1073,7 +1075,7 @@ export default function BatchTab({
                     <p className="text-[10px] text-slate-400 mt-0.5">Select unassigned active stock cows to put on fattening</p>
                   </div>
 
-                  <div className={`grid grid-cols-1 ${!currentUser?.farmLocation ? 'sm:grid-cols-3' : 'sm:grid-cols-2'} gap-2`}>
+                  <div className={`grid grid-cols-1 ${!currentUser?.farmLocation ? 'sm:grid-cols-4' : 'sm:grid-cols-3'} gap-2`}>
                     {/* Farm / Branch filter — only for Admin / Super Admin */}
                     {!currentUser?.farmLocation && (
                       <select
@@ -1107,6 +1109,16 @@ export default function BatchTab({
                       {(data.settings.breeds || []).map(b => (
                         <option key={b} value={b}>{b}</option>
                       ))}
+                    </select>
+                    {/* Sex filter */}
+                    <select
+                      value={sexFilter}
+                      onChange={e => setSexFilter(e.target.value)}
+                      className="h-8 rounded-xl border border-slate-200 bg-white px-2 text-xs font-bold text-slate-700 focus:outline-none cursor-pointer"
+                    >
+                      <option value="">🚻 All Sexes</option>
+                      <option value="M">Male (M / ឈ្មោល)</option>
+                      <option value="F">Female (F / ញី)</option>
                     </select>
                   </div>
 
