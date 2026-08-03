@@ -54,6 +54,7 @@ export default function InventoryTable({
 
   const [search, setSearch] = useState('');
   const [selectedBreed, setSelectedBreed] = useState('All');
+  const [selectedSex, setSelectedSex] = useState('All');
   const [selectedStatus, setSelectedStatus] = useState<'Active' | 'Sold' | 'All'>('Active');
   const [selectedFarm, setSelectedFarm] = useState<string | null>(null);
 
@@ -91,6 +92,12 @@ export default function InventoryTable({
     return ['All', ...new Set(farmFilteredStock.map(item => item.breed).filter(Boolean))];
   }, [farmFilteredStock]);
 
+  // Extract unique sexes from stock for filtering
+  const uniqueSexes = React.useMemo(() => {
+    const set = new Set(farmFilteredStock.map(item => item.sex).filter(Boolean));
+    return ['All', ...Array.from(set)];
+  }, [farmFilteredStock]);
+
   // Sort stock: Latest purchase date first, then highest ID first (latest registration)
   const sortedStock = React.useMemo(() => {
     return [...statusFilteredStock].sort((a, b) => {
@@ -108,6 +115,7 @@ export default function InventoryTable({
         (item.ownerName && item.ownerName.toLowerCase().includes(search.toLowerCase())) ||
         (item.location && item.location.toLowerCase().includes(search.toLowerCase()));
       const matchesBreed = selectedBreed === 'All' || item.breed === selectedBreed;
+      const matchesSex = selectedSex === 'All' || (item.sex && item.sex.toLowerCase().trim() === selectedSex.toLowerCase().trim());
 
       // Date Range Filter Check
       let matchesDate = true;
@@ -118,14 +126,14 @@ export default function InventoryTable({
         if (endDate && itemDate > endDate) matchesDate = false;
       }
 
-      return matchesSearch && matchesBreed && matchesDate;
+      return matchesSearch && matchesBreed && matchesSex && matchesDate;
     });
-  }, [sortedStock, search, selectedBreed, startDate, endDate]);
+  }, [sortedStock, search, selectedBreed, selectedSex, startDate, endDate]);
 
   // Reset page when filters change
   useEffect(() => {
     setCurrentPage(1);
-  }, [search, selectedBreed, selectedStatus, selectedFarm, startDate, endDate, pageSize]);
+  }, [search, selectedBreed, selectedSex, selectedStatus, selectedFarm, startDate, endDate, pageSize]);
 
   // Compute pagination bounds
   const indexOfLastRow = currentPage * pageSize;
@@ -269,19 +277,37 @@ export default function InventoryTable({
             </select>
           </div>
 
+          {/* Sex Filter Dropdown */}
+          <div className="flex items-center gap-2">
+            <span className="text-xs text-emerald-700 font-extrabold uppercase tracking-wider">Sex:</span>
+            <select
+              value={selectedSex}
+              onChange={(e) => setSelectedSex(e.target.value)}
+              className="bg-white border border-slate-200 rounded-xl text-xs py-1.5 px-3 text-slate-700 font-bold focus:outline-none focus:ring-2 focus:ring-emerald-500/10 focus:border-emerald-500 cursor-pointer"
+            >
+              <option value="All">All Sexes (ទាំងអស់)</option>
+              {uniqueSexes.filter(s => s !== 'All').map(s => (
+                <option key={s} value={s}>
+                  {s === 'M' || s.toLowerCase() === 'male' ? 'Male (M / ឈ្មោល)' : s === 'F' || s.toLowerCase() === 'female' ? 'Female (F / ញី)' : s}
+                </option>
+              ))}
+            </select>
+          </div>
+
           {/* Reset Filters */}
-          {(search || selectedBreed !== 'All' || selectedStatus !== 'Active' || startDate || endDate) && (
+          {(search || selectedBreed !== 'All' || selectedSex !== 'All' || selectedStatus !== 'Active' || startDate || endDate) && (
             <Button
               variant="outline"
               size="sm"
               onClick={() => {
                 setSearch('');
                 setSelectedBreed('All');
+                setSelectedSex('All');
                 setSelectedStatus('Active');
                 setStartDate('');
                 setEndDate('');
               }}
-              className="h-8 text-xs gap-1 rounded-xl border-slate-200"
+              className="h-8 text-xs gap-1 rounded-xl border-slate-200 cursor-pointer"
             >
               <RefreshCcw className="h-3 w-3" /> Reset
             </Button>
