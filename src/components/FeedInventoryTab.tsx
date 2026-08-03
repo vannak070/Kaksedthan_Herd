@@ -501,52 +501,55 @@ export default function FeedInventoryTab({
         </div>
       </div>
 
-      {/* Sub Navigation Tabs */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div className="flex bg-slate-100 p-1.5 rounded-2xl border border-slate-200 text-xs font-bold w-fit">
+      {/* Sub Navigation Tabs & Responsive Filter Bar */}
+      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3">
+        <div className="flex overflow-x-auto bg-slate-100/90 p-1.5 rounded-2xl border border-slate-200 text-xs font-bold w-full lg:w-auto scrollbar-none">
           <button
             onClick={() => setSubView('balances')}
-            className={`px-4 py-2 rounded-xl transition-all cursor-pointer ${
-              subView === 'balances' ? 'bg-white text-emerald-700 shadow-xs' : 'text-slate-500 hover:text-slate-800'
+            className={`px-3.5 py-2 rounded-xl transition-all cursor-pointer whitespace-nowrap shrink-0 ${
+              subView === 'balances' ? 'bg-white text-emerald-700 shadow-xs font-black' : 'text-slate-500 hover:text-slate-800'
             }`}
           >
-            ⚖️ Stock Balance & On-Hand ({filteredBalances.length})
+            ⚖️ Stock Balance ({filteredBalances.length})
           </button>
           <button
             onClick={() => setSubView('products')}
-            className={`px-4 py-2 rounded-xl transition-all cursor-pointer ${
-              subView === 'products' ? 'bg-white text-emerald-700 shadow-xs' : 'text-slate-500 hover:text-slate-800'
+            className={`px-3.5 py-2 rounded-xl transition-all cursor-pointer whitespace-nowrap shrink-0 ${
+              subView === 'products' ? 'bg-white text-emerald-700 shadow-xs font-black' : 'text-slate-500 hover:text-slate-800'
             }`}
           >
-            📦 Product Catalog ({products.length})
+            📦 Product Master ({products.length})
           </button>
           <button
             onClick={() => setSubView('transactions')}
-            className={`px-4 py-2 rounded-xl transition-all cursor-pointer ${
-              subView === 'transactions' ? 'bg-white text-emerald-700 shadow-xs' : 'text-slate-500 hover:text-slate-800'
+            className={`px-3.5 py-2 rounded-xl transition-all cursor-pointer whitespace-nowrap shrink-0 ${
+              subView === 'transactions' ? 'bg-white text-emerald-700 shadow-xs font-black' : 'text-slate-500 hover:text-slate-800'
             }`}
           >
-            📊 Movement Ledger & Reports ({filteredTransactions.length})
+            📊 Movement Ledger ({filteredTransactions.length})
           </button>
         </div>
 
-        {/* Search & Category & Type & Batch Filter */}
-        <div className="flex flex-wrap items-center gap-2">
-          <div className="relative w-56">
+        {/* Responsive Search & Category & Type & Batch Filter Bar */}
+        <div className="w-full lg:w-auto flex flex-col sm:flex-row sm:items-center gap-2 bg-slate-50/80 p-2 rounded-2xl border border-slate-200/70 shadow-2xs">
+          {/* Search Input */}
+          <div className="relative w-full sm:w-52 shrink-0">
             <Search className="absolute left-3 top-2.5 h-3.5 w-3.5 text-slate-400" />
             <Input
-              placeholder="Search feed product / farm..."
+              placeholder="Search product / ref..."
               value={searchQuery}
               onChange={e => setSearchQuery(e.target.value)}
-              className="h-9 pl-9 text-xs font-semibold rounded-xl bg-white border border-slate-200"
+              className="h-9 pl-8 text-xs font-semibold rounded-xl bg-white border border-slate-200"
             />
           </div>
-          <div className="flex flex-wrap items-center gap-1.5">
+
+          {/* Filter Dropdowns Grid */}
+          <div className="grid grid-cols-2 sm:flex sm:items-center gap-1.5 w-full sm:w-auto">
             {/* Feed Category / Type filter */}
             <select
               value={categoryFilter}
               onChange={e => setCategoryFilter(e.target.value)}
-              className="h-9 rounded-xl border border-slate-200 bg-white px-3 text-xs font-bold text-slate-700 focus:outline-none cursor-pointer"
+              className="h-9 w-full sm:w-auto rounded-xl border border-slate-200 bg-white px-2.5 text-xs font-bold text-slate-700 focus:outline-none cursor-pointer"
             >
               <option value="">🌾 All Categories</option>
               {(data.settings?.feedTypes || ['Concentrate', 'Silage', 'Roughage', 'Supplement', 'Medicine']).map(c => (
@@ -559,11 +562,11 @@ export default function FeedInventoryTab({
               <select
                 value={txTypeFilter}
                 onChange={e => setTxTypeFilter(e.target.value as 'ALL' | 'STOCK_IN' | 'STOCK_OUT')}
-                className="h-9 rounded-xl border border-slate-200 bg-white px-3 text-xs font-bold text-slate-700 focus:outline-none cursor-pointer"
+                className="h-9 w-full sm:w-auto rounded-xl border border-slate-200 bg-white px-2.5 text-xs font-bold text-slate-700 focus:outline-none cursor-pointer"
               >
                 <option value="ALL">🔄 All Types</option>
-                <option value="STOCK_IN">📥 Stock In (នាំចូល)</option>
-                <option value="STOCK_OUT">📤 Stock Out (ប្រើប្រាស់)</option>
+                <option value="STOCK_IN">📥 Stock In</option>
+                <option value="STOCK_OUT">📤 Stock Out</option>
               </select>
             )}
 
@@ -572,44 +575,46 @@ export default function FeedInventoryTab({
               <select
                 value={batchFilter}
                 onChange={e => setBatchFilter(e.target.value)}
-                className="h-9 rounded-xl border border-slate-200 bg-white px-3 text-xs font-bold text-slate-700 focus:outline-none cursor-pointer"
+                className="h-9 w-full sm:w-auto rounded-xl border border-slate-200 bg-white px-2.5 text-xs font-bold text-slate-700 focus:outline-none cursor-pointer max-w-[150px] truncate"
               >
-                <option value="">🎯 All Batches (គ្រប់ក្រុមគោ)</option>
+                <option value="">🎯 All Batches</option>
                 {(data.batches || []).map(b => (
                   <option key={b.id} value={b.name}>{b.id} - {b.name}</option>
                 ))}
               </select>
             )}
 
-            {/* Reset Filters */}
-            {(searchQuery || categoryFilter || txTypeFilter !== 'ALL' || batchFilter || startDate || endDate) && (
-              <button
-                type="button"
-                onClick={() => {
-                  setSearchQuery('');
-                  setCategoryFilter('');
-                  setTxTypeFilter('ALL');
-                  setBatchFilter('');
-                  setStartDate('');
-                  setEndDate('');
-                }}
-                className="h-9 px-3 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-slate-600 font-bold text-xs flex items-center gap-1 cursor-pointer transition-colors shadow-2xs"
-                title="Reset All Filters"
-              >
-                ✕ Reset
-              </button>
-            )}
+            {/* Action Buttons: Reset & Settings */}
+            <div className="flex items-center gap-1.5 justify-end col-span-2 sm:col-span-1">
+              {(searchQuery || categoryFilter || txTypeFilter !== 'ALL' || batchFilter || startDate || endDate) && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSearchQuery('');
+                    setCategoryFilter('');
+                    setTxTypeFilter('ALL');
+                    setBatchFilter('');
+                    setStartDate('');
+                    setEndDate('');
+                  }}
+                  className="h-9 px-3 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-slate-600 font-bold text-xs flex items-center gap-1 cursor-pointer transition-colors shadow-2xs whitespace-nowrap"
+                  title="Reset All Filters"
+                >
+                  ✕ Reset
+                </button>
+              )}
 
-            {hasPermission(currentUser, 'feed_manage') && (
-              <button
-                type="button"
-                onClick={() => setIsCategoryModalOpen(true)}
-                className="h-9 px-2.5 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-slate-600 font-bold text-xs flex items-center gap-1 cursor-pointer transition-colors shadow-2xs"
-                title="Manage Feed Categories"
-              >
-                <Settings className="h-3.5 w-3.5 text-slate-500" />
-              </button>
-            )}
+              {hasPermission(currentUser, 'feed_manage') && (
+                <button
+                  type="button"
+                  onClick={() => setIsCategoryModalOpen(true)}
+                  className="h-9 px-2.5 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-slate-600 font-bold text-xs flex items-center gap-1 cursor-pointer transition-colors shadow-2xs shrink-0"
+                  title="Manage Feed Categories"
+                >
+                  <Settings className="h-3.5 w-3.5 text-slate-500" />
+                </button>
+              )}
+            </div>
           </div>
         </div>
       </div>
