@@ -18,6 +18,10 @@ export interface StockItem {
   purchaseType?: string;
   paymentMethod?: string;
   imageUrl?: string;
+  purpose?: 'Fattening' | 'Breeding Dam' | 'Breeding Bull' | 'Calf';
+  damId?: string;
+  sireId?: string;
+  breedingStatus?: 'Open' | 'Inseminated' | 'Confirmed Pregnant' | 'Lactating' | 'Resting';
 }
 
 export interface WeightRecord {

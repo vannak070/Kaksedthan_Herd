@@ -44,6 +44,8 @@ import SettingsTab from './SettingsTab';
 import FarmsTab from './FarmsTab';
 import CowDetails from './CowDetails';
 import QuickEntryModal from './QuickEntryModal';
+import BreedingTab from './BreedingTab';
+import FatteningTab from './FatteningTab';
 import { ERPLivestockData, FeedProductItem, FeedStockTransaction } from '@/lib/types';
 import { SalesRecord } from '@/lib/xlsx-parser';
 import { hasPermission } from '@/lib/utils';
@@ -56,6 +58,23 @@ interface DashboardContainerProps {
 export default function DashboardContainer({ initialData }: DashboardContainerProps) {
   const queryClient = useQueryClient();
   const [activeTab, setActiveTab] = useState<ActiveTabType>('dashboard');
+
+  // Deep linking URL query parameter handler for mobile QR code scans
+  React.useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const params = new URLSearchParams(window.location.search);
+      const tabParam = params.get('tab');
+      const idParam = params.get('id');
+
+      if (tabParam) {
+        setActiveTab(tabParam as ActiveTabType);
+      }
+      if (idParam && (tabParam === 'inventory' || tabParam === 'fattening')) {
+        setSelectedCowDetailsId(idParam);
+        setIsDetailsOpen(true);
+      }
+    }
+  }, []);
 
   // Authentication Management
   const [currentUser, setCurrentUser] = React.useState<any | null>(null);
@@ -85,8 +104,14 @@ export default function DashboardContainer({ initialData }: DashboardContainerPr
 
   // Scoped Data based on Current User's farmLocation (farm-level users only)
   const dbData = useMemo(() => {
-    if (!rawDbData) return rawDbData;
-    if (!currentUser?.farmLocation) return rawDbData; // admins see all raw data
+    if (
+      !currentUser?.farmLocation ||
+      currentUser.farmLocation.trim().toLowerCase() === 'all' ||
+      currentUser.role === 'Super Admin' ||
+      currentUser.role === 'Admin'
+    ) {
+      return rawDbData; // admins and all-location users see full raw PostgreSQL data
+    }
 
     const farmLoc = currentUser.farmLocation;
 
@@ -539,14 +564,14 @@ export default function DashboardContainer({ initialData }: DashboardContainerPr
         <div className="absolute bottom-[-20%] right-[-10%] w-[50%] h-[50%] rounded-full bg-teal-50/60 blur-3xl -z-10" />
 
         <div className="w-full max-w-md bg-white border border-slate-100/80 rounded-3xl shadow-xl overflow-hidden transition-all duration-300 hover:shadow-2xl">
-          <div className="bg-[#002D26] p-8 text-center relative">
-            <div className="absolute inset-0 bg-gradient-to-tr from-emerald-950/20 to-teal-500/10 opacity-70" />
+          <div className="bg-[#18191c] p-8 text-center relative">
+            <div className="absolute inset-0 bg-gradient-to-tr from-[#dc5c15]/20 to-orange-500/10 opacity-70" />
             <div className="relative z-10 flex flex-col items-center">
               <div className="mb-4 transform hover:scale-105 transition-transform duration-250 flex items-center justify-center">
                 <img src="/logo.png" alt="LiveStock Fattening ERP Logo" className="h-20 w-auto object-contain filter drop-shadow-lg" />
               </div>
-              <h1 className="font-black text-lg leading-tight tracking-wider uppercase text-white">LiveStock Fattening ERP</h1>
-              <p className="text-[10px] text-emerald-400 font-extrabold tracking-widest uppercase mt-1">Fattening Livestock Management System</p>
+              <h1 className="font-black text-lg leading-tight tracking-wider uppercase text-white">KAKSEDTHAN ERP</h1>
+              <p className="text-[10px] text-[#dc5c15] font-extrabold tracking-widest uppercase mt-1">Livestock Fattening Management System</p>
             </div>
           </div>
 
@@ -560,7 +585,7 @@ export default function DashboardContainer({ initialData }: DashboardContainerPr
                   placeholder="e.g. name@snrfarm.com"
                   value={emailInput}
                   onChange={e => setEmailInput(e.target.value)}
-                  className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-emerald-500/30 focus:border-emerald-600 transition-all placeholder:text-slate-400"
+                  className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-[#dc5c15]/30 focus:border-[#dc5c15] transition-all placeholder:text-slate-400"
                 />
               </div>
 
@@ -572,7 +597,7 @@ export default function DashboardContainer({ initialData }: DashboardContainerPr
                   placeholder="••••••••"
                   value={passwordInput}
                   onChange={e => setPasswordInput(e.target.value)}
-                  className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-emerald-500/30 focus:border-emerald-600 transition-all placeholder:text-slate-400"
+                  className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-[#dc5c15]/30 focus:border-[#dc5c15] transition-all placeholder:text-slate-400"
                 />
               </div>
 
@@ -585,7 +610,7 @@ export default function DashboardContainer({ initialData }: DashboardContainerPr
               <button
                 type="submit"
                 disabled={isSubmitting}
-                className="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-3 px-4 rounded-xl text-xs uppercase tracking-wider shadow-lg shadow-emerald-600/10 hover:shadow-emerald-600/20 active:scale-[0.98] transition-all duration-150 flex items-center justify-center gap-2 disabled:opacity-50"
+                className="w-full bg-[#dc5c15] hover:bg-[#c44f0e] text-white font-bold py-3 px-4 rounded-xl text-xs uppercase tracking-wider shadow-lg shadow-[#dc5c15]/20 hover:shadow-[#dc5c15]/30 active:scale-[0.98] transition-all duration-150 flex items-center justify-center gap-2 disabled:opacity-50"
               >
                 {isSubmitting ? (
                   <span className="h-4 w-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
@@ -640,21 +665,30 @@ export default function DashboardContainer({ initialData }: DashboardContainerPr
         />
       )}
 
+      {activeTab === 'fattening' && (
+        <FatteningTab
+          data={dbData}
+          onOpenLogWeight={(cowId) => handleOpenQuickEntry('weight', cowId || null)}
+          onOpenCreateBatch={() => setActiveTab('batch-management')}
+          onNavigateTab={(tab) => setActiveTab(tab as ActiveTabType)}
+        />
+      )}
+
       {activeTab === 'batch-management' && (
         <BatchTab
           data={dbData}
-          onCreateBatch={async (batch) => {
-            const batchWithLoc = {
-              ...batch,
-              farmLocation: batch.farmLocation || currentUser?.farmLocation || undefined
-            };
-            await createBatchMutation.mutateAsync(batchWithLoc);
-          }}
           onAssignCows={async (batchId, cowIds) => {
             await assignCowsMutation.mutateAsync({ batchId, cowIds });
           }}
           onRemoveCow={async (batchId, cowId) => {
             await removeCowMutation.mutateAsync({ batchId, cowId });
+          }}
+          onCreateBatch={async (batchData) => {
+            const batchWithLoc = {
+              ...batchData,
+              farmLocation: currentUser?.farmLocation || undefined
+            };
+            await createBatchMutation.mutateAsync(batchWithLoc);
           }}
           onUpdateBatch={async (batchId, updates) => {
             await updateBatchMutation.mutateAsync({ batchId, updates });
@@ -662,14 +696,36 @@ export default function DashboardContainer({ initialData }: DashboardContainerPr
           onRecordBatchWeights={async (records) => {
             await recordBatchWeightsMutation.mutateAsync(records);
           }}
-          onRecordBatchHealthLog={async (batchId, log) => {
-            await recordBatchHealthLogMutation.mutateAsync({ batchId, log });
-          }}
           onDeleteBatch={async (batchId) => {
             await deleteBatchMutation.mutateAsync(batchId);
           }}
           currentUser={currentUser}
           farms={dbData.settings?.farms ?? []}
+        />
+      )}
+
+      {['breeding', 'breeding-semen', 'dam-listing', 'calf-listing', 'calf-certificate', 'calves', 'calf', 'calf-management', 'certificate-center', 'breeding-logs', 'gestation-calendar', 'breeding-financials', 'breeding-analytics'].includes(activeTab) && (
+        <BreedingTab
+          stock={dbData.stock}
+          expenses={dbData.expenses || []}
+          onRefreshData={() => queryClient.invalidateQueries({ queryKey: ['livestock-data'] })}
+          farmLocationFilter={currentUser?.farmLocation || 'All'}
+          initialSubTab={
+            activeTab === 'breeding-semen' ? 'semen' :
+            activeTab === 'dam-listing' ? 'dams' :
+            (activeTab === 'calf-listing' || activeTab === 'calves' || activeTab === 'calf' || activeTab === 'calf-management') ? 'calves' :
+            (activeTab === 'calf-certificate' || activeTab === 'certificate-center') ? 'certificate' :
+            activeTab === 'gestation-calendar' ? 'calendar' :
+            activeTab === 'breeding-financials' ? 'financials' :
+            activeTab === 'breeding-analytics' ? 'analytics' : 'logs'
+          }
+          onAddCow={async (cowData) => {
+            const cowWithLoc = {
+              ...cowData,
+              farmLocation: currentUser?.farmLocation || undefined
+            };
+            await addCowMutation.mutateAsync(cowWithLoc);
+          }}
         />
       )}
 
@@ -769,10 +825,11 @@ export default function DashboardContainer({ initialData }: DashboardContainerPr
         />
       )}
 
-      {activeTab === 'settings' && (
+      {(activeTab === 'settings' || activeTab === 'breeding-setup') && (
         <SettingsTab
           settings={dbData.settings}
           currentUser={currentUser}
+          initialSubTab={activeTab === 'breeding-setup' ? 'breeding' : 'livestock'}
         />
       )}
 

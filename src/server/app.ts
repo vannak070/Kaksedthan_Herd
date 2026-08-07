@@ -10,8 +10,15 @@ const app = express();
 app.use(helmet());
 
 // CORS configuration
+const corsOriginEnv = process.env.CORS_ORIGIN || '*';
+const allowedOrigins = corsOriginEnv === '*' 
+  ? '*' 
+  : corsOriginEnv.includes(',') 
+    ? corsOriginEnv.split(',').map(o => o.trim()) 
+    : corsOriginEnv;
+
 app.use(cors({
-  origin: process.env.CORS_ORIGIN || '*',
+  origin: allowedOrigins,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization']
 }));

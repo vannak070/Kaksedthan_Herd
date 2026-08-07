@@ -38,12 +38,14 @@ COPY --from=builder /app/src ./src
 COPY --from=builder /app/.next ./.next
 COPY --from=builder /app/.env.example ./.env
 
+RUN chown -R nextjs:nodejs /app
+
 USER nextjs
 
 EXPOSE 3000
-EXPOSE 3001
+EXPOSE 5001
 
 HEALTHCHECK --interval=30s --timeout=10s --start-period=10s --retries=3 \
-  CMD curl -f http://localhost:3001/health || curl -f http://localhost:3000/ || exit 1
+  CMD curl -f http://localhost:5001/health || curl -f http://localhost:3000/ || exit 1
 
-CMD ["npm", "run", "dev"]
+CMD ["npm", "run", "start:all"]

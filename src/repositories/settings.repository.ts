@@ -141,6 +141,23 @@ export class SettingsRepository {
 
     return this.getSettings();
   }
+
+  async getCustomKey(key: string): Promise<any> {
+    const res = await query('SELECT data FROM master_settings WHERE key = $1', [key]);
+    if (res.rows.length === 0) return null;
+    return res.rows[0].data;
+  }
+
+  async setCustomKey(key: string, data: any, client?: PoolClient): Promise<any> {
+    const sql = `
+      INSERT INTO master_settings (key, data, updated_at)
+      VALUES ($1, $2, CURRENT_TIMESTAMP)
+      ON CONFLICT (key) DO UPDATE SET data = $2, updated_at = CURRENT_TIMESTAMP
+      RETURNING data
+    `;
+    const res = await this.executeQuery(sql, [key, JSON.stringify(data)], client);
+    return res.rows[0].data;
+  }
 }
 
 export const settingsRepository = new SettingsRepository();

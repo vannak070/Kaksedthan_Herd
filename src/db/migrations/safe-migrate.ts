@@ -76,6 +76,11 @@ async function safeMigrate() {
         updated_at     TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
       );
     `);
+    // Optional columns added for breeding & lineage
+    await client.query(`ALTER TABLE stock ADD COLUMN IF NOT EXISTS purpose VARCHAR(50) DEFAULT 'Fattening';`);
+    await client.query(`ALTER TABLE stock ADD COLUMN IF NOT EXISTS dam_id VARCHAR(50);`);
+    await client.query(`ALTER TABLE stock ADD COLUMN IF NOT EXISTS sire_id VARCHAR(50);`);
+    await client.query(`ALTER TABLE stock ADD COLUMN IF NOT EXISTS breeding_status VARCHAR(50) DEFAULT 'Open';`);
     console.log('[✓] stock');
 
     // ── 4. weight_tracking ───────────────────────────────────────────────────
@@ -224,6 +229,167 @@ async function safeMigrate() {
     `);
     console.log('[✓] feed_products');
 
+    // ── 11. breeding_records ─────────────────────────────────────────────────
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS breeding_records (
+        id                    VARCHAR(50) PRIMARY KEY,
+        dam_id                VARCHAR(50) NOT NULL REFERENCES stock(id) ON DELETE CASCADE,
+        sire_id               VARCHAR(50),
+        mating_date           TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+        breeding_type         VARCHAR(20) DEFAULT 'AI',
+        technician            VARCHAR(100),
+        pregnancy_status      VARCHAR(30) DEFAULT 'Pending',
+        pregnancy_check_date TIMESTAMP WITH TIME ZONE,
+        expected_calving_date TIMESTAMP WITH TIME ZONE,
+        actual_calving_date   TIMESTAMP WITH TIME ZONE,
+        calf_id               VARCHAR(50),
+        notes                 TEXT,
+        created_at            TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+      );
+      ALTER TABLE breeding_records ADD COLUMN IF NOT EXISTS cow_owner VARCHAR(100);
+      ALTER TABLE breeding_records ADD COLUMN IF NOT EXISTS dam_source VARCHAR(50);
+      ALTER TABLE breeding_records ADD COLUMN IF NOT EXISTS breeder_name VARCHAR(100);
+      ALTER TABLE breeding_records ADD COLUMN IF NOT EXISTS service_type VARCHAR(20) DEFAULT 'AI';
+      ALTER TABLE breeding_records ADD COLUMN IF NOT EXISTS breeding_method VARCHAR(50) DEFAULT 'Cross-Breeding';
+      ALTER TABLE breeding_records ADD COLUMN IF NOT EXISTS target_breed VARCHAR(50);
+      ALTER TABLE breeding_records ADD COLUMN IF NOT EXISTS bull_name VARCHAR(100);
+      ALTER TABLE breeding_records ADD COLUMN IF NOT EXISTS heat_detection_date TIMESTAMP WITH TIME ZONE;
+      ALTER TABLE breeding_records ADD COLUMN IF NOT EXISTS checkup_date TIMESTAMP WITH TIME ZONE;
+      ALTER TABLE breeding_records ADD COLUMN IF NOT EXISTS expected_birthdate TIMESTAMP WITH TIME ZONE;
+      ALTER TABLE breeding_records ADD COLUMN IF NOT EXISTS breeding_service_cost NUMERIC(12, 2) DEFAULT 0;
+      ALTER TABLE breeding_records ADD COLUMN IF NOT EXISTS breeding_insemination_cost NUMERIC(12, 2) DEFAULT 0;
+    `);
+    console.log('[✓] breeding_records');
+
+    // ── 12. media_assets (Unified Storage Media Table) ──────────────────────
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS media_assets (
+        id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        entity_type VARCHAR(50) NOT NULL,
+        entity_id   VARCHAR(100) NOT NULL,
+        category    VARCHAR(50) DEFAULT 'cover',
+        file_path   VARCHAR(255) NOT NULL,
+        file_name   VARCHAR(255) NOT NULL,
+        mime_type   VARCHAR(50) NOT NULL,
+        file_size   INTEGER NOT NULL,
+        width       INTEGER,
+        height      INTEGER,
+        thumb_path  VARCHAR(255),
+        medium_path VARCHAR(255),
+        large_path  VARCHAR(255),
+        is_primary  BOOLEAN DEFAULT false,
+        created_at  TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+        updated_at  TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+      );
+    `);
+    console.log('[✓] media_assets');
+
+    // ── 13. calving_events (Delivery Logs) ───────────────────────────────────
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS calving_events (
+        id                     VARCHAR(50) PRIMARY KEY,
+        breeding_record_id     VARCHAR(50) NOT NULL REFERENCES breeding_records(id) ON DELETE CASCADE,
+        dam_id                 VARCHAR(50) NOT NULL REFERENCES stock(id) ON DELETE CASCADE,
+        actual_calving_date    TIMESTAMP WITH TIME ZONE NOT NULL,
+        place_of_birth         VARCHAR(100) NOT NULL,
+        birth_facility         VARCHAR(100) NOT NULL,
+        delivery_status_ced    VARCHAR(100) NOT NULL,
+        number_of_calves       VARCHAR(20) DEFAULT 'Single (1)',
+        gestation_period_days  INTEGER NOT NULL,
+        veterinarian_notes     TEXT,
+        created_at             TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+      );
+    `);
+    console.log('[✓] calving_events');
+
+    // ── 14. calves_herd (Registered Infant Stock) ───────────────────────────
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS calves_herd (
+        id                   VARCHAR(50) PRIMARY KEY,
+        calving_event_id     VARCHAR(50) REFERENCES calving_events(id) ON DELETE CASCADE,
+        breeding_record_id   VARCHAR(50) REFERENCES breeding_records(id) ON DELETE CASCADE,
+        code                 VARCHAR(50) UNIQUE NOT NULL,
+        tag_id               VARCHAR(50),
+        calf_name            VARCHAR(100) NOT NULL,
+        sex                  VARCHAR(10) NOT NULL,
+        breed                VARCHAR(50) NOT NULL,
+        color                VARCHAR(50) NOT NULL,
+        generation           VARCHAR(30) NOT NULL,
+        birth_weight_kg      NUMERIC(6,2) NOT NULL,
+        height_cm            NUMERIC(6,2),
+        body_length_cm       NUMERIC(6,2),
+        chest_size_cm        NUMERIC(6,2),
+        leg_size_cm          NUMERIC(6,2),
+        birth_temperature_c  NUMERIC(4,2),
+        navel_treatment      BOOLEAN DEFAULT true,
+        virus_test           BOOLEAN DEFAULT true,
+        timing_of_feeding    VARCHAR(50),
+        method_of_feeding    JSONB DEFAULT '[]'::jsonb,
+        current_status       VARCHAR(50) DEFAULT 'Healthy (Nursing)',
+        created_at           TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+      );
+    `);
+    console.log('[✓] calves_herd');
+
+    // ── 15. birth_certificates (Pedigree Certificates) ───────────────────────
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS birth_certificates (
+        cert_no               VARCHAR(50) PRIMARY KEY,
+        calf_id               VARCHAR(50) NOT NULL UNIQUE REFERENCES calves_herd(id) ON DELETE CASCADE,
+        qr_verification_code VARCHAR(100) UNIQUE NOT NULL,
+        farm_name             VARCHAR(100) NOT NULL,
+        province_district     VARCHAR(100) NOT NULL,
+        village_commune       VARCHAR(100) NOT NULL,
+        gps_coordinates       VARCHAR(100),
+        recorded_by           VARCHAR(100) NOT NULL,
+        verified_by           VARCHAR(100) NOT NULL,
+        issued_date           TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+        pdf_path              VARCHAR(255),
+        png_path              VARCHAR(255)
+      );
+    `);
+    console.log('[✓] birth_certificates');
+
+    // ── Audit & Soft-Delete Columns across Core Tables ─────────────────────────
+    const auditTables = ['stock', 'breeding_records', 'health_logs', 'weight_tracking', 'sales_tracking', 'batches', 'expenses', 'feed_products', 'calves_herd'];
+    for (const tbl of auditTables) {
+      await client.query(`ALTER TABLE ${tbl} ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMP WITH TIME ZONE;`);
+      await client.query(`ALTER TABLE ${tbl} ADD COLUMN IF NOT EXISTS archived_at TIMESTAMP WITH TIME ZONE;`);
+      await client.query(`ALTER TABLE ${tbl} ADD COLUMN IF NOT EXISTS is_archived BOOLEAN DEFAULT false;`);
+      await client.query(`ALTER TABLE ${tbl} ADD COLUMN IF NOT EXISTS created_by VARCHAR(100);`);
+      await client.query(`ALTER TABLE ${tbl} ADD COLUMN IF NOT EXISTS updated_by VARCHAR(100);`);
+    }
+
+    // ── 16. attachments (Central Generic File Upload Table) ──────────────────
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS attachments (
+        id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        entity_type VARCHAR(50) NOT NULL,
+        entity_id   VARCHAR(100) NOT NULL,
+        file_name   VARCHAR(255) NOT NULL,
+        file_path   VARCHAR(255) NOT NULL,
+        mime_type   VARCHAR(100) NOT NULL,
+        file_size   INTEGER NOT NULL,
+        uploaded_by VARCHAR(100),
+        created_at  TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+      );
+    `);
+    console.log('[✓] attachments');
+
+    // ── 17. activity_logs (Central Audit & Activity Trail Table) ─────────────
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS activity_logs (
+        id          SERIAL PRIMARY KEY,
+        entity_type VARCHAR(50) NOT NULL,
+        entity_id   VARCHAR(100) NOT NULL,
+        action      VARCHAR(50) NOT NULL, -- CREATE | UPDATE | DELETE | RESTORE | ARCHIVE
+        actor_name  VARCHAR(100) DEFAULT 'System',
+        details     JSONB DEFAULT '{}'::jsonb,
+        created_at  TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+      );
+    `);
+    console.log('[✓] activity_logs');
+
     // ── Indexes (CREATE INDEX IF NOT EXISTS is idempotent) ──────────────────
     const indexes = [
       'CREATE INDEX IF NOT EXISTS idx_stock_status          ON stock(status)',
@@ -235,6 +401,14 @@ async function safeMigrate() {
       'CREATE INDEX IF NOT EXISTS idx_batch_cows_cow_id     ON batch_cows(cow_id)',
       'CREATE INDEX IF NOT EXISTS idx_expenses_category     ON expenses(category)',
       'CREATE INDEX IF NOT EXISTS idx_expenses_date         ON expenses(date)',
+      'CREATE INDEX IF NOT EXISTS idx_breeding_dam_id       ON breeding_records(dam_id)',
+      'CREATE INDEX IF NOT EXISTS idx_breeding_status       ON breeding_records(pregnancy_status)',
+      'CREATE INDEX IF NOT EXISTS idx_breeding_calving      ON breeding_records(expected_calving_date)',
+      'CREATE INDEX IF NOT EXISTS idx_media_entity          ON media_assets(entity_type, entity_id)',
+      'CREATE INDEX IF NOT EXISTS idx_attachments_entity    ON attachments(entity_type, entity_id)',
+      'CREATE INDEX IF NOT EXISTS idx_activity_entity       ON activity_logs(entity_type, entity_id)',
+      'CREATE INDEX IF NOT EXISTS idx_calves_code           ON calves_herd(code)',
+      'CREATE INDEX IF NOT EXISTS idx_calves_tag            ON calves_herd(tag_id)',
     ];
     for (const idx of indexes) {
       await client.query(idx + ';');

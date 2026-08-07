@@ -179,6 +179,13 @@ export interface MasterSetup {
   weightUnits: string[];
   revenueTypes: string[];
   purchaseTypes: string[];
+  sireBreeds?: string[];
+  damClassifications?: string[];
+  calfGenerations?: string[];
+  breedingMethods?: string[];
+  serviceTypes?: string[];
+  gestationLocations?: string[];
+  pregnancyStatuses?: string[];
   users: UserRoleItem[];
   roles?: CustomRoleDefinition[];
   farms?: FarmItem[];

@@ -1,18 +1,18 @@
 import app from './app';
 import { connectWithRetry } from '../config/database';
 
-const PORT = parseInt(process.env.PORT || '3001', 10);
+const PORT = parseInt(process.env.API_PORT || process.env.PORT || '5001', 10);
 
 async function startServer() {
   try {
     console.log('[Server Init] Connecting to PostgreSQL database...');
     await connectWithRetry(10, 1000);
 
-    app.listen(PORT, () => {
+    app.listen(PORT, '0.0.0.0', () => {
       console.log(`=======================================================`);
       console.log(`🚀 Livestock Management API Server running on port ${PORT}`);
-      console.log(`🌐 Health check: http://localhost:${PORT}/health`);
-      console.log(`📡 API Base:     http://localhost:${PORT}/api/v1`);
+      console.log(`🌐 Health check: http://0.0.0.0:${PORT}/health`);
+      console.log(`📡 API Base:     http://0.0.0.0:${PORT}/api/v1`);
       console.log(`=======================================================`);
     });
   } catch (error: any) {

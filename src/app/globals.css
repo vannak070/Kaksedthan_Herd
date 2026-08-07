@@ -3,6 +3,10 @@
 :root {
   --background: #ffffff;
   --foreground: #171717;
+  --brand-primary: #dc5c15;
+  --brand-hover: #c44f0e;
+  --brand-dark: #a33e08;
+  --brand-light: #fff6f0;
 }
 
 @theme inline {
@@ -10,6 +14,16 @@
   --color-foreground: var(--foreground);
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
+  --color-brand-50: #fff6f0;
+  --color-brand-100: #fde9db;
+  --color-brand-200: #fbcbb3;
+  --color-brand-300: #f8a783;
+  --color-brand-400: #f37d4f;
+  --color-brand-500: #dc5c15;
+  --color-brand-600: #c44f0e;
+  --color-brand-700: #a33e08;
+  --color-brand-800: #833109;
+  --color-brand-900: #6b2a0b;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -26,3 +40,4 @@ body {
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
+

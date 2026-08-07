@@ -11,6 +11,7 @@ export * from './health.types';
 export * from './finance.types';
 export * from './settings.types';
 export * from './feed.types';
+export * from './breeding.types';
 
 export interface ERPLivestockData {
   stock: StockItem[];
@@ -23,4 +24,5 @@ export interface ERPLivestockData {
   settings: MasterSetup;
   feedProducts?: FeedProductItem[];
   feedTransactions?: FeedStockTransaction[];
+  breedingRecords?: import('./breeding.types').BreedingRecord[];
 }

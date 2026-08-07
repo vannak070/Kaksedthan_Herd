@@ -14,6 +14,7 @@ import { TablePagination } from './common/TablePagination';
 interface SettingsTabProps {
   settings: MasterSetup;
   currentUser?: any;
+  initialSubTab?: 'livestock' | 'breeding' | 'financial' | 'users';
 }
 
 const DEFAULT_SYSTEM_ROLES: CustomRoleDefinition[] = [
@@ -25,10 +26,10 @@ const DEFAULT_SYSTEM_ROLES: CustomRoleDefinition[] = [
   { id: 'ROLE-06', name: 'Veterinarian', description: 'Responsible for health tracking, medical records, deworming, and diagnostics.', permissions: DEFAULT_ROLE_PERMISSIONS['Veterinarian'], isSystem: true }
 ];
 
-export default function SettingsTab({ settings, currentUser }: SettingsTabProps) {
+export default function SettingsTab({ settings, currentUser, initialSubTab = 'livestock' }: SettingsTabProps) {
   const { t } = useLanguage();
   const queryClient = useQueryClient();
-  const [subTab, setSubTab] = useState<'livestock' | 'financial' | 'users'>('livestock');
+  const [subTab, setSubTab] = useState<'livestock' | 'breeding' | 'financial' | 'users'>(initialSubTab);
 
   const [userPage, setUserPage] = useState(1);
   const [userPageSize, setUserPageSize] = useState(10);
@@ -91,11 +92,22 @@ export default function SettingsTab({ settings, currentUser }: SettingsTabProps)
     }
   });
 
+const DEFAULT_BREEDING_FALLBACKS: Record<string, string[]> = {
+  sireBreeds: ['Brahman Red', 'Brahman White', 'Angus Black', 'Wagyu A5', 'Charolais', 'Indu-Brazil', 'Nelore', 'Limousin'],
+  damClassifications: ['Existing Dam', 'Purchased Heifer', 'Local Mixed Dam', 'Registered Purebred Dam'],
+  calfGenerations: ['F1 Cross (50%)', 'F2 Cross (75%)', 'F3 Purebred (87.5%)', 'Purebred 100%'],
+  breedingMethods: ['Artificial Insemination (AI)', 'Natural Service', 'Embryo Transfer (ET)'],
+  serviceTypes: ['AI Straw Insemination', 'Direct Sire Bull Service', 'IVF'],
+  gestationLocations: ['Maternity Pen A', 'Nursery Stall 1', 'Main Breeding Facility', 'Kampong Cham Ranch'],
+  pregnancyStatuses: ['Pending PD Check', 'Confirmed Pregnant', 'Open (Not Pregnant)', 'Calved'],
+};
+
   const handleAddItem = (e: React.FormEvent) => {
     e.preventDefault();
     if (!newItemText.trim()) return;
 
-    const list = [...(settings[activeCategory] as string[])];
+    const existingList = (settings[activeCategory] as string[]) || DEFAULT_BREEDING_FALLBACKS[activeCategory] || [];
+    const list = [...existingList];
     if (list.includes(newItemText.trim())) {
       setConfirmModal({
         isOpen: true,
@@ -117,7 +129,8 @@ export default function SettingsTab({ settings, currentUser }: SettingsTabProps)
   };
 
   const handleRemoveItem = (category: keyof Omit<MasterSetup, 'users' | 'roles'>, index: number) => {
-    const list = [...(settings[category] as string[])];
+    const existingList = (settings[category] as string[]) || DEFAULT_BREEDING_FALLBACKS[category] || [];
+    const list = [...existingList];
     list.splice(index, 1);
 
     const updatedSettings: MasterSetup = {
@@ -351,7 +364,14 @@ export default function SettingsTab({ settings, currentUser }: SettingsTabProps)
     batchTypes: { label: 'Batch Classification Types', description: 'Purpose options assigned to dynamic herds.' },
     weightUnits: { label: 'Measurement Units', description: 'Cattle weight measurement systems.' },
     revenueTypes: { label: 'Revenue Streams', description: 'ERP classifications for income recording.' },
-    purchaseTypes: { label: 'Purchase Type Structures', description: 'Acquisition categories mapped to finances.' }
+    purchaseTypes: { label: 'Purchase Type Structures', description: 'Acquisition categories mapped to finances.' },
+    sireBreeds: { label: 'Sire Breeds & Semen Straws', description: 'Master catalog of registered Sire bulls and semen straw breeds.' },
+    damClassifications: { label: 'Dam Classifications & Sources', description: 'Categories and sources for breeding mother cows.' },
+    calfGenerations: { label: 'Calf Generations & Classifications', description: 'Genetics classifications for calves (F1 50%, F2 75%, Purebred).' },
+    breedingMethods: { label: 'Breeding Methods', description: 'Allowed reproductive methods (AI, Natural Service, Embryo Transfer).' },
+    serviceTypes: { label: 'Service Types', description: 'Insemination service types and straw classifications.' },
+    gestationLocations: { label: 'Calving & Nursery Facilities', description: 'Dedicated maternity pens, nursery facilities, and calving locations.' },
+    pregnancyStatuses: { label: 'Pregnancy Diagnostic Statuses', description: 'Allowable pregnancy checkup statuses (Pending PD, Confirmed, Open).' }
   };
 
   const livestockKeys: (keyof Omit<MasterSetup, 'users' | 'roles' | 'farms'>)[] = [
@@ -365,6 +385,16 @@ export default function SettingsTab({ settings, currentUser }: SettingsTabProps)
     'feedTypes',
     'batchTypes',
     'weightUnits'
+  ];
+
+  const breedingKeys: (keyof Omit<MasterSetup, 'users' | 'roles' | 'farms'>)[] = [
+    'sireBreeds',
+    'damClassifications',
+    'calfGenerations',
+    'breedingMethods',
+    'serviceTypes',
+    'gestationLocations',
+    'pregnancyStatuses'
   ];
 
   const financialKeys: (keyof Omit<MasterSetup, 'users' | 'roles' | 'farms'>)[] = [
@@ -389,6 +419,17 @@ export default function SettingsTab({ settings, currentUser }: SettingsTabProps)
           >
             <Settings className="h-4 w-4" />
             {t('settings.systemParams')}
+          </button>
+          <button
+            onClick={() => { setSubTab('breeding'); setActiveCategory('sireBreeds'); }}
+            className={`flex items-center gap-2 px-6 py-3.5 border-b-2 font-bold text-xs uppercase tracking-wider transition-all duration-150 cursor-pointer ${
+              subTab === 'breeding'
+                ? 'border-purple-600 text-purple-600'
+                : 'border-transparent text-slate-400 hover:text-slate-600'
+            }`}
+          >
+            <Sparkles className="h-4 w-4 text-purple-600" />
+            Breeding Setup (ERP Master)
           </button>
           <button
             onClick={() => { setSubTab('financial'); setActiveCategory('expenseCategories'); }}
@@ -425,13 +466,13 @@ export default function SettingsTab({ settings, currentUser }: SettingsTabProps)
         </div>
       )}
 
-      {/* Content for Livestock Setup & Financial Setup lists */}
-      {(subTab === 'livestock' || subTab === 'financial') && (
+      {/* Content for Livestock Setup, Breeding Setup & Financial Setup lists */}
+      {(subTab === 'livestock' || subTab === 'breeding' || subTab === 'financial') && (
         <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
           {/* Left Navigation Selection list */}
           <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-xs h-fit space-y-1">
             <h4 className="text-[10px] font-bold text-slate-400 uppercase tracking-widest px-3.5 mb-3.5">Configure Categories</h4>
-            {(subTab === 'livestock' ? livestockKeys : financialKeys).map(key => {
+            {(subTab === 'livestock' ? livestockKeys : subTab === 'breeding' ? breedingKeys : financialKeys).map(key => {
               const isActive = activeCategory === key;
               return (
                 <button
@@ -449,7 +490,7 @@ export default function SettingsTab({ settings, currentUser }: SettingsTabProps)
                       ? 'bg-[#D1FAE5] text-[#065F46]' 
                       : 'bg-slate-100 text-slate-500'
                   }`}>
-                    {((settings[key] || []) as string[]).length}
+                    {((settings[key] || DEFAULT_BREEDING_FALLBACKS[key] || []) as string[]).length}
                   </span>
                 </button>
               );
@@ -479,7 +520,7 @@ export default function SettingsTab({ settings, currentUser }: SettingsTabProps)
                   />
                   <button
                     type="submit"
-                    className="bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold px-5 py-2.5 rounded-xl flex items-center gap-1.5 shadow-sm transition-all cursor-pointer active:scale-[0.98]"
+                    className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold px-5 py-2.5 rounded-xl flex items-center gap-2 transition-all shadow-sm cursor-pointer"
                   >
                     <Plus className="h-4 w-4" /> Add Item
                   </button>
@@ -487,7 +528,7 @@ export default function SettingsTab({ settings, currentUser }: SettingsTabProps)
 
                 {/* Items tags/pills list */}
                 <div className="flex flex-wrap gap-2.5 pt-2">
-                  {((settings[activeCategory] || []) as string[]).map((item, idx) => (
+                  {((settings[activeCategory] || DEFAULT_BREEDING_FALLBACKS[activeCategory] || []) as string[]).map((item, idx) => (
                     <div
                       key={idx}
                       className="bg-slate-50 border border-slate-200/80 rounded-xl py-2 px-3.5 text-xs font-bold text-slate-700 flex items-center gap-2 group hover:border-slate-300 transition-all"
@@ -503,7 +544,7 @@ export default function SettingsTab({ settings, currentUser }: SettingsTabProps)
                       </button>
                     </div>
                   ))}
-                  {((settings[activeCategory] || []) as string[]).length === 0 && (
+                  {((settings[activeCategory] || DEFAULT_BREEDING_FALLBACKS[activeCategory] || []) as string[]).length === 0 && (
                     <p className="text-xs text-slate-400 font-semibold italic py-4">
                       No custom entries created yet. Add one above.
                     </p>

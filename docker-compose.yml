@@ -13,7 +13,7 @@ services:
     ports:
       - "5433:5432"
     volumes:
-      - postgres_data:/var/lib/postgresql/data
+      - livestock_postgres_data:/var/lib/postgresql/data
       - ./src/db/schema.sql:/docker-entrypoint-initdb.d/01_schema.sql
     networks:
       - livestock_net
@@ -33,11 +33,14 @@ services:
     restart: always
     ports:
       - "3000:3000"
-      - "3001:3001"
+      - "5001:5001"
     environment:
-      NODE_ENV: production
-      PORT: 3001
-      CORS_ORIGIN: "*"
+      NODE_ENV: ${NODE_ENV:-production}
+      PORT: ${PORT:-5001}
+      CORS_ORIGIN: ${CORS_ORIGIN:-*}
+      NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:5001/api/v1}
+      NEXT_PUBLIC_LAN_IP: ${NEXT_PUBLIC_LAN_IP:-}
+      LAN_IP: ${LAN_IP:-}
       # Use the Docker Compose service name 'db' as the database host
       DB_HOST: db
       DB_PORT: 5432
@@ -60,5 +63,6 @@ networks:
     driver: bridge
 
 volumes:
-  postgres_data:
+  livestock_postgres_data:
     driver: local
+
