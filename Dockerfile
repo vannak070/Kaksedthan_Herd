@@ -19,7 +19,7 @@ COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 ENV NEXT_TELEMETRY_DISABLED 1
 ENV NODE_OPTIONS "--max-old-space-size=4096"
-RUN NODE_OPTIONS="--max-old-space-size=4096" npx next build --no-lint
+RUN NODE_OPTIONS="--max-old-space-size=4096" npm run build
 
 # Stage 4: Production Runner
 FROM base AS runner
