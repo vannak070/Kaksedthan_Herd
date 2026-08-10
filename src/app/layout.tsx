@@ -1,24 +1,17 @@
 import type { Metadata } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import ReactQueryProvider from "@/components/providers/ReactQueryProvider";
-
-const geistSans = Geist({
-  variable: "--font-geist-sans",
-  subsets: ["latin"],
-});
-
-const geistMono = Geist_Mono({
-  variable: "--font-geist-mono",
-  subsets: ["latin"],
-});
+import AppWrapper from "@/components/layout/AppWrapper";
 
 export const metadata: Metadata = {
-  title: "KAKSEDTHAN | LiveStock Fattening ERP System",
-  description: "Enterprise multi-farm livestock fattening ERP platform for tracking weight performance, ADG, feed rations, health logs, and financial P&L.",
+  title: "KAKSEDTHAN | Livestock Management System",
+  description: "Integrated livestock lifecycle platform connecting Sire, Stock Insemination, Dam, Breeding Program, Calving, Herdbook, Pedigree, Certificate, and QR Verification.",
   icons: {
-    icon: "/logo.png",
-    shortcut: "/favicon.ico",
+    icon: [
+      { url: "/apple-touch-icon.png", type: "image/png" },
+      { url: "/logo.png", type: "image/png" }
+    ],
+    shortcut: "/apple-touch-icon.png",
     apple: "/apple-touch-icon.png",
   },
 };
@@ -29,13 +22,12 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html
-      lang="en"
-      className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
-    >
+    <html lang="en" className="h-full antialiased">
       <body className="min-h-full flex flex-col bg-slate-50/80 text-slate-900 font-sans">
         <ReactQueryProvider>
-          {children}
+          <AppWrapper>
+            {children}
+          </AppWrapper>
         </ReactQueryProvider>
       </body>
     </html>

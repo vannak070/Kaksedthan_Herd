@@ -21,11 +21,10 @@ const DEFAULT_ROLES: CustomRoleDefinition[] = [
 
 const DEFAULT_USERS: UserRoleItem[] = [
   { id: '1', name: 'Vannak Admin', email: 'vannak@snrfarm.com', role: 'Super Admin', status: 'Active', password: 'password123', permissions: DEFAULT_ROLE_PERMISSIONS['Super Admin'] },
-  { id: '2', name: 'Sokha Manager', email: 'sokha.m@snrfarm.com', role: 'Admin', status: 'Active', password: 'password123', permissions: DEFAULT_ROLE_PERMISSIONS['Admin'] },
-  { id: '3', name: 'Chay Pang', email: 'pang@snrfarm.com', role: 'Company', status: 'Active', password: 'password123', permissions: DEFAULT_ROLE_PERMISSIONS['Company'] },
-  { id: '4', name: 'Bona Owner', email: 'bona.v@snrfarm.com', role: 'Farm Owner', status: 'Active', password: 'password123', permissions: DEFAULT_ROLE_PERMISSIONS['Farm Owner'], farmLocation: 'រទាំង' },
-  { id: '5', name: 'Dara Staff', email: 'dara.s@snrfarm.com', role: 'Farm Staff', status: 'Active', password: 'password123', permissions: DEFAULT_ROLE_PERMISSIONS['Farm Staff'], farmLocation: 'រទាំង' },
-  { id: '6', name: 'Dara Rath', email: 'rath@snrfarm.com', role: 'Veterinarian', status: 'Active', password: 'password123', permissions: DEFAULT_ROLE_PERMISSIONS['Veterinarian'], farmLocation: 'ព្រៃវែង' }
+  { id: '2', name: 'Dr. Vannak Breeder', email: 'breeder@snrfarm.com', role: 'Breeder', status: 'Active', password: 'password123', permissions: DEFAULT_ROLE_PERMISSIONS['Breeder'] },
+  { id: '3', name: 'Bona Farm Owner', email: 'bona.v@snrfarm.com', role: 'Farm Owner', status: 'Active', password: 'password123', permissions: DEFAULT_ROLE_PERMISSIONS['Farm Owner'], farmLocation: 'រទាំង' },
+  { id: '4', name: 'Sophea Cow Owner', email: 'sophea@customer.com', role: 'Customer / Cow Owner', status: 'Active', password: 'password123', permissions: DEFAULT_ROLE_PERMISSIONS['Customer / Cow Owner'] },
+  { id: '5', name: 'ABS Global Sourcing Co.', email: 'sourcing@absglobal.com', role: 'Sire Sourcing Company', status: 'Active', password: 'password123', permissions: DEFAULT_ROLE_PERMISSIONS['Sire Sourcing Company'] }
 ];
 
 export class SettingsRepository {
@@ -96,10 +95,18 @@ export class SettingsRepository {
           name: row.name,
           email: row.email,
           role: row.role,
+          userLevel: row.user_level,
+          userLevelId: row.user_level_id,
+          dataScope: row.data_scope || 'ASSIGNED_RECORD',
           status: row.status,
           password: row.password,
           permissions: perms,
-          farmLocation: row.farm_location || undefined
+          farmLocation: row.farm_location || undefined,
+          nationalId: row.national_id,
+          idFrontUrl: row.id_front_url,
+          idBackUrl: row.id_back_url,
+          idVerificationStatus: row.id_verification_status || 'Pending',
+          farmId: row.farm_id
         };
       });
     }
@@ -130,10 +137,26 @@ export class SettingsRepository {
       for (const u of settings.users) {
         const permsToSave = u.permissions || DEFAULT_ROLE_PERMISSIONS[u.role] || [];
         await this.executeQuery(
-          `INSERT INTO users (id, name, email, role, status, password, permissions, farm_location)
-           VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-           ON CONFLICT (id) DO UPDATE SET name=$2, email=$3, role=$4, status=$5, password=$6, permissions=$7, farm_location=$8`,
-          [u.id, u.name, u.email, u.role, u.status || 'Active', u.password || 'password123', JSON.stringify(permsToSave), u.farmLocation || null],
+          `INSERT INTO users (id, name, email, role, user_level, user_level_id, data_scope, status, password, permissions, farm_location, national_id, id_front_url, id_back_url, id_verification_status, farm_id)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
+           ON CONFLICT (id) DO UPDATE SET 
+             name=$2, email=$3, role=$4, 
+             user_level=COALESCE($5, users.user_level), 
+             user_level_id=COALESCE($6, users.user_level_id), 
+             data_scope=COALESCE($7, users.data_scope), 
+             status=$8, password=$9, permissions=$10, farm_location=$11,
+             national_id=COALESCE($12, users.national_id),
+             id_front_url=COALESCE($13, users.id_front_url),
+             id_back_url=COALESCE($14, users.id_back_url),
+             id_verification_status=COALESCE($15, users.id_verification_status),
+             farm_id=COALESCE($16, users.farm_id)`,
+          [
+            u.id, u.name, u.email, u.role,
+            (u as any).userLevel || null, (u as any).userLevelId || null, (u as any).dataScope || 'ASSIGNED_RECORD',
+            u.status || 'Active', u.password || 'password123', JSON.stringify(permsToSave), u.farmLocation || null,
+            (u as any).nationalId || null, (u as any).idFrontUrl || null, (u as any).idBackUrl || null,
+            (u as any).idVerificationStatus || 'Pending', (u as any).farmId || null
+          ],
           client
         );
       }

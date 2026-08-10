@@ -4,8 +4,13 @@ const nextConfig: NextConfig = {
   typescript: {
     ignoreBuildErrors: true,
   },
+  experimental: {
+    serverActions: {
+      bodySizeLimit: '200mb',
+    },
+  },
   async rewrites() {
-    const backendPort = process.env.PORT || '5001';
+    const backendPort = process.env.API_PORT || process.env.BACKEND_PORT || '5001';
     const backendHost = process.env.BACKEND_HOST || '127.0.0.1';
     return [
       {

@@ -4,7 +4,13 @@ import helmet from 'helmet';
 import routes from '../routes';
 import { errorHandler } from '../middleware/error.middleware';
 
+import path from 'path';
+
 const app = express();
+
+// Serve static image upload files
+app.use('/uploads', express.static(path.join(process.cwd(), 'uploads')));
+app.use('/public/uploads', express.static(path.join(process.cwd(), 'uploads')));
 
 // Security headers with Helmet
 app.use(helmet());
@@ -24,8 +30,8 @@ app.use(cors({
 }));
 
 // Request body parser
-app.use(express.json({ limit: '10mb' }));
-app.use(express.urlencoded({ extended: true }));
+app.use(express.json({ limit: '200mb' }));
+app.use(express.urlencoded({ limit: '200mb', extended: true }));
 
 // Request logger middleware
 app.use((req: Request, res: Response, next) => {

@@ -1,9 +1,39 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { MasterSetup, UserRoleItem, CustomRoleDefinition, PermissionKey, PERMISSION_MODULES, ALL_PERMISSIONS, DEFAULT_ROLE_PERMISSIONS } from '@/lib/types';
+import { 
+  MasterSetup, 
+  UserRoleItem, 
+  CustomRoleDefinition, 
+  PermissionKey, 
+  PERMISSION_MODULES, 
+  ALL_PERMISSIONS, 
+  DEFAULT_ROLE_PERMISSIONS,
+  APPROVED_USER_LEVELS,
+  APPROVED_ROLES,
+  UserLevelItem,
+  DataScopeType
+} from '@/types/settings.types';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from './ui/card';
-import { Settings, Shield, DollarSign, Plus, Trash2, Edit2, UserPlus, CheckCircle2, ShieldCheck, KeyRound, Sparkles, Award } from 'lucide-react';
+import { 
+  Settings, 
+  Shield, 
+  Plus, 
+  Trash2, 
+  Edit2, 
+  UserPlus, 
+  CheckCircle2, 
+  ShieldCheck, 
+  KeyRound, 
+  Award,
+  Layers,
+  UserCheck,
+  Building2,
+  Lock,
+  Eye,
+  CheckSquare,
+  AlertTriangle
+} from 'lucide-react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { updateSettingsAction } from '@/app/actions';
 import { ConfirmModal } from './ui/confirm-modal';
@@ -12,73 +42,65 @@ import { useLanguage } from '@/context/LanguageContext';
 import { TablePagination } from './common/TablePagination';
 
 interface SettingsTabProps {
-  settings: MasterSetup;
+  settings?: MasterSetup;
+  data?: any;
   currentUser?: any;
   initialSubTab?: 'livestock' | 'breeding' | 'financial' | 'users';
+  initialSection?: 'livestock' | 'breeding' | 'financial' | 'users';
 }
 
-const DEFAULT_SYSTEM_ROLES: CustomRoleDefinition[] = [
-  { id: 'ROLE-01', name: 'Super Admin', description: 'Full system management and security authority.', permissions: ALL_PERMISSIONS, isSystem: true },
-  { id: 'ROLE-02', name: 'Admin', description: 'Full business operations control and user creation privileges.', permissions: DEFAULT_ROLE_PERMISSIONS['Admin'], isSystem: true },
-  { id: 'ROLE-03', name: 'Company', description: 'Manages user accounts, permissions, and multiple farms under them.', permissions: DEFAULT_ROLE_PERMISSIONS['Company'], isSystem: true },
-  { id: 'ROLE-04', name: 'Farm Owner', description: 'Full operational control and lifecycle management of their specific farm.', permissions: DEFAULT_ROLE_PERMISSIONS['Farm Owner'], isSystem: true },
-  { id: 'ROLE-05', name: 'Farm Staff', description: 'Records weights, health logs, and tracks daily checklists based on custom permissions.', permissions: DEFAULT_ROLE_PERMISSIONS['Farm Staff'], isSystem: true },
-  { id: 'ROLE-06', name: 'Veterinarian', description: 'Responsible for health tracking, medical records, deworming, and diagnostics.', permissions: DEFAULT_ROLE_PERMISSIONS['Veterinarian'], isSystem: true }
-];
+export default function SettingsTab({ settings: rawSettings, data, currentUser, initialSubTab = 'users', initialSection }: SettingsTabProps) {
+  const settings: MasterSetup = rawSettings || data?.settings || {
+    breeds: ['Angus Cross', 'Brahman', 'Wagyu', 'Charolais Cross', 'Local Cow'],
+    categories: ['Sire', 'Dam', 'Calf'],
+    farms: ['រទាំង', 'ព្រៃវែង', 'បន្ទាយមានជ័យ'],
+    locations: ['រទាំង', 'ព្រៃវែង', 'បន្ទាយមានជ័យ'],
+    healthStatuses: ['Good', 'Fair', 'Poor', 'Sick', 'Quarantine'],
+    vaccineTypes: ['FMD', 'Blackleg', 'Anthrax'],
+    expenseCategories: ['Feed', 'Medicine', 'Labor', 'Equipment'],
+    users: [
+      { id: '1', name: 'Vannak Admin', email: 'vannak@snrfarm.com', userLevel: 'Breeder', role: 'Super Admin', dataScope: 'GLOBAL', status: 'Active', permissions: ALL_PERMISSIONS },
+      { id: '2', name: 'Dr. Vannak Breeder', email: 'breeder@snrfarm.com', userLevel: 'Breeder', role: 'Breeding Specialist', dataScope: 'ASSIGNED_RECORD', status: 'Active', permissions: DEFAULT_ROLE_PERMISSIONS['Breeder'] },
+      { id: '3', name: 'Bona Farm Owner', email: 'bona.v@snrfarm.com', userLevel: 'Farm Owner', role: 'Farm Manager', dataScope: 'FARM', farmLocation: 'រទាំង', status: 'Active', permissions: DEFAULT_ROLE_PERMISSIONS['Farm Owner'] },
+      { id: '4', name: 'Sophea Cow Owner', email: 'sophea@customer.com', userLevel: 'Customer / Cow Owner', role: 'Customer Viewer', dataScope: 'CUSTOMER', status: 'Active', permissions: DEFAULT_ROLE_PERMISSIONS['Customer / Cow Owner'] },
+      { id: '5', name: 'ABS Global Sourcing Co.', email: 'sourcing@absglobal.com', userLevel: 'Sire Sourcing Company', role: 'Sourcing Manager', dataScope: 'SOURCING_COMPANY', companyName: 'ABS Global', status: 'Active', permissions: DEFAULT_ROLE_PERMISSIONS['Sire Sourcing Company'] }
+    ],
+    roles: APPROVED_ROLES,
+    userLevels: APPROVED_USER_LEVELS
+  };
 
-export default function SettingsTab({ settings, currentUser, initialSubTab = 'livestock' }: SettingsTabProps) {
   const { t } = useLanguage();
   const queryClient = useQueryClient();
-  const [subTab, setSubTab] = useState<'livestock' | 'breeding' | 'financial' | 'users'>(initialSubTab);
+  const [subTab, setSubTab] = useState<'livestock' | 'breeding' | 'users'>('users');
+  const [rbacTab, setRbacTab] = useState<'users' | 'levels' | 'roles' | 'permissions' | 'access'>('users');
 
   const [userPage, setUserPage] = useState(1);
   const [userPageSize, setUserPageSize] = useState(10);
 
-  const isFarmOwner = currentUser?.role === 'Farm Owner';
-
-  useEffect(() => {
-    if (isFarmOwner && subTab !== 'users') {
-      setSubTab('users');
-    }
-  }, [isFarmOwner, subTab]);
-
-  // Input states for adding new configurations
-  const [newItemText, setNewItemText] = useState<string>('');
-  const [activeCategory, setActiveCategory] = useState<keyof Omit<MasterSetup, 'users' | 'roles' | 'farms'>>('breeds');
-
-  // Available roles list (system + custom created roles)
-  const currentRoles: CustomRoleDefinition[] = settings.roles && settings.roles.length > 0 ? settings.roles : DEFAULT_SYSTEM_ROLES;
+  // Current Roles list
+  const currentRoles: CustomRoleDefinition[] = settings.roles && settings.roles.length > 0 ? settings.roles : APPROVED_ROLES;
+  const currentUserLevels: UserLevelItem[] = settings.userLevels && settings.userLevels.length > 0 ? settings.userLevels : APPROVED_USER_LEVELS;
 
   // User form & permission states
   const [isAddingUser, setIsAddingUser] = useState(false);
   const [userName, setUserName] = useState('');
   const [userEmail, setUserEmail] = useState('');
   const [userPassword, setUserPassword] = useState('');
-  const [userRole, setUserRole] = useState<string>('Company');
-  const [userPermissions, setUserPermissions] = useState<PermissionKey[]>(DEFAULT_ROLE_PERMISSIONS['Company'] || []);
+  const [userLevel, setUserLevel] = useState<string>('Breeder');
+  const [userRole, setUserRole] = useState<string>('Breeding Specialist');
+  const [userDataScope, setUserDataScope] = useState<DataScopeType>('ASSIGNED_RECORD');
+  const [userPermissions, setUserPermissions] = useState<PermissionKey[]>(DEFAULT_ROLE_PERMISSIONS['Breeder'] || []);
   const [editingUserId, setEditingUserId] = useState<string | null>(null);
   const [userFarmLocation, setUserFarmLocation] = useState<string>('');
+  const [userCompanyName, setUserCompanyName] = useState<string>('');
 
   // Custom Role Modal States
   const [isRoleModalOpen, setIsRoleModalOpen] = useState(false);
   const [editingRole, setEditingRole] = useState<CustomRoleDefinition | null>(null);
   const [roleName, setRoleName] = useState('');
+  const [roleCategory, setRoleCategory] = useState<string>('Breeding');
   const [roleDescription, setRoleDescription] = useState('');
   const [rolePermissions, setRolePermissions] = useState<PermissionKey[]>(ALL_PERMISSIONS);
-
-  const [confirmModal, setConfirmModal] = useState<{
-    isOpen: boolean;
-    title: string;
-    description: string;
-    onConfirm?: () => void;
-    type: 'danger' | 'warning' | 'success' | 'info';
-    confirmText?: string;
-  }>({
-    isOpen: false,
-    title: '',
-    description: '',
-    type: 'warning'
-  });
 
   // Mutation to save settings updates to server action
   const updateSettingsMutation = useMutation({
@@ -92,64 +114,18 @@ export default function SettingsTab({ settings, currentUser, initialSubTab = 'li
     }
   });
 
-const DEFAULT_BREEDING_FALLBACKS: Record<string, string[]> = {
-  sireBreeds: ['Brahman Red', 'Brahman White', 'Angus Black', 'Wagyu A5', 'Charolais', 'Indu-Brazil', 'Nelore', 'Limousin'],
-  damClassifications: ['Existing Dam', 'Purchased Heifer', 'Local Mixed Dam', 'Registered Purebred Dam'],
-  calfGenerations: ['F1 Cross (50%)', 'F2 Cross (75%)', 'F3 Purebred (87.5%)', 'Purebred 100%'],
-  breedingMethods: ['Artificial Insemination (AI)', 'Natural Service', 'Embryo Transfer (ET)'],
-  serviceTypes: ['AI Straw Insemination', 'Direct Sire Bull Service', 'IVF'],
-  gestationLocations: ['Maternity Pen A', 'Nursery Stall 1', 'Main Breeding Facility', 'Kampong Cham Ranch'],
-  pregnancyStatuses: ['Pending PD Check', 'Confirmed Pregnant', 'Open (Not Pregnant)', 'Calved'],
-};
-
-  const handleAddItem = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!newItemText.trim()) return;
-
-    const existingList = (settings[activeCategory] as string[]) || DEFAULT_BREEDING_FALLBACKS[activeCategory] || [];
-    const list = [...existingList];
-    if (list.includes(newItemText.trim())) {
-      setConfirmModal({
-        isOpen: true,
-        title: 'Option Exists',
-        description: `The item "${newItemText.trim()}" is already present in this category.`,
-        type: 'info',
-        confirmText: 'OK'
-      });
-      return;
-    }
-
-    const updatedSettings: MasterSetup = {
-      ...settings,
-      [activeCategory]: [...list, newItemText.trim()]
-    };
-
-    updateSettingsMutation.mutate(updatedSettings);
-    setNewItemText('');
-  };
-
-  const handleRemoveItem = (category: keyof Omit<MasterSetup, 'users' | 'roles'>, index: number) => {
-    const existingList = (settings[category] as string[]) || DEFAULT_BREEDING_FALLBACKS[category] || [];
-    const list = [...existingList];
-    list.splice(index, 1);
-
-    const updatedSettings: MasterSetup = {
-      ...settings,
-      [category]: list
-    };
-
-    updateSettingsMutation.mutate(updatedSettings);
-  };
-
   const handleStartEditUser = (user: UserRoleItem) => {
     setEditingUserId(user.id);
     setUserName(user.name);
     setUserEmail(user.email);
     setUserPassword(user.password || '');
+    setUserLevel(user.userLevel || 'Breeder');
     setUserRole(user.role);
+    setUserDataScope(user.dataScope || 'ASSIGNED_RECORD');
     const matchedRole = currentRoles.find(r => r.name === user.role);
     setUserPermissions(user.permissions && user.permissions.length > 0 ? user.permissions : (matchedRole ? matchedRole.permissions : (DEFAULT_ROLE_PERMISSIONS[user.role] || [])));
     setUserFarmLocation(user.farmLocation || '');
+    setUserCompanyName(user.companyName || '');
     setIsAddingUser(true);
   };
 
@@ -158,8 +134,6 @@ const DEFAULT_BREEDING_FALLBACKS: Record<string, string[]> = {
     const matchedRole = currentRoles.find(r => r.name === newRoleName);
     if (matchedRole) {
       setUserPermissions(matchedRole.permissions);
-    } else if (DEFAULT_ROLE_PERMISSIONS[newRoleName]) {
-      setUserPermissions(DEFAULT_ROLE_PERMISSIONS[newRoleName]);
     }
   };
 
@@ -167,28 +141,6 @@ const DEFAULT_BREEDING_FALLBACKS: Record<string, string[]> = {
     setUserPermissions(prev =>
       prev.includes(key) ? prev.filter(k => k !== key) : [...prev, key]
     );
-  };
-
-  const toggleModulePermissions = (moduleKeys: PermissionKey[]) => {
-    const allEnabled = moduleKeys.every(k => userPermissions.includes(k));
-    if (allEnabled) {
-      setUserPermissions(prev => prev.filter(k => !moduleKeys.includes(k)));
-    } else {
-      setUserPermissions(prev => Array.from(new Set([...prev, ...moduleKeys])));
-    }
-  };
-
-  const handleApplyPreset = (presetName: string) => {
-    if (presetName === 'all') {
-      setUserPermissions(ALL_PERMISSIONS);
-    } else {
-      const matched = currentRoles.find(r => r.name === presetName);
-      if (matched) {
-        setUserPermissions(matched.permissions);
-      } else if (DEFAULT_ROLE_PERMISSIONS[presetName]) {
-        setUserPermissions(DEFAULT_ROLE_PERMISSIONS[presetName]);
-      }
-    }
   };
 
   const handleAddUser = (e: React.FormEvent) => {
@@ -204,10 +156,13 @@ const DEFAULT_BREEDING_FALLBACKS: Record<string, string[]> = {
             ...u,
             name: userName.trim(),
             email: userEmail.trim(),
+            userLevel: userLevel as any,
             role: userRole,
+            dataScope: userDataScope,
             password: userPassword.trim() || u.password || 'password123',
             permissions: userPermissions,
-            farmLocation: userFarmLocation.trim() || undefined
+            farmLocation: userFarmLocation.trim() || undefined,
+            companyName: userCompanyName.trim() || undefined
           };
         }
         return u;
@@ -217,11 +172,14 @@ const DEFAULT_BREEDING_FALLBACKS: Record<string, string[]> = {
         id: `USR-${Math.random().toString(36).substr(2, 9).toUpperCase()}`,
         name: userName.trim(),
         email: userEmail.trim(),
+        userLevel: userLevel as any,
         role: userRole,
+        dataScope: userDataScope,
         status: 'Active',
         password: userPassword.trim() || 'password123',
         permissions: userPermissions,
-        farmLocation: userFarmLocation.trim() || undefined
+        farmLocation: userFarmLocation.trim() || undefined,
+        companyName: userCompanyName.trim() || undefined
       };
       updatedUsers.push(newUser);
     }
@@ -235,871 +193,425 @@ const DEFAULT_BREEDING_FALLBACKS: Record<string, string[]> = {
     setUserName('');
     setUserEmail('');
     setUserPassword('');
-    setUserRole('Company');
-    setUserPermissions(DEFAULT_ROLE_PERMISSIONS['Company']);
+    setUserLevel('Breeder');
+    setUserRole('Breeding Specialist');
+    setUserDataScope('ASSIGNED_RECORD');
+    setUserPermissions(DEFAULT_ROLE_PERMISSIONS['Breeder']);
     setUserFarmLocation('');
+    setUserCompanyName('');
     setEditingUserId(null);
     setIsAddingUser(false);
-  };
-
-  // Custom Role Modal Handlers
-  const openCreateRoleModal = () => {
-    setEditingRole(null);
-    setRoleName('');
-    setRoleDescription('');
-    setRolePermissions(DEFAULT_ROLE_PERMISSIONS['Farm Staff'] || []);
-    setIsRoleModalOpen(true);
-  };
-
-  const openEditRoleModal = (role: CustomRoleDefinition) => {
-    setEditingRole(role);
-    setRoleName(role.name);
-    setRoleDescription(role.description || '');
-    setRolePermissions(role.permissions || []);
-    setIsRoleModalOpen(true);
-  };
-
-  const handleSaveRole = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!roleName.trim()) return;
-
-    let updatedRoles = [...currentRoles];
-
-    if (editingRole) {
-      updatedRoles = updatedRoles.map(r => r.id === editingRole.id ? {
-        ...r,
-        name: roleName.trim(),
-        description: roleDescription.trim(),
-        permissions: rolePermissions
-      } : r);
-    } else {
-      const newRole: CustomRoleDefinition = {
-        id: `ROLE-${Math.floor(10 + Math.random() * 90)}`,
-        name: roleName.trim(),
-        description: roleDescription.trim() || 'Custom ERP User Role',
-        permissions: rolePermissions,
-        isSystem: false
-      };
-      updatedRoles.push(newRole);
-    }
-
-    const updatedSettings: MasterSetup = {
-      ...settings,
-      roles: updatedRoles
-    };
-
-    updateSettingsMutation.mutate(updatedSettings);
-    setIsRoleModalOpen(false);
-  };
-
-  const handleDeleteRole = (roleId: string) => {
-    const target = currentRoles.find(r => r.id === roleId);
-    if (target?.name === 'Super Admin') {
-      alert('Super Admin role cannot be deleted to prevent system lockout.');
-      return;
-    }
-
-    setConfirmModal({
-      isOpen: true,
-      title: 'Delete System/Custom Role?',
-      description: `Are you sure you want to delete the role "${target?.name}"? Users with this role will default back to Company.`,
-      type: 'danger',
-      confirmText: 'Delete Role',
-      onConfirm: () => {
-        const updatedRoles = currentRoles.filter(r => r.id !== roleId);
-        const updatedSettings: MasterSetup = {
-          ...settings,
-          roles: updatedRoles
-        };
-        updateSettingsMutation.mutate(updatedSettings);
-      }
-    });
   };
 
   const handleToggleUserStatus = (userId: string) => {
     const updatedUsers = (settings.users || []).map(u => {
       if (u.id === userId) {
-        return { ...u, status: u.status === 'Active' ? 'Inactive' : 'Active' } as UserRoleItem;
+        const nextStatus = u.status === 'Active' ? 'Inactive' : 'Active';
+        return { ...u, status: nextStatus as any };
       }
       return u;
     });
 
-    const updatedSettings: MasterSetup = {
+    updateSettingsMutation.mutate({
       ...settings,
       users: updatedUsers
-    };
-
-    updateSettingsMutation.mutate(updatedSettings);
-  };
-
-  const handleRemoveUser = (userId: string) => {
-    setConfirmModal({
-      isOpen: true,
-      title: 'Remove User Profile',
-      description: 'Are you sure you want to permanently remove this user? They will lose all access to the system.',
-      type: 'danger',
-      confirmText: 'Remove User',
-      onConfirm: () => {
-        const updatedSettings: MasterSetup = {
-          ...settings,
-          users: (settings.users || []).filter(u => u.id !== userId)
-        };
-        updateSettingsMutation.mutate(updatedSettings);
-      }
     });
   };
 
-  // Human-readable titles for configuration arrays
-  const categoriesMeta: Record<keyof Omit<MasterSetup, 'users' | 'roles' | 'farms'>, { label: string; description: string }> = {
-    breeds: { label: 'Breeds', description: 'Master catalog of registered cattle breeds.' },
-    locations: { label: 'Locations / Barns', description: 'Locations and stall/pasture identifier names.' },
-    buyTypes: { label: 'Acquisition / Buy Types', description: 'Methods through which cattle enter inventory.' },
-    healthStatuses: { label: 'Health Status Types', description: 'Allowable medical diagnostic classifications.' },
-    vaccineTypes: { label: 'Vaccines & Dewormers', description: 'Authorized vaccines and deworming treatments.' },
-    feedTypes: { label: 'Feed & Nutrition Types', description: 'Feeding program ingredient batches.' },
-    expenseCategories: { label: 'Expense Categories', description: 'Financial ledger cost allocation labels.' },
-    paymentMethods: { label: 'Payment Methods', description: 'Corporate checkout and payout channels.' },
-    sexes: { label: 'Sex Options', description: 'Biological classifications of cattle.' },
-    diseaseTypes: { label: 'Common Diseases / Symptoms', description: 'Known illnesses logged during checks.' },
-    batchTypes: { label: 'Batch Classification Types', description: 'Purpose options assigned to dynamic herds.' },
-    weightUnits: { label: 'Measurement Units', description: 'Cattle weight measurement systems.' },
-    revenueTypes: { label: 'Revenue Streams', description: 'ERP classifications for income recording.' },
-    purchaseTypes: { label: 'Purchase Type Structures', description: 'Acquisition categories mapped to finances.' },
-    sireBreeds: { label: 'Sire Breeds & Semen Straws', description: 'Master catalog of registered Sire bulls and semen straw breeds.' },
-    damClassifications: { label: 'Dam Classifications & Sources', description: 'Categories and sources for breeding mother cows.' },
-    calfGenerations: { label: 'Calf Generations & Classifications', description: 'Genetics classifications for calves (F1 50%, F2 75%, Purebred).' },
-    breedingMethods: { label: 'Breeding Methods', description: 'Allowed reproductive methods (AI, Natural Service, Embryo Transfer).' },
-    serviceTypes: { label: 'Service Types', description: 'Insemination service types and straw classifications.' },
-    gestationLocations: { label: 'Calving & Nursery Facilities', description: 'Dedicated maternity pens, nursery facilities, and calving locations.' },
-    pregnancyStatuses: { label: 'Pregnancy Diagnostic Statuses', description: 'Allowable pregnancy checkup statuses (Pending PD, Confirmed, Open).' }
-  };
-
-  const livestockKeys: (keyof Omit<MasterSetup, 'users' | 'roles' | 'farms'>)[] = [
-    'breeds',
-    'locations',
-    'buyTypes',
-    'sexes',
-    'healthStatuses',
-    'vaccineTypes',
-    'diseaseTypes',
-    'feedTypes',
-    'batchTypes',
-    'weightUnits'
-  ];
-
-  const breedingKeys: (keyof Omit<MasterSetup, 'users' | 'roles' | 'farms'>)[] = [
-    'sireBreeds',
-    'damClassifications',
-    'calfGenerations',
-    'breedingMethods',
-    'serviceTypes',
-    'gestationLocations',
-    'pregnancyStatuses'
-  ];
-
-  const financialKeys: (keyof Omit<MasterSetup, 'users' | 'roles' | 'farms'>)[] = [
-    'expenseCategories',
-    'revenueTypes',
-    'purchaseTypes',
-    'paymentMethods'
-  ];
-
   return (
     <div className="space-y-6">
-      {/* Tab Navigation header */}
-      {!isFarmOwner ? (
-        <div className="flex border-b border-slate-200 overflow-x-auto">
-          <button
-            onClick={() => { setSubTab('livestock'); setActiveCategory('breeds'); }}
-            className={`flex items-center gap-2 px-6 py-3.5 border-b-2 font-bold text-xs uppercase tracking-wider transition-all duration-150 cursor-pointer ${
-              subTab === 'livestock'
-                ? 'border-emerald-600 text-emerald-600'
-                : 'border-transparent text-slate-400 hover:text-slate-600'
-            }`}
-          >
-            <Settings className="h-4 w-4" />
-            {t('settings.systemParams')}
-          </button>
-          <button
-            onClick={() => { setSubTab('breeding'); setActiveCategory('sireBreeds'); }}
-            className={`flex items-center gap-2 px-6 py-3.5 border-b-2 font-bold text-xs uppercase tracking-wider transition-all duration-150 cursor-pointer ${
-              subTab === 'breeding'
-                ? 'border-purple-600 text-purple-600'
-                : 'border-transparent text-slate-400 hover:text-slate-600'
-            }`}
-          >
-            <Sparkles className="h-4 w-4 text-purple-600" />
-            Breeding Setup (ERP Master)
-          </button>
-          <button
-            onClick={() => { setSubTab('financial'); setActiveCategory('expenseCategories'); }}
-            className={`flex items-center gap-2 px-6 py-3.5 border-b-2 font-bold text-xs uppercase tracking-wider transition-all duration-150 cursor-pointer ${
-              subTab === 'financial'
-                ? 'border-emerald-600 text-emerald-600'
-                : 'border-transparent text-slate-400 hover:text-slate-600'
-            }`}
-          >
-            <DollarSign className="h-4 w-4" />
-            {t('finance.title')}
-          </button>
-          <button
-            onClick={() => setSubTab('users')}
-            className={`flex items-center gap-2 px-6 py-3.5 border-b-2 font-bold text-xs uppercase tracking-wider transition-all duration-150 cursor-pointer ${
-              subTab === 'users'
-                ? 'border-emerald-600 text-emerald-600'
-                : 'border-transparent text-slate-400 hover:text-slate-600'
-            }`}
-          >
-            <Shield className="h-4 w-4" />
-            {t('settings.userManagement')}
-          </button>
-        </div>
-      ) : (
-        <div className="border-b border-slate-200 pb-4">
-          <h2 className="text-base font-extrabold text-slate-800 flex items-center gap-2 uppercase tracking-wide">
-            <ShieldCheck className="h-5 w-5 text-emerald-600 animate-pulse" />
-            Farm Staff & Vet User Management
-          </h2>
-          <p className="text-xs text-slate-400 font-medium mt-1">
-            Create, manage, and configure security permissions for staff and veterinarians scoped to your farm: <strong className="text-emerald-700 font-black">{currentUser.farmLocation}</strong>.
-          </p>
-        </div>
-      )}
 
-      {/* Content for Livestock Setup, Breeding Setup & Financial Setup lists */}
-      {(subTab === 'livestock' || subTab === 'breeding' || subTab === 'financial') && (
-        <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
-          {/* Left Navigation Selection list */}
-          <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-xs h-fit space-y-1">
-            <h4 className="text-[10px] font-bold text-slate-400 uppercase tracking-widest px-3.5 mb-3.5">Configure Categories</h4>
-            {(subTab === 'livestock' ? livestockKeys : subTab === 'breeding' ? breedingKeys : financialKeys).map(key => {
-              const isActive = activeCategory === key;
-              return (
-                <button
-                  key={key}
-                  onClick={() => setActiveCategory(key)}
-                  className={`w-full text-left px-3.5 py-3 rounded-xl text-xs font-semibold transition-all duration-150 flex items-center justify-between cursor-pointer ${
-                    isActive
-                      ? 'bg-emerald-50 text-emerald-700 border-l-4 border-emerald-600'
-                      : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'
-                  }`}
-                >
-                  <span>{categoriesMeta[key]?.label}</span>
-                  <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold transition-all ${
-                    isActive 
-                      ? 'bg-[#D1FAE5] text-[#065F46]' 
-                      : 'bg-slate-100 text-slate-500'
-                  }`}>
-                    {((settings[key] || DEFAULT_BREEDING_FALLBACKS[key] || []) as string[]).length}
-                  </span>
-                </button>
-              );
-            })}
+      {/* Header Banner */}
+      <div className="bg-[#121926] text-white rounded-3xl p-6 shadow-xl border border-slate-800">
+        <div className="flex items-center gap-3">
+          <div className="h-10 w-10 rounded-2xl bg-[#dc5c15]/20 text-[#dc5c15] border border-[#dc5c15]/30 flex items-center justify-center font-black">
+            <ShieldCheck className="h-5 w-5" />
           </div>
-
-          {/* Right management view */}
-          <div className="lg:col-span-3 space-y-6">
-            <Card className="bg-white border border-slate-200 rounded-2xl shadow-xs overflow-hidden">
-              <CardHeader className="border-b border-slate-100 p-6">
-                <CardTitle className="text-base font-bold text-slate-800">
-                  Manage {categoriesMeta[activeCategory]?.label}
-                </CardTitle>
-                <CardDescription className="text-xs text-slate-400 mt-1">
-                  {categoriesMeta[activeCategory]?.description} Custom options will automatically update input forms.
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="p-6 space-y-6">
-                {/* Form to add item */}
-                <form onSubmit={handleAddItem} className="flex gap-3">
-                  <input
-                    type="text"
-                    value={newItemText}
-                    onChange={e => setNewItemText(e.target.value)}
-                    placeholder={`Enter new ${categoriesMeta[activeCategory]?.label.toLowerCase()} option...`}
-                    className="flex-1 bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-emerald-500/10 focus:border-emerald-600 transition-all"
-                  />
-                  <button
-                    type="submit"
-                    className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold px-5 py-2.5 rounded-xl flex items-center gap-2 transition-all shadow-sm cursor-pointer"
-                  >
-                    <Plus className="h-4 w-4" /> Add Item
-                  </button>
-                </form>
-
-                {/* Items tags/pills list */}
-                <div className="flex flex-wrap gap-2.5 pt-2">
-                  {((settings[activeCategory] || DEFAULT_BREEDING_FALLBACKS[activeCategory] || []) as string[]).map((item, idx) => (
-                    <div
-                      key={idx}
-                      className="bg-slate-50 border border-slate-200/80 rounded-xl py-2 px-3.5 text-xs font-bold text-slate-700 flex items-center gap-2 group hover:border-slate-300 transition-all"
-                    >
-                      <span>{item}</span>
-                      <button
-                        type="button"
-                        onClick={() => handleRemoveItem(activeCategory, idx)}
-                        className="text-slate-400 hover:text-rose-500 transition-colors p-0.5 rounded cursor-pointer"
-                        title="Delete option"
-                      >
-                        <Trash2 className="h-3.5 w-3.5" />
-                      </button>
-                    </div>
-                  ))}
-                  {((settings[activeCategory] || DEFAULT_BREEDING_FALLBACKS[activeCategory] || []) as string[]).length === 0 && (
-                    <p className="text-xs text-slate-400 font-semibold italic py-4">
-                      No custom entries created yet. Add one above.
-                    </p>
-                  )}
-                </div>
-              </CardContent>
-            </Card>
+          <div>
+            <h2 className="text-base sm:text-lg font-black tracking-tight">Kaksedthan Setup & Access Control Hub</h2>
+            <p className="text-xs text-slate-400 mt-0.5">
+              Three-Tier Security Architecture: <span className="text-[#dc5c15] font-bold">User Level</span> (Account Category) → <span className="text-purple-400 font-bold">Role</span> (Responsibility) → <span className="text-emerald-400 font-bold">Permissions & Data Scope</span>.
+            </p>
           </div>
         </div>
-      )}
+      </div>
 
-      {/* Content for User Permissions & Roles sub-tab */}
-      {subTab === 'users' && (
-        <div className="space-y-6 text-left">
-          {/* Custom Roles Manager Panel */}
-          {!isFarmOwner && (
-            <Card className="bg-white border border-slate-200 rounded-2xl shadow-xs overflow-hidden">
-              <CardHeader className="flex flex-col sm:flex-row sm:items-center justify-between border-b border-slate-100 p-6 gap-4">
-                <div>
-                  <CardTitle className="text-base font-bold text-slate-800 flex items-center gap-2">
-                    <Award className="h-5 w-5 text-emerald-600" />
-                    ERP Master Roles Management ({currentRoles.length} Roles Defined)
-                  </CardTitle>
-                  <CardDescription className="text-xs text-slate-400 mt-1">
-                    Create custom system roles (e.g. Veterinarian, Accountant, Feed Manager) with preset permission matrixes.
-                  </CardDescription>
-                </div>
-                <button
-                  onClick={openCreateRoleModal}
-                  className="bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold py-2.5 px-4 rounded-xl flex items-center gap-1.5 shadow-sm transition-all cursor-pointer active:scale-[0.98]"
-                >
-                  <Plus className="h-4 w-4 text-emerald-400" />
-                  Create New Custom Role
-                </button>
-              </CardHeader>
-              <CardContent className="p-6">
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                  {currentRoles.map(role => (
-                    <div key={role.id} className="bg-slate-50 border border-slate-200/80 rounded-2xl p-4 space-y-3 flex flex-col justify-between hover:border-slate-300 transition-all">
-                      <div className="space-y-1">
-                        <div className="flex items-center justify-between">
-                          <span className="font-black text-xs text-slate-800">{role.name}</span>
-                          <span className={`px-2 py-0.5 rounded text-[9px] font-bold ${
-                            role.isSystem ? 'bg-slate-200 text-slate-600' : 'bg-emerald-100 text-emerald-800'
-                          }`}>
-                            {role.isSystem ? 'System' : 'Custom'}
-                          </span>
-                        </div>
-                        <p className="text-[10.5px] text-slate-500 line-clamp-2">{role.description}</p>
-                      </div>
+      {/* 5 ACCESS CONTROL HUB SUBTABS */}
+      <div className="bg-white rounded-3xl border border-slate-200/90 p-2 shadow-xs flex items-center gap-1.5 overflow-x-auto scrollbar-none">
+        <button
+          onClick={() => setRbacTab('users')}
+          className={`flex-1 py-2.5 px-4 rounded-2xl text-xs font-black transition-all cursor-pointer flex items-center justify-center gap-2 ${
+            rbacTab === 'users' ? 'bg-[#dc5c15] text-white shadow-md shadow-[#dc5c15]/20' : 'text-slate-600 hover:bg-slate-100'
+          }`}
+        >
+          <UserCheck className="h-4 w-4" />
+          <span>1. User Management</span>
+        </button>
 
-                      <div className="flex items-center justify-between border-t border-slate-200/60 pt-2.5 text-xs">
-                        <span className="text-[10px] font-bold text-slate-600 flex items-center gap-1">
-                          <CheckCircle2 className="h-3 w-3 text-emerald-600" />
-                          {role.permissions.length} / {ALL_PERMISSIONS.length} Functions
+        <button
+          onClick={() => setRbacTab('levels')}
+          className={`flex-1 py-2.5 px-4 rounded-2xl text-xs font-black transition-all cursor-pointer flex items-center justify-center gap-2 ${
+            rbacTab === 'levels' ? 'bg-[#dc5c15] text-white shadow-md shadow-[#dc5c15]/20' : 'text-slate-600 hover:bg-slate-100'
+          }`}
+        >
+          <Layers className="h-4 w-4" />
+          <span>2. User Levels (4 Levels)</span>
+        </button>
+
+        <button
+          onClick={() => setRbacTab('roles')}
+          className={`flex-1 py-2.5 px-4 rounded-2xl text-xs font-black transition-all cursor-pointer flex items-center justify-center gap-2 ${
+            rbacTab === 'roles' ? 'bg-[#dc5c15] text-white shadow-md shadow-[#dc5c15]/20' : 'text-slate-600 hover:bg-slate-100'
+          }`}
+        >
+          <Award className="h-4 w-4" />
+          <span>3. Roles Configuration</span>
+        </button>
+
+        <button
+          onClick={() => setRbacTab('permissions')}
+          className={`flex-1 py-2.5 px-4 rounded-2xl text-xs font-black transition-all cursor-pointer flex items-center justify-center gap-2 ${
+            rbacTab === 'permissions' ? 'bg-[#dc5c15] text-white shadow-md shadow-[#dc5c15]/20' : 'text-slate-600 hover:bg-slate-100'
+          }`}
+        >
+          <KeyRound className="h-4 w-4" />
+          <span>4. Permissions Matrix</span>
+        </button>
+
+        <button
+          onClick={() => setRbacTab('access')}
+          className={`flex-1 py-2.5 px-4 rounded-2xl text-xs font-black transition-all cursor-pointer flex items-center justify-center gap-2 ${
+            rbacTab === 'access' ? 'bg-[#dc5c15] text-white shadow-md shadow-[#dc5c15]/20' : 'text-slate-600 hover:bg-slate-100'
+          }`}
+        >
+          <Shield className="h-4 w-4" />
+          <span>5. User Access & Scopes</span>
+        </button>
+      </div>
+
+      {/* 1. USER MANAGEMENT TAB */}
+      {rbacTab === 'users' && (
+        <Card className="bg-white border border-slate-200/90 rounded-3xl shadow-sm overflow-hidden">
+          <CardHeader className="flex flex-col sm:flex-row sm:items-center justify-between border-b border-slate-100 p-5 gap-4">
+            <div>
+              <CardTitle className="text-sm font-black text-slate-900 flex items-center gap-2">
+                <UserCheck className="h-4 w-4 text-[#dc5c15]" />
+                User Account Registry & Status Controls
+              </CardTitle>
+              <CardDescription className="text-xs text-slate-500 mt-0.5">
+                Active accounts across all four operational User Levels (`Breeder`, `Farm Owner`, `Customer`, `Sire Sourcing Co.`).
+              </CardDescription>
+            </div>
+            <button
+              onClick={() => {
+                setIsAddingUser(true);
+                setEditingUserId(null);
+                setUserName('');
+                setUserEmail('');
+                setUserPassword('');
+                setUserLevel('Breeder');
+                setUserRole('Breeding Specialist');
+                setUserDataScope('ASSIGNED_RECORD');
+                setUserPermissions(DEFAULT_ROLE_PERMISSIONS['Breeder']);
+              }}
+              className="bg-[#dc5c15] hover:bg-[#c44f0e] text-white text-xs font-black py-2.5 px-4 rounded-xl flex items-center gap-1.5 shadow-md shadow-[#dc5c15]/20 transition-all cursor-pointer"
+            >
+              <UserPlus className="h-4 w-4" />
+              Add New System User
+            </button>
+          </CardHeader>
+          <CardContent className="p-5">
+            <div className="overflow-x-auto">
+              <table className="w-full text-left border-collapse text-xs">
+                <thead>
+                  <tr className="border-b border-slate-100 text-[10px] font-black text-slate-400 uppercase tracking-wider bg-slate-50">
+                    <th className="py-3 pl-3">Employee Name</th>
+                    <th className="py-3">User Level (Who)</th>
+                    <th className="py-3">Role (Responsibility)</th>
+                    <th className="py-3">Data Scope</th>
+                    <th className="py-3">Status</th>
+                    <th className="py-3 text-right pr-3">Actions</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {(settings.users || []).map(user => (
+                    <tr key={user.id} className="hover:bg-slate-50/50 transition-colors">
+                      <td className="py-3 pl-3">
+                        <p className="font-black text-slate-900">{user.name}</p>
+                        <p className="text-[10px] text-slate-400 font-medium">{user.email}</p>
+                      </td>
+                      <td className="py-3">
+                        <span className="inline-block px-2.5 py-0.5 rounded-full text-[9.5px] font-black bg-orange-100 text-[#dc5c15]">
+                          {user.userLevel || 'Breeder'}
                         </span>
-                        <div className="space-x-1">
-                          <button
-                            type="button"
-                            onClick={() => openEditRoleModal(role)}
-                            className="px-2 py-1 text-slate-600 hover:text-slate-900 text-[10px] font-bold cursor-pointer"
-                          >
-                            Edit
-                          </button>
-                          {role.name !== 'Super Admin' && (
-                            <button
-                              type="button"
-                              onClick={() => handleDeleteRole(role.id)}
-                              className="px-2 py-1 text-rose-500 hover:text-rose-700 text-[10px] font-bold cursor-pointer"
-                            >
-                              Delete
-                            </button>
-                          )}
-                        </div>
+                      </td>
+                      <td className="py-3">
+                        <span className="font-bold text-slate-800">{user.role}</span>
+                      </td>
+                      <td className="py-3">
+                        <span className="inline-block px-2 py-0.5 rounded text-[9.5px] font-mono font-bold bg-slate-100 text-slate-700">
+                          {user.dataScope || 'ASSIGNED_RECORD'}
+                        </span>
+                      </td>
+                      <td className="py-3">
+                        <button
+                          onClick={() => handleToggleUserStatus(user.id)}
+                          className={`text-[10px] font-black px-2.5 py-0.5 rounded-full cursor-pointer transition-colors ${
+                            user.status === 'Active' ? 'bg-emerald-100 text-emerald-800' : 'bg-rose-100 text-rose-800'
+                          }`}
+                        >
+                          {user.status}
+                        </button>
+                      </td>
+                      <td className="py-3 text-right pr-3 space-x-1">
+                        <button
+                          onClick={() => handleStartEditUser(user)}
+                          className="px-2.5 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-[10px] font-black transition-colors cursor-pointer"
+                        >
+                          Edit
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* 2. USER LEVELS TAB */}
+      {rbacTab === 'levels' && (
+        <Card className="bg-white border border-slate-200/90 rounded-3xl shadow-sm p-5 space-y-4">
+          <div className="flex items-center gap-2 border-b border-slate-100 pb-3">
+            <Layers className="h-4 w-4 text-[#dc5c15]" />
+            <h4 className="text-xs font-black text-slate-900 uppercase tracking-wider">Approved Operational User Levels (Account Category)</h4>
+          </div>
+          <p className="text-xs text-slate-500 font-medium">
+            User Level defines <strong className="text-slate-900">WHO THE USER IS</strong> in the business domain. Permissions are not assigned directly to User Levels; they are derived from Roles.
+          </p>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            {currentUserLevels.map(lvl => (
+              <div key={lvl.id} className="p-4 bg-slate-50 border border-slate-200/80 rounded-2xl space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-black text-slate-900">{lvl.name}</span>
+                  <span className="text-[9px] font-black bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded-full">{lvl.status}</span>
+                </div>
+                <p className="text-xs text-slate-600 font-semibold">{lvl.description}</p>
+                <div className="text-[10px] text-slate-400 font-mono">ID: {lvl.id}</div>
+              </div>
+            ))}
+          </div>
+        </Card>
+      )}
+
+      {/* 3. ROLES CONFIGURATION TAB */}
+      {rbacTab === 'roles' && (
+        <Card className="bg-white border border-slate-200/90 rounded-3xl shadow-sm p-5 space-y-4">
+          <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+            <div className="flex items-center gap-2">
+              <Award className="h-4 w-4 text-[#dc5c15]" />
+              <h4 className="text-xs font-black text-slate-900 uppercase tracking-wider">Configurable System Roles (Responsibilities)</h4>
+            </div>
+          </div>
+          <p className="text-xs text-slate-500 font-medium">
+            Roles define <strong className="text-slate-900">WHAT RESPONSIBILITY THE USER HAS</strong>. Permissions are assigned strictly to Roles.
+          </p>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
+            {currentRoles.map(role => (
+              <div key={role.id} className="p-4 bg-slate-50 border border-slate-200/80 rounded-2xl space-y-2 flex flex-col justify-between">
+                <div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-black text-slate-900">{role.name}</span>
+                    <span className="text-[8.5px] font-black bg-orange-100 text-[#dc5c15] px-1.5 py-0.2 rounded">{role.category || 'General'}</span>
+                  </div>
+                  <p className="text-[11px] text-slate-500 font-medium mt-1">{role.description}</p>
+                </div>
+                <div className="border-t border-slate-200/80 pt-2 flex items-center justify-between text-[10px] font-bold text-slate-600">
+                  <span>{role.permissions.length} Permissions</span>
+                  <span className="text-[#dc5c15]">System Role</span>
+                </div>
+              </div>
+            ))}
+          </div>
+        </Card>
+      )}
+
+      {/* 4. PERMISSIONS MATRIX TAB */}
+      {rbacTab === 'permissions' && (
+        <Card className="bg-white border border-slate-200/90 rounded-3xl shadow-sm p-5 space-y-4">
+          <div className="flex items-center gap-2 border-b border-slate-100 pb-3">
+            <KeyRound className="h-4 w-4 text-[#dc5c15]" />
+            <h4 className="text-xs font-black text-slate-900 uppercase tracking-wider">Granular Module Permissions Matrix</h4>
+          </div>
+          <p className="text-xs text-slate-500 font-medium">
+            Permissions define <strong className="text-slate-900">WHAT ACTION A USER CAN EXECUTE</strong> (View, Create, Edit, Delete, Verify, Approve, Download).
+          </p>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {PERMISSION_MODULES.map(mod => (
+              <div key={mod.id} className="p-4 bg-slate-50 border border-slate-200/80 rounded-2xl space-y-2">
+                <h5 className="text-xs font-black text-slate-900 border-b border-slate-200/70 pb-1.5">{mod.label}</h5>
+                <div className="space-y-1.5">
+                  {mod.items.map(item => (
+                    <div key={item.key} className="flex items-start gap-2 text-xs">
+                      <span className="font-mono font-bold text-[10px] text-[#dc5c15] bg-orange-50 px-1.5 py-0.5 rounded shrink-0">{item.key}</span>
+                      <div>
+                        <p className="font-bold text-slate-800 text-[11px]">{item.label}</p>
+                        <p className="text-[10px] text-slate-400 font-medium">{item.description}</p>
                       </div>
                     </div>
                   ))}
                 </div>
-              </CardContent>
-            </Card>
-          )}
-
-          {/* User Accounts & Permission Assignment Card */}
-          <Card className="bg-white border border-slate-200 rounded-2xl shadow-xs overflow-hidden">
-            <CardHeader className="flex flex-col sm:flex-row sm:items-center justify-between border-b border-slate-100 p-6 gap-4">
-              <div>
-                <CardTitle className="text-base font-bold text-slate-800 flex items-center gap-2">
-                  <ShieldCheck className="h-5 w-5 text-emerald-600" />
-                  ERP User Accounts & Function Permissions
-                </CardTitle>
-                <CardDescription className="text-xs text-slate-400 mt-1">
-                  Authorize employees, assign system roles, and fine-tune function-level permissions.
-                </CardDescription>
               </div>
-              {!isAddingUser && !editingUserId && (
-                <button
-                  onClick={() => {
-                    setIsAddingUser(true);
-                    setEditingUserId(null);
-                    setUserName('');
-                    setUserEmail('');
-                    setUserPassword('');
-                    if (isFarmOwner) {
-                      setUserRole('Farm Staff');
-                      setUserPermissions(DEFAULT_ROLE_PERMISSIONS['Farm Staff']);
-                      setUserFarmLocation(currentUser.farmLocation || '');
-                    } else {
-                      setUserRole('Company');
-                      setUserPermissions(DEFAULT_ROLE_PERMISSIONS['Company']);
-                      setUserFarmLocation('');
-                    }
-                  }}
-                  className="bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold py-2.5 px-4 rounded-xl flex items-center gap-1.5 shadow-sm transition-all cursor-pointer active:scale-[0.98]"
-                >
-                  <UserPlus className="h-4 w-4" />
-                  Add User Account
-                </button>
-              )}
-            </CardHeader>
-            <CardContent className="p-6">
-              {/* Users Table */}
-              <div className="overflow-x-auto">
-                <table className="w-full text-left border-collapse text-xs">
-                  <thead>
-                    <tr className="border-b border-slate-100 text-[10px] font-bold text-slate-400 uppercase tracking-wider bg-slate-50/50">
-                      <th className="py-3 pl-3">Employee Profile</th>
-                      <th className="py-3">System Role</th>
-                      <th className="py-3">Location Scope</th>
-                      <th className="py-3">Function Access</th>
-                      <th className="py-3">Account Status</th>
-                      <th className="py-3 text-right pr-3">Actions</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-100">
-                    {(() => {
-                      const allUsers = (settings.users || []).filter(u => {
-                        if (isFarmOwner) {
-                          return u.farmLocation === currentUser.farmLocation && (u.role === 'Farm Staff' || u.role === 'Veterinarian');
-                        }
-                        return true;
-                      });
-                      const paginatedUsers = allUsers.slice((userPage - 1) * userPageSize, userPage * userPageSize);
-
-                      if (paginatedUsers.length === 0) {
-                        return (
-                          <tr>
-                            <td colSpan={6} className="py-8 text-center text-slate-400 font-semibold">
-                              No system users found.
-                            </td>
-                          </tr>
-                        );
-                      }
-
-                      return paginatedUsers.map(user => {
-                        const enabledCount = user.permissions?.length || (DEFAULT_ROLE_PERMISSIONS[user.role]?.length || 0);
-                        return (
-                          <tr key={user.id} className="hover:bg-slate-50/50 transition-colors">
-                            <td className="py-3.5 pl-3">
-                              <p className="font-bold text-slate-800">{user.name}</p>
-                              <p className="text-[10px] text-slate-400">{user.email}</p>
-                            </td>
-                            <td className="py-3.5">
-                              <span className={`inline-block px-2.5 py-0.5 rounded-full text-[9px] font-bold uppercase border ${
-                                user.role === 'Super Admin' ? 'bg-red-50 text-red-700 border-red-200' :
-                                user.role === 'Admin' ? 'bg-emerald-50 text-emerald-700 border-emerald-200' :
-                                user.role === 'Company' ? 'bg-teal-50 text-teal-700 border-teal-200' :
-                                user.role === 'Farm Owner' ? 'bg-amber-50 text-amber-800 border-amber-200' :
-                                user.role === 'Farm Staff' ? 'bg-indigo-50 text-indigo-700 border-indigo-200' :
-                                user.role === 'Veterinarian' ? 'bg-blue-50 text-blue-700 border-blue-200' :
-                                'bg-slate-100 text-slate-650 border-slate-200'
-                              }`}>
-                                {user.role}
-                              </span>
-                            </td>
-                            <td className="py-3.5">
-                              <span className={`inline-block px-2 py-0.5 rounded text-[10px] font-semibold border ${
-                                user.farmLocation ? 'bg-amber-50 text-amber-700 border-amber-100' : 'bg-slate-50 text-slate-400 border-slate-100'
-                              }`}>
-                                {user.farmLocation || 'Global (All Farms)'}
-                              </span>
-                            </td>
-                            <td className="py-3.5">
-                              <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-slate-100 text-slate-700 rounded-lg text-[10px] font-bold">
-                                <CheckCircle2 className="h-3 w-3 text-emerald-600" />
-                                {enabledCount} / {ALL_PERMISSIONS.length} Functions
-                              </span>
-                            </td>
-                            <td className="py-3.5">
-                              {user.role === 'Super Admin' ? (
-                                <span className="text-[10px] font-bold text-red-500">Active (Locked)</span>
-                              ) : (
-                                <button
-                                  onClick={() => handleToggleUserStatus(user.id)}
-                                  className={`text-[10px] font-bold transition-colors cursor-pointer ${
-                                    user.status === 'Active' ? 'text-emerald-600 hover:text-emerald-700 hover:underline' : 'text-slate-400 hover:text-slate-500 hover:underline'
-                                  }`}
-                                >
-                                  {user.status}
-                                </button>
-                              )}
-                            </td>
-                            <td className="py-3.5 text-right pr-3 space-x-1">
-                              <button
-                                onClick={() => handleStartEditUser(user)}
-                                className="px-2.5 py-1 bg-white hover:bg-slate-50 border border-slate-200 text-slate-700 rounded-lg text-[10px] font-bold transition-colors cursor-pointer"
-                              >
-                                Edit Account
-                              </button>
-                              {user.role !== 'Super Admin' && (
-                                <button
-                                  onClick={() => handleRemoveUser(user.id)}
-                                  className="px-2 py-1 bg-rose-50 hover:bg-rose-100 text-rose-600 rounded-lg text-[10px] font-bold transition-colors cursor-pointer"
-                                >
-                                  Delete
-                                </button>
-                              )}
-                            </td>
-                          </tr>
-                        );
-                      });
-                    })()}
-                  </tbody>
-                </table>
-              </div>
-              <TablePagination
-                currentPage={userPage}
-                totalItems={(settings.users || []).filter(u => isFarmOwner ? (u.farmLocation === currentUser.farmLocation && (u.role === 'Farm Staff' || u.role === 'Veterinarian')) : true).length}
-                pageSize={userPageSize}
-                onPageChange={setUserPage}
-                onPageSizeChange={setUserPageSize}
-                itemLabel="users"
-              />
-            </CardContent>
-          </Card>
-        </div>
+            ))}
+          </div>
+        </Card>
       )}
 
-      {/* Create / Edit Custom Role Dialog Modal */}
-      <Dialog open={isRoleModalOpen} onOpenChange={setIsRoleModalOpen}>
-        <DialogContent className="max-w-3xl bg-white p-6 rounded-2xl border border-slate-100 shadow-xl max-h-[90vh] overflow-y-auto">
-          <DialogHeader className="text-left pb-4 border-b border-slate-100">
-            <DialogTitle className="text-lg font-black text-slate-900 flex items-center gap-2">
-              <Award className="h-5 w-5 text-emerald-600" />
-              {editingRole ? `Edit Role: ${editingRole.name}` : 'Create New Custom Role'}
+      {/* 5. USER ACCESS MATRIX TAB */}
+      {rbacTab === 'access' && (
+        <Card className="bg-white border border-slate-200/90 rounded-3xl shadow-sm p-5 space-y-4">
+          <div className="flex items-center gap-2 border-b border-slate-100 pb-3">
+            <Shield className="h-4 w-4 text-[#dc5c15]" />
+            <h4 className="text-xs font-black text-slate-900 uppercase tracking-wider">User Access & Data Scope Assignment</h4>
+          </div>
+          <p className="text-xs text-slate-500 font-medium">
+            Combines <strong className="text-[#dc5c15]">User Level</strong> + <strong className="text-purple-700">Role</strong> + <strong className="text-emerald-700">Data Scope</strong> (`GLOBAL`, `FARM`, `CUSTOMER`, `SOURCING_COMPANY`, `ASSIGNED_RECORD`).
+          </p>
+
+          <div className="space-y-3">
+            {(settings.users || []).map(usr => (
+              <div key={usr.id} className="p-4 bg-slate-50 border border-slate-200/80 rounded-2xl flex items-center justify-between text-xs">
+                <div>
+                  <h5 className="font-black text-slate-900">{usr.name} ({usr.email})</h5>
+                  <p className="text-slate-600 font-medium mt-0.5">
+                    User Level: <span className="font-bold text-[#dc5c15]">{usr.userLevel || 'Breeder'}</span> • Role: <span className="font-bold text-purple-700">{usr.role}</span>
+                  </p>
+                </div>
+                <div className="text-right">
+                  <span className="text-[10px] font-mono font-black bg-slate-900 text-white px-3 py-1 rounded-xl">
+                    SCOPE: {usr.dataScope || 'ASSIGNED_RECORD'}
+                  </span>
+                </div>
+              </div>
+            ))}
+          </div>
+        </Card>
+      )}
+
+      {/* Add / Edit User Dialog Modal */}
+      <Dialog open={isAddingUser} onOpenChange={setIsAddingUser}>
+        <DialogContent className="max-w-xl bg-white p-6 rounded-3xl border border-slate-100 shadow-xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader className="text-left pb-3 border-b border-slate-100">
+            <DialogTitle className="text-base font-black text-slate-900 flex items-center gap-2">
+              <KeyRound className="h-4 w-4 text-[#dc5c15]" />
+              {editingUserId ? `Edit User: ${userName}` : 'Configure New User Account'}
             </DialogTitle>
-            <DialogDescription className="text-xs text-slate-500">
-              Define a new system role name, description, and assign default function permissions.
-            </DialogDescription>
-            {editingRole?.isSystem && (
-              <div className="bg-amber-50/70 border border-amber-200 p-2.5 rounded-xl text-[10px] text-amber-800 font-bold leading-normal mt-3">
-                ⚠️ System Role Lock: You cannot rename or delete system roles because the core system scoping rules rely on their names, but you can customize their default function permissions.
-              </div>
-            )}
-          </DialogHeader>
-
-          <form onSubmit={handleSaveRole} className="space-y-4 pt-4 text-left">
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div className="space-y-1">
-                <label className="text-xs font-bold text-slate-700">Role Name (ឈ្មោះតួនាទី)</label>
-                <input
-                  type="text"
-                  required
-                  disabled={editingRole?.isSystem}
-                  placeholder="e.g. Veterinarian, Feed Supervisor"
-                  value={roleName}
-                  onChange={e => setRoleName(e.target.value)}
-                  className="w-full bg-slate-50 border border-slate-200 disabled:bg-slate-100 disabled:text-slate-400 rounded-xl px-3.5 py-2 text-xs font-bold focus:outline-none focus:border-emerald-600"
-                />
-              </div>
-              <div className="space-y-1">
-                <label className="text-xs font-bold text-slate-700">Description</label>
-                <input
-                  type="text"
-                  placeholder="Short explanation of role duties..."
-                  value={roleDescription}
-                  onChange={e => setRoleDescription(e.target.value)}
-                  className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2 text-xs font-semibold focus:outline-none focus:border-emerald-600"
-                />
-              </div>
-            </div>
-
-            <div className="space-y-3 pt-2">
-              <label className="text-xs font-bold text-slate-800">
-                Default Role Function Permissions ({rolePermissions.length} / {ALL_PERMISSIONS.length} Enabled)
-              </label>
-
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-3 max-h-72 overflow-y-auto border border-slate-200 p-3 rounded-xl bg-slate-50/50">
-                {PERMISSION_MODULES.map(module => {
-                  const moduleKeys = module.items.map(i => i.key);
-                  const isAllEnabled = moduleKeys.every(k => rolePermissions.includes(k));
-                  return (
-                    <div key={module.id} className="bg-white border border-slate-200 rounded-lg p-2.5 space-y-1.5">
-                      <div className="flex items-center justify-between border-b border-slate-100 pb-1">
-                        <span className="text-[11px] font-black text-slate-800">{module.label}</span>
-                        <button
-                          type="button"
-                          onClick={() => {
-                            if (isAllEnabled) {
-                              setRolePermissions(prev => prev.filter(k => !moduleKeys.includes(k)));
-                            } else {
-                              setRolePermissions(prev => Array.from(new Set([...prev, ...moduleKeys])));
-                            }
-                          }}
-                          className="text-[9px] font-bold text-emerald-600 hover:underline cursor-pointer"
-                        >
-                          {isAllEnabled ? 'None' : 'All'}
-                        </button>
-                      </div>
-                      {module.items.map(item => {
-                        const isChecked = rolePermissions.includes(item.key);
-                        return (
-                          <label key={item.key} className="flex items-center gap-2 text-[11px] cursor-pointer">
-                            <input
-                              type="checkbox"
-                              checked={isChecked}
-                              onChange={() => {
-                                setRolePermissions(prev =>
-                                  prev.includes(item.key) ? prev.filter(k => k !== item.key) : [...prev, item.key]
-                                );
-                              }}
-                              className="rounded text-emerald-600 focus:ring-emerald-500 cursor-pointer"
-                            />
-                            <span className={isChecked ? 'font-bold text-slate-800' : 'text-slate-500'}>
-                              {item.label}
-                            </span>
-                          </label>
-                        );
-                      })}
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-
-            <div className="flex justify-end gap-2.5 pt-4 border-t border-slate-100">
-              <button
-                type="button"
-                onClick={() => setIsRoleModalOpen(false)}
-                className="px-4 py-2 text-xs font-bold text-slate-500 hover:text-slate-800 cursor-pointer"
-              >
-                Cancel
-              </button>
-              <button
-                type="submit"
-                className="bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs px-6 py-2 rounded-xl shadow-sm cursor-pointer"
-              >
-                💾 Save Custom Role
-              </button>
-            </div>
-          </form>
-        </DialogContent>
-      </Dialog>
-
-      {/* Create / Edit User Dialog Modal */}
-      <Dialog open={isAddingUser} onOpenChange={(open) => { if (!open) { setIsAddingUser(false); setEditingUserId(null); } }}>
-        <DialogContent className={`bg-white p-6 rounded-2xl border border-slate-100 shadow-xl max-h-[90vh] overflow-y-auto ${isFarmOwner ? 'max-w-md' : 'max-w-4xl'}`}>
-          <DialogHeader className="text-left pb-4 border-b border-slate-100">
-            <DialogTitle className="text-base font-bold text-slate-800 flex items-center gap-2">
-              <KeyRound className="h-5 w-5 text-emerald-600 animate-pulse" />
-              {editingUserId ? `Edit User Account: ${userName}` : 'Configure New User Account'}
-            </DialogTitle>
-            <DialogDescription className="text-xs text-slate-400">
-              {editingUserId ? 'Modify employee profile, system role, and access rights.' : 'Create an account for a new staff member or veterinarian.'}
+            <DialogDescription className="text-xs text-slate-500 font-medium">
+              Separately specify User Level (Category), Role (Responsibility), and Data Scope.
             </DialogDescription>
           </DialogHeader>
 
-          <form onSubmit={handleAddUser} className="space-y-6 pt-4 text-left">
-            {/* Core Account Details */}
+          <form onSubmit={handleAddUser} className="space-y-4 pt-3 text-xs">
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div className="space-y-1">
-                <label className="text-[10px] font-bold uppercase text-slate-400">Employee Name</label>
+              <div>
+                <label className="block font-bold text-slate-700 mb-1">Employee / User Name <span className="text-rose-500">*</span></label>
                 <input
                   type="text"
                   required
-                  placeholder="e.g. Sokha Manager"
                   value={userName}
                   onChange={e => setUserName(e.target.value)}
-                  className="w-full bg-white border border-slate-200 rounded-xl px-3.5 py-2 text-xs font-semibold focus:outline-none focus:border-emerald-600"
+                  className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2 font-bold text-slate-900 focus:ring-2 focus:ring-[#dc5c15] focus:outline-none"
                 />
               </div>
-              <div className="space-y-1">
-                <label className="text-[10px] font-bold uppercase text-slate-400">Corporate Email</label>
+
+              <div>
+                <label className="block font-bold text-slate-700 mb-1">Email / Username <span className="text-rose-500">*</span></label>
                 <input
                   type="email"
                   required
-                  placeholder="sokha@snrfarm.com"
                   value={userEmail}
                   onChange={e => setUserEmail(e.target.value)}
-                  className="w-full bg-white border border-slate-200 rounded-xl px-3.5 py-2 text-xs font-semibold focus:outline-none focus:border-emerald-600"
+                  className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2 font-bold text-slate-900 focus:ring-2 focus:ring-[#dc5c15] focus:outline-none"
                 />
               </div>
-              <div className="space-y-1">
-                <label className="text-[10px] font-bold uppercase text-slate-400">Password</label>
-                <input
-                  type="password"
-                  required={!editingUserId}
-                  placeholder={editingUserId ? "New password (optional)..." : "Password..."}
-                  value={userPassword}
-                  onChange={e => setUserPassword(e.target.value)}
-                  className="w-full bg-white border border-slate-200 rounded-xl px-3.5 py-2 text-xs font-semibold focus:outline-none focus:border-emerald-600"
-                />
-              </div>
-              <div className="space-y-1">
-                <label className="text-[10px] font-bold uppercase text-slate-400">Role Selection</label>
+
+              <div>
+                <label className="block font-bold text-slate-700 mb-1">1. User Level (Account Category)</label>
                 <select
-                  value={userRole}
-                  disabled={editingUserId !== null && settings.users.find(u => u.id === editingUserId)?.role === 'Super Admin'}
-                  onChange={e => handleRoleSelectChange(e.target.value)}
-                  className="w-full bg-white border border-slate-200 rounded-xl px-3.5 py-2 text-xs font-bold text-slate-800 focus:outline-none focus:border-emerald-600 cursor-pointer"
+                  value={userLevel}
+                  onChange={e => setUserLevel(e.target.value)}
+                  className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2 font-bold text-[#dc5c15] focus:ring-2 focus:ring-[#dc5c15] focus:outline-none"
                 >
-                  {currentRoles
-                    .filter(r => !isFarmOwner || r.name === 'Farm Staff' || r.name === 'Veterinarian')
-                    .map(r => (
-                      <option key={r.id} value={r.name}>{r.name}</option>
-                    ))}
+                  <option value="Breeder">Breeder</option>
+                  <option value="Farm Owner">Farm Owner</option>
+                  <option value="Customer / Cow Owner">Customer / Cow Owner</option>
+                  <option value="Sire Sourcing Company">Sire Sourcing Company</option>
                 </select>
               </div>
-              <div className="space-y-1 col-span-2">
-                <label className="text-[10px] font-bold uppercase text-slate-400">Farm Location Scope</label>
+
+              <div>
+                <label className="block font-bold text-slate-700 mb-1">2. Assigned System Role</label>
                 <select
-                  value={userFarmLocation}
-                  disabled={isFarmOwner}
-                  onChange={e => setUserFarmLocation(e.target.value)}
-                  className="w-full bg-white border border-slate-200 disabled:bg-slate-100 disabled:text-slate-500 rounded-xl px-3.5 py-2 text-xs font-bold text-slate-800 focus:outline-none focus:border-emerald-600 cursor-pointer"
+                  value={userRole}
+                  onChange={e => handleRoleSelectChange(e.target.value)}
+                  className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2 font-bold text-slate-900 focus:ring-2 focus:ring-[#dc5c15] focus:outline-none"
                 >
-                  <option value="">All Farms (គ្មានដែនកំណត់)</option>
-                  {(settings.locations || []).map(loc => (
-                    <option key={loc} value={loc}>{loc}</option>
+                  {currentRoles.map(r => (
+                    <option key={r.id} value={r.name}>{r.name}</option>
                   ))}
                 </select>
               </div>
+
+              <div>
+                <label className="block font-bold text-slate-700 mb-1">3. Record-Level Data Scope</label>
+                <select
+                  value={userDataScope}
+                  onChange={e => setUserDataScope(e.target.value as any)}
+                  className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2 font-bold text-slate-900 focus:ring-2 focus:ring-[#dc5c15] focus:outline-none"
+                >
+                  <option value="GLOBAL">GLOBAL (All System Records)</option>
+                  <option value="FARM">FARM (Authorized Farm Station)</option>
+                  <option value="CUSTOMER">CUSTOMER (Owned Cattle Only)</option>
+                  <option value="SOURCING_COMPANY">SOURCING_COMPANY (Supplied Sires Only)</option>
+                  <option value="ASSIGNED_RECORD">ASSIGNED_RECORD (Assigned Operations)</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="block font-bold text-slate-700 mb-1">Account Password</label>
+                <input
+                  type="password"
+                  value={userPassword}
+                  onChange={e => setUserPassword(e.target.value)}
+                  placeholder="Leave blank to keep password"
+                  className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2 font-bold text-slate-900 focus:ring-2 focus:ring-[#dc5c15] focus:outline-none"
+                />
+              </div>
             </div>
 
-            {/* Quick Preset Buttons */}
-            {!isFarmOwner && (
-              <div className="bg-slate-50 p-3 rounded-xl border border-slate-200 flex flex-wrap items-center justify-between gap-2">
-                <span className="text-[11px] font-bold text-slate-600 flex items-center gap-1">
-                  <Sparkles className="h-3.5 w-3.5 text-amber-500" /> Apply Quick Permission Preset:
-                </span>
-                <div className="flex flex-wrap gap-1.5">
-                  {!isFarmOwner && (
-                    <button
-                      type="button"
-                      onClick={() => handleApplyPreset('all')}
-                      className="px-2.5 py-1 bg-red-50 text-red-700 hover:bg-red-100 rounded-lg text-[10px] font-bold transition-colors cursor-pointer"
-                    >
-                      Select All (Super Admin)
-                    </button>
-                  )}
-                  {currentRoles
-                    .slice(1)
-                    .filter(r => !isFarmOwner || r.name === 'Farm Staff' || r.name === 'Veterinarian')
-                    .map(r => (
-                      <button
-                        key={r.id}
-                        type="button"
-                        onClick={() => handleApplyPreset(r.name)}
-                        className="px-2.5 py-1 bg-slate-100 text-slate-700 hover:bg-slate-200 rounded-lg text-[10px] font-bold transition-colors cursor-pointer"
-                      >
-                        {r.name}
-                      </button>
-                    ))}
-                </div>
-              </div>
-            )}
-
-            {/* Function Permission Matrix Checkboxes Grid */}
-            {!isFarmOwner && (
-              <div className="space-y-4">
-                <h6 className="text-xs font-bold text-slate-800 tracking-tight">
-                  Granular Function Permission Matrix ({userPermissions.length} / {ALL_PERMISSIONS.length} Enabled)
-                </h6>
-
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  {PERMISSION_MODULES.map(module => {
-                    const moduleKeys = module.items.map(i => i.key);
-                    const isAllEnabled = moduleKeys.every(k => userPermissions.includes(k));
-                    return (
-                      <div key={module.id} className="bg-white border border-slate-200 rounded-xl p-3.5 space-y-2 shadow-2xs">
-                        <div className="flex items-center justify-between border-b border-slate-100 pb-2">
-                          <span className="text-xs font-black text-slate-800">{module.label}</span>
-                          <button
-                            type="button"
-                            onClick={() => toggleModulePermissions(moduleKeys)}
-                            className="text-[10px] font-bold text-emerald-650 hover:underline cursor-pointer"
-                          >
-                            {isAllEnabled ? 'Deselect All' : 'Select All'}
-                          </button>
-                        </div>
-                        <div className="space-y-2">
-                          {module.items.map(item => {
-                            const isChecked = userPermissions.includes(item.key);
-                            return (
-                              <label
-                                key={item.key}
-                                className={`flex items-start gap-2.5 p-2 rounded-lg border text-xs cursor-pointer transition-all ${
-                                  isChecked
-                                    ? 'bg-emerald-50/60 border-emerald-300 text-emerald-950 font-bold'
-                                    : 'bg-white border-slate-200 text-slate-650 hover:bg-slate-50'
-                                }`}
-                              >
-                                <input
-                                  type="checkbox"
-                                  checked={isChecked}
-                                  onChange={() => togglePermission(item.key)}
-                                  className="mt-0.5 rounded text-emerald-600 focus:ring-emerald-500 cursor-pointer"
-                                />
-                                <div>
-                                  <p className="font-bold leading-tight">{item.label}</p>
-                                  <p className="text-[10px] text-slate-400 font-normal leading-tight mt-0.5">{item.description}</p>
-                                </div>
-                              </label>
-                            );
-                          })}
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-            )}
-
-            <div className="flex justify-end gap-2.5 border-t border-slate-200 pt-4">
+            <div className="flex justify-end gap-2 pt-3 border-t border-slate-100">
               <button
                 type="button"
-                onClick={() => {
-                  setIsAddingUser(false);
-                  setEditingUserId(null);
-                }}
-                className="px-4 py-2 text-xs font-bold text-slate-500 hover:text-slate-800 transition-colors cursor-pointer"
+                onClick={() => setIsAddingUser(false)}
+                className="px-4 py-2 font-bold text-slate-400 hover:text-slate-700"
               >
                 Cancel
               </button>
               <button
                 type="submit"
-                className="bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold px-6 py-2 rounded-xl shadow-sm transition-all active:scale-[0.98] cursor-pointer"
+                className="bg-[#dc5c15] text-white font-black px-6 py-2 rounded-xl shadow-md hover:bg-[#c44f0e]"
               >
-                {editingUserId ? '💾 Update User & Permissions' : '💾 Save New User'}
+                💾 Save User Access Profile
               </button>
             </div>
           </form>
         </DialogContent>
       </Dialog>
 
-      {confirmModal.isOpen && (
-        <ConfirmModal
-          isOpen={confirmModal.isOpen}
-          onClose={() => setConfirmModal(prev => ({ ...prev, isOpen: false }))}
-          onConfirm={confirmModal.onConfirm}
-          title={confirmModal.title}
-          description={confirmModal.description}
-          type={confirmModal.type}
-          confirmText={confirmModal.confirmText}
-        />
-      )}
     </div>
   );
 }

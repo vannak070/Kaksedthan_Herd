@@ -46,7 +46,7 @@ echo "[2/2] Restoring data on production server..."
 ssh -o StrictHostKeyChecking=no "$PROD_HOST" 'node << '"'"'EOF'"'"'
 const fs = require("fs");
 const { Pool } = require("/root/LiveStock/node_modules/pg");
-const pool = new Pool({ host:"localhost", port:5432, user:"postgres", password:"postgres123", database:"livestock_db" });
+const pool = new Pool({ host:"localhost", port:5432, user:"postgres", password:"postgres123", database:"kaksedthan_herdbook" });
 const data = JSON.parse(fs.readFileSync("/tmp/restore_backup.json", "utf8"));
 
 async function restore() {

@@ -1,244 +1,492 @@
 'use client';
 
-import React from 'react';
+import React, { useState, useMemo } from 'react';
+import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { ERPLivestockData } from '@/lib/types';
-import { Card, CardHeader, CardTitle, CardDescription, CardContent } from './ui/card';
-import { Activity, ShieldAlert, Calendar, DollarSign, Scale, Beef, TrendingUp, ArrowRight } from 'lucide-react';
-import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, BarChart, Bar } from 'recharts';
+import StandardAnimalImage from '@/components/common/StandardAnimalImage';
+import { 
+  Beef, 
+  Heart, 
+  Baby, 
+  Award, 
+  ArrowRight, 
+  ShieldCheck, 
+  Building2, 
+  UserCheck, 
+  Syringe, 
+  AlertCircle,
+  Plus,
+  Eye,
+  CheckCircle2,
+  Calendar,
+  DollarSign,
+  Sparkles,
+  Layers,
+  Search,
+  Filter,
+  Check
+} from 'lucide-react';
 
 interface DashboardHomeProps {
   data: ERPLivestockData;
-  onNavigateToTab: (tab: any) => void;
 }
 
-export default function DashboardHome({ data, onNavigateToTab }: DashboardHomeProps) {
-  const activeCows = data.stock.filter(c => c.status.toLowerCase() === 'active');
-  const soldCows = data.stock.filter(c => c.status.toLowerCase() === 'sold');
-  const healthyCount = activeCows.filter(c => c.healthStatus.toLowerCase() === 'good').length;
-  const sickCows = activeCows.filter(c => c.healthStatus.toLowerCase() === 'poor' || c.healthStatus.toLowerCase() === 'fair');
+export default function DashboardHome({ data }: DashboardHomeProps) {
+  const router = useRouter();
 
-  // Active fattening batches
-  const activeBatches = data.batches.filter(b => b.status === 'Active');
+  // Role State Selector for testing/operational dashboard view
+  const [activeRole, setActiveRole] = useState<'Super Admin' | 'Breeder' | 'Farm Owner' | 'Customer / Cow Owner' | 'Sire Sourcing Company'>('Super Admin');
 
-  // Total revenue from fattening sales
-  const totalRevenue = data.salesTracking.reduce((sum, s) => sum + (s.totalPrice || 0), 0);
-  const totalExpenses = data.expenses.reduce((sum, e) => sum + (e.amount || 0), 0);
-  const netProfit = totalRevenue - totalExpenses;
+  // Master PostgreSQL Datasets
+  const sires = data.sires || [];
+  const dams = data.dams || [];
+  const calves = data.calves || [];
+  const programs = data.breedingPrograms || [];
+  const stock = data.stockInsemination || [];
+  const herdbook = data.herdbookRegistrations || [];
+  const certificates = data.certificates || [];
 
-  // Average weight gain across active cattle
-  const recentWeights = data.weightTracking.slice(-30);
-  const avgGain = recentWeights.length > 0
-    ? recentWeights.reduce((sum, w) => sum + (w.gainLoss || 0), 0) / recentWeights.length
-    : 0;
+  // SCOPE FILTERED DATASETS
+  const filteredData = useMemo(() => {
+    if (activeRole === 'Farm Owner') {
+      const farmLoc = 'រទាំង';
+      const farmDams = dams.filter(d => d.farmLocation === farmLoc || d.ownerName?.includes('Farm') || !d.ownerName);
+      const farmCalves = calves.filter(c => c.farmLocation === farmLoc || c.ownerName?.includes('Farm') || !c.ownerName);
+      const farmPrograms = programs.filter(p => p.farmLocation === farmLoc || p.ownerName?.includes('Farm'));
+      return {
+        sires,
+        dams: farmDams,
+        calves: farmCalves,
+        programs: farmPrograms,
+        stock,
+        certificates: certificates.filter(c => c.animalType !== 'Sire' || farmPrograms.some(p => p.sireId === c.animalId)),
+        scopeLabel: `Station Scope: ${farmLoc}`
+      };
+    }
 
-  // Weight growth chart — group by date bucket
-  const growthByDate: Record<string, number[]> = {};
-  data.weightTracking.slice(-30).forEach(w => {
-    const day = w.trackingDate ? new Date(w.trackingDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : 'N/A';
-    if (!growthByDate[day]) growthByDate[day] = [];
-    growthByDate[day].push(w.gainLoss || 0);
-  });
-  const growthChartData = Object.entries(growthByDate).slice(-10).map(([date, gains]) => ({
-    date,
-    avgGain: parseFloat((gains.reduce((s, g) => s + g, 0) / gains.length).toFixed(2))
-  }));
+    if (activeRole === 'Customer / Cow Owner') {
+      const custOwner = 'SNR Livestock Owner';
+      const custDams = dams.filter(d => d.ownerName === custOwner || d.ownerName === 'Sophea Cow Owner');
+      const custCalves = calves.filter(c => c.ownerName === custOwner || c.ownerName === 'Sophea Cow Owner');
+      const custPrograms = programs.filter(p => p.cowOwner === custOwner || p.ownerName === custOwner);
+      return {
+        sires: [],
+        dams: custDams,
+        calves: custCalves,
+        programs: custPrograms,
+        stock: [],
+        certificates: certificates.filter(c => custDams.some(d => d.id === c.animalId) || custCalves.some(cl => cl.id === c.animalId)),
+        scopeLabel: `Customer Scope: ${custOwner}`
+      };
+    }
 
-  // Sales revenue per month (last 5 months)
-  const revenueByMonth: Record<string, number> = {};
-  data.salesTracking.forEach(s => {
-    const month = s.salesDate ? new Date(s.salesDate).toLocaleDateString('en-US', { month: 'short', year: '2-digit' }) : 'N/A';
-    revenueByMonth[month] = (revenueByMonth[month] || 0) + (s.totalPrice || 0);
-  });
-  const revenueChartData = Object.entries(revenueByMonth).slice(-6).map(([month, revenue]) => ({
-    month,
-    revenue: Math.round(revenue / 1000)
-  }));
+    if (activeRole === 'Sire Sourcing Company') {
+      const companyName = 'ABS Global Inc.';
+      const compSires = sires.filter(s => s.sourcingCompany === companyName || !s.sourcingCompany);
+      const compStock = stock.filter(st => compSires.some(s => s.id === st.sireId));
+      const compCerts = certificates.filter(c => c.animalType === 'Sire' && compSires.some(s => s.id === c.animalId));
+      return {
+        sires: compSires,
+        dams: [],
+        calves: [],
+        programs: [],
+        stock: compStock,
+        certificates: compCerts,
+        scopeLabel: `Sourcing Scope: ${companyName}`
+      };
+    }
 
-  // Recent intake / acquisition
-  const recentCows = [...data.stock]
-    .sort((a, b) => new Date(b.purchaseDate || 0).getTime() - new Date(a.purchaseDate || 0).getTime())
-    .slice(0, 5);
+    if (activeRole === 'Breeder') {
+      return {
+        sires,
+        dams: dams.filter(d => d.availability === 'Open' || d.availability === 'In Breeding'),
+        calves,
+        programs: programs.filter(p => p.status === 'Breeding' || p.status === 'Scheduled'),
+        stock,
+        certificates,
+        scopeLabel: 'Operations Scope: Licensed Breeder'
+      };
+    }
 
-  // Recent sales
-  const recentSales = [...data.salesTracking]
-    .sort((a, b) => new Date(b.salesDate || 0).getTime() - new Date(a.salesDate || 0).getTime())
-    .slice(0, 5);
+    // Super Admin
+    return {
+      sires,
+      dams,
+      calves,
+      programs,
+      stock,
+      certificates,
+      scopeLabel: 'Global Scope: System Administrator'
+    };
+  }, [activeRole, sires, dams, calves, programs, stock, certificates]);
+
+  // Aggregation Metrics
+  const activeProgramsCount = filteredData.programs.filter(p => p.status === 'Breeding' || p.status === 'Scheduled').length;
+  const openDamsCount = filteredData.dams.filter(d => d.availability === 'Open' || !d.availability).length;
+  const lowStockStraws = filteredData.stock.filter(s => s.availableStraws < 10);
+  const totalCostingUsd = filteredData.programs.reduce((sum, p) => sum + (p.priceUsd || 0), 0);
+
+  // Attention alerts
+  const pendingPdChecks = filteredData.programs.filter(p => p.pregnancyCheckDate && new Date(p.pregnancyCheckDate) <= new Date());
+  const upcomingCalvings = filteredData.programs.filter(p => p.expectedCalvingDate);
 
   return (
     <div className="space-y-6">
 
-      {/* KPI Summary Grid (3 Columns) */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-5">
+      {/* Welcome & Active Account Role Banner */}
+      <div className="bg-[#121926] text-white rounded-3xl p-6 shadow-xl border border-slate-800 flex flex-col md:flex-row md:items-center justify-between gap-4">
+        <div className="flex items-center gap-3.5">
+          <div className="h-12 w-12 rounded-2xl bg-[#dc5c15]/20 text-[#dc5c15] border border-[#dc5c15]/30 flex items-center justify-center font-black text-xl shrink-0 shadow-inner">
+            {activeRole === 'Breeder' ? '🧬' : activeRole === 'Farm Owner' ? '🏡' : activeRole === 'Customer / Cow Owner' ? '🐮' : activeRole === 'Sire Sourcing Company' ? '🏢' : '🛡️'}
+          </div>
+          <div>
+            <div className="flex items-center gap-2">
+              <h2 className="text-base sm:text-lg font-black tracking-tight">
+                Welcome to Kaksedthan Operational Dashboard
+              </h2>
+              <span className="text-[10px] font-black uppercase px-2.5 py-0.5 rounded-full bg-[#dc5c15] text-white tracking-wider">
+                {activeRole}
+              </span>
+            </div>
+            <p className="text-xs text-slate-400 mt-1 font-medium">
+              Real-time operational summary from PostgreSQL database <code className="text-orange-400 font-mono">kaksedthan_herdbook</code> • <span className="text-emerald-400 font-bold">{filteredData.scopeLabel}</span>
+            </p>
+          </div>
+        </div>
 
-        {/* Active Fattening Herd */}
-        <Card className="bg-white border border-slate-100 shadow-sm hover:shadow-md transition-shadow cursor-pointer" onClick={() => onNavigateToTab('cow-inventory')}>
-          <CardHeader className="pb-2">
-            <CardDescription className="text-xs uppercase tracking-wider font-bold text-slate-400 flex items-center gap-1.5">
-              <Beef className="h-3.5 w-3.5 text-emerald-600" /> Active Fattening Herd
-            </CardDescription>
-            <CardTitle className="text-2xl font-black text-slate-900 mt-1">{activeCows.length} Head</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <p className="text-[10px] text-emerald-600 font-bold">Total Intake: {data.stock.length} • Sold: {soldCows.length}</p>
-          </CardContent>
-        </Card>
+        {/* Dashboard Role Switcher Toolbar */}
+        <div className="bg-slate-900 border border-slate-800 p-1.5 rounded-2xl flex items-center gap-2 shrink-0">
+          <span className="text-[9.5px] font-black uppercase tracking-wider text-slate-400 px-2">Role View:</span>
+          <select
+            value={activeRole}
+            onChange={(e: any) => setActiveRole(e.target.value)}
+            className="bg-slate-800 text-white text-xs font-bold px-3 py-1.5 rounded-xl border border-slate-700 focus:ring-2 focus:ring-[#dc5c15] focus:outline-none cursor-pointer"
+          >
+            <option value="Super Admin">🛡️ Super Admin View</option>
+            <option value="Breeder">🧬 Breeder Dashboard</option>
+            <option value="Farm Owner">🏡 Farm Owner Dashboard</option>
+            <option value="Customer / Cow Owner">🐮 Customer Dashboard</option>
+            <option value="Sire Sourcing Company">🏢 Sire Sourcing Co. Dashboard</option>
+          </select>
+        </div>
+      </div>
 
-        {/* Active Batches */}
-        <Card className="bg-white border border-slate-100 shadow-sm hover:shadow-md transition-shadow cursor-pointer" onClick={() => onNavigateToTab('batch-management')}>
-          <CardHeader className="pb-2">
-            <CardDescription className="text-xs uppercase tracking-wider font-bold text-slate-400 flex items-center gap-1.5">
-              <Activity className="h-3.5 w-3.5 text-teal-600" /> Fattening Batches
-            </CardDescription>
-            <CardTitle className="text-2xl font-black text-slate-900 mt-1">{activeBatches.length} Active</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <p className="text-[10px] text-teal-600 font-bold">Total batches: {data.batches.length}</p>
-          </CardContent>
-        </Card>
+      {/* ATTENTION REQUIRED / ALERTS BANNER (If any alerts exist) */}
+      {(pendingPdChecks.length > 0 || lowStockStraws.length > 0) && activeRole !== 'Customer / Cow Owner' && (
+        <div className="bg-amber-50 border border-amber-200/90 rounded-3xl p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs text-amber-900">
+          <div className="flex items-center gap-2.5">
+            <AlertCircle className="h-5 w-5 text-amber-600 shrink-0" />
+            <div>
+              <p className="font-black text-slate-900">Operational Alerts Needing Action:</p>
+              <p className="text-slate-700 font-medium">
+                {pendingPdChecks.length > 0 && <span>• {pendingPdChecks.length} Breeding Programs due for 21-Day PD Check. </span>}
+                {lowStockStraws.length > 0 && <span>• {lowStockStraws.length} Semen straw batches low in inventory (&lt; 10 straws).</span>}
+              </p>
+            </div>
+          </div>
+          <Link href="/breeding-programs" className="px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white font-black rounded-xl text-xs shadow-xs text-center shrink-0">
+            Review Programs →
+          </Link>
+        </div>
+      )}
 
-        {/* Medical Alerts */}
-        <Card
-          className={`border shadow-sm hover:shadow-md transition-shadow cursor-pointer ${sickCows.length > 0 ? 'bg-rose-50 border-rose-100' : 'bg-white border-slate-100'}`}
-          onClick={() => sickCows.length > 0 && onNavigateToTab('health-tracking')}
-        >
-          <CardHeader className="pb-2">
-            <CardDescription className="text-xs uppercase tracking-wider font-bold text-slate-400 flex items-center gap-1.5">
-              <ShieldAlert className="h-3.5 w-3.5 text-rose-500" /> Health Alerts
-            </CardDescription>
-            <CardTitle className={`text-2xl font-black mt-1 ${sickCows.length > 0 ? 'text-rose-600' : 'text-slate-900'}`}>
-              {sickCows.length} Sick
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            {sickCows.length > 0 ? (
-              <button onClick={() => onNavigateToTab('health-tracking')} className="text-[10px] text-rose-500 hover:underline font-bold animate-pulse flex items-center gap-1">
-                View Alerts <ArrowRight className="h-3 w-3" />
+      {/* QUICK ACTIONS TOOLBAR (Permission & Role Aware) */}
+      <div className="bg-white border border-slate-200/90 rounded-3xl p-4 shadow-sm space-y-2">
+        <div className="flex items-center gap-2 text-xs font-black uppercase tracking-wider text-slate-400">
+          <Sparkles className="h-4 w-4 text-[#dc5c15]" />
+          <span>Quick Operational Actions</span>
+        </div>
+
+        <div className="flex flex-wrap gap-2 text-xs">
+          {(activeRole === 'Super Admin' || activeRole === 'Breeder') && (
+            <button
+              onClick={() => router.push('/breeding-programs/new')}
+              className="px-4 py-2.5 rounded-xl bg-[#dc5c15] text-white font-black shadow-md shadow-[#dc5c15]/20 hover:bg-[#c44f0e] transition-all flex items-center gap-1.5 cursor-pointer"
+            >
+              <Plus className="h-4 w-4" />
+              <span>+ New Breeding Program</span>
+            </button>
+          )}
+
+          {(activeRole === 'Super Admin' || activeRole === 'Breeder' || activeRole === 'Farm Owner') && (
+            <>
+              <button
+                onClick={() => router.push('/dams/new')}
+                className="px-4 py-2.5 rounded-xl bg-purple-700 text-white font-black shadow-md shadow-purple-700/20 hover:bg-purple-800 transition-all flex items-center gap-1.5 cursor-pointer"
+              >
+                <Plus className="h-4 w-4" />
+                <span>+ Register Dam Cow</span>
               </button>
-            ) : (
-              <p className="text-[10px] text-slate-400 font-bold">Herd healthy. No active alerts.</p>
-            )}
-          </CardContent>
-        </Card>
+              <button
+                onClick={() => router.push('/calves/new')}
+                className="px-4 py-2.5 rounded-xl bg-emerald-600 text-white font-black shadow-md shadow-emerald-600/20 hover:bg-emerald-700 transition-all flex items-center gap-1.5 cursor-pointer"
+              >
+                <Plus className="h-4 w-4" />
+                <span>+ Register Calf Birth</span>
+              </button>
+            </>
+          )}
+
+          {(activeRole === 'Super Admin' || activeRole === 'Sire Sourcing Company') && (
+            <>
+              <button
+                onClick={() => router.push('/sires/new')}
+                className="px-4 py-2.5 rounded-xl bg-[#dc5c15] text-white font-black shadow-md shadow-[#dc5c15]/20 hover:bg-[#c44f0e] transition-all flex items-center gap-1.5 cursor-pointer"
+              >
+                <Plus className="h-4 w-4" />
+                <span>+ Register Sire Bull</span>
+              </button>
+              <button
+                onClick={() => router.push('/stock-insemination/new')}
+                className="px-4 py-2.5 rounded-xl bg-indigo-600 text-white font-black shadow-md shadow-indigo-600/20 hover:bg-indigo-700 transition-all flex items-center gap-1.5 cursor-pointer"
+              >
+                <Plus className="h-4 w-4" />
+                <span>+ Add Semen Stock</span>
+              </button>
+            </>
+          )}
+
+          {activeRole === 'Customer / Cow Owner' && (
+            <>
+              <button
+                onClick={() => router.push('/dams')}
+                className="px-4 py-2.5 rounded-xl bg-purple-700 text-white font-black shadow-md hover:bg-purple-800 transition-all flex items-center gap-1.5 cursor-pointer"
+              >
+                <Eye className="h-4 w-4" />
+                <span>View My Owned Animals</span>
+              </button>
+              <button
+                onClick={() => router.push('/breeding-programs')}
+                className="px-4 py-2.5 rounded-xl bg-[#dc5c15] text-white font-black shadow-md hover:bg-[#c44f0e] transition-all flex items-center gap-1.5 cursor-pointer"
+              >
+                <Heart className="h-4 w-4" />
+                <span>View My Breeding Programs</span>
+              </button>
+              <button
+                onClick={() => router.push('/certificates')}
+                className="px-4 py-2.5 rounded-xl bg-emerald-600 text-white font-black shadow-md hover:bg-emerald-700 transition-all flex items-center gap-1.5 cursor-pointer"
+              >
+                <Award className="h-4 w-4" />
+                <span>View My Certificates</span>
+              </button>
+            </>
+          )}
+        </div>
       </div>
 
-      {/* Revenue & Profit Summary Row */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        <div className="bg-gradient-to-br from-emerald-600 to-teal-600 text-white p-5 rounded-2xl shadow-sm">
-          <p className="text-[10px] font-extrabold uppercase tracking-widest opacity-70">Total Sales Revenue</p>
-          <p className="text-2xl font-black mt-1">៛ {totalRevenue.toLocaleString()}</p>
-          <p className="text-[10px] opacity-60 mt-1">From {soldCows.length} fattened cattle sold</p>
-        </div>
-        <div className="bg-white border border-slate-100 p-5 rounded-2xl shadow-sm">
-          <p className="text-[10px] font-extrabold uppercase tracking-widest text-slate-400">Total Expenses</p>
-          <p className="text-2xl font-black mt-1 text-rose-500">៛ {totalExpenses.toLocaleString()}</p>
-          <p className="text-[10px] text-slate-400 mt-1">Feed, medical, labor & operations</p>
-        </div>
-        <div className={`p-5 rounded-2xl shadow-sm border ${netProfit >= 0 ? 'bg-emerald-50 border-emerald-100' : 'bg-rose-50 border-rose-100'}`}>
-          <p className="text-[10px] font-extrabold uppercase tracking-widest text-slate-400">Net Profit / Loss</p>
-          <p className={`text-2xl font-black mt-1 ${netProfit >= 0 ? 'text-emerald-600' : 'text-rose-500'}`}>
-            {netProfit >= 0 ? '+' : ''}៛ {netProfit.toLocaleString()}
+      {/* REAL-TIME SUMMARY CARDS GRID */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+
+        {/* Card 1: SIRES / SIRE MANAGEMENT */}
+        {activeRole !== 'Customer / Cow Owner' && (
+          <div
+            onClick={() => router.push('/sires')}
+            className="bg-white border border-slate-200/90 rounded-3xl p-5 shadow-xs hover:shadow-lg hover:border-[#dc5c15] transition-all cursor-pointer space-y-2 group"
+          >
+            <div className="flex items-center justify-between">
+              <span className="text-[10px] font-black uppercase tracking-wider text-slate-400">
+                {activeRole === 'Sire Sourcing Company' ? 'Supplied Sires' : 'Sire Bull Register'}
+              </span>
+              <span className="p-2 rounded-2xl bg-orange-50 text-[#dc5c15] group-hover:bg-[#dc5c15] group-hover:text-white transition-colors">
+                <Beef className="h-4 w-4" />
+              </span>
+            </div>
+            <p className="text-2xl font-black text-slate-900">{filteredData.sires.length}</p>
+            <p className="text-xs text-[#dc5c15] font-extrabold flex items-center gap-1">
+              <span>View Sire Bull Records</span> <ArrowRight className="h-3 w-3" />
+            </p>
+          </div>
+        )}
+
+        {/* Card 2: DAMS / DAM MANAGEMENT */}
+        {activeRole !== 'Sire Sourcing Company' && (
+          <div
+            onClick={() => router.push('/dams')}
+            className="bg-white border border-slate-200/90 rounded-3xl p-5 shadow-xs hover:shadow-lg hover:border-purple-600 transition-all cursor-pointer space-y-2 group"
+          >
+            <div className="flex items-center justify-between">
+              <span className="text-[10px] font-black uppercase tracking-wider text-slate-400">
+                {activeRole === 'Customer / Cow Owner' ? 'My Owned Cows' : 'Dam Cow Register'}
+              </span>
+              <span className="p-2 rounded-2xl bg-purple-50 text-purple-700 group-hover:bg-purple-700 group-hover:text-white transition-colors">
+                <Beef className="h-4 w-4" />
+              </span>
+            </div>
+            <p className="text-2xl font-black text-slate-900">{filteredData.dams.length}</p>
+            <p className="text-xs text-purple-700 font-extrabold flex items-center gap-1">
+              <span>View Dam Cow Records</span> <ArrowRight className="h-3 w-3" />
+            </p>
+          </div>
+        )}
+
+        {/* Card 3: BREEDING PROGRAMS */}
+        {activeRole !== 'Sire Sourcing Company' && (
+          <div
+            onClick={() => router.push('/breeding-programs')}
+            className="bg-white border border-slate-200/90 rounded-3xl p-5 shadow-xs hover:shadow-lg hover:border-[#dc5c15] transition-all cursor-pointer space-y-2 group"
+          >
+            <div className="flex items-center justify-between">
+              <span className="text-[10px] font-black uppercase tracking-wider text-slate-400">
+                {activeRole === 'Customer / Cow Owner' ? 'My Breeding Programs' : 'Active Breeding'}
+              </span>
+              <span className="p-2 rounded-2xl bg-orange-50 text-[#dc5c15] group-hover:bg-[#dc5c15] group-hover:text-white transition-colors">
+                <Heart className="h-4 w-4" />
+              </span>
+            </div>
+            <p className="text-2xl font-black text-slate-900">{activeProgramsCount}</p>
+            <p className="text-xs text-[#dc5c15] font-extrabold flex items-center gap-1">
+              <span>View Gestation Timetable</span> <ArrowRight className="h-3 w-3" />
+            </p>
+          </div>
+        )}
+
+        {/* Card 4: CALVES & CERTIFICATES */}
+        <div
+          onClick={() => router.push('/certificates')}
+          className="bg-white border border-slate-200/90 rounded-3xl p-5 shadow-xs hover:shadow-lg hover:border-emerald-600 transition-all cursor-pointer space-y-2 group"
+        >
+          <div className="flex items-center justify-between">
+            <span className="text-[10px] font-black uppercase tracking-wider text-slate-400">Certificates Issued</span>
+            <span className="p-2 rounded-2xl bg-emerald-50 text-emerald-600 group-hover:bg-emerald-600 group-hover:text-white transition-colors">
+              <Award className="h-4 w-4" />
+            </span>
+          </div>
+          <p className="text-2xl font-black text-slate-900">{filteredData.certificates.length}</p>
+          <p className="text-xs text-emerald-600 font-extrabold flex items-center gap-1">
+            <span>View Certificate Center</span> <ArrowRight className="h-3 w-3" />
           </p>
-          <p className="text-[10px] text-slate-400 mt-1">Revenue minus total expenditure</p>
         </div>
+
       </div>
 
-      {/* Monthly Sales Revenue Chart */}
-      <div className="bg-white border border-slate-100 p-6 rounded-2xl shadow-sm space-y-4">
-        <div>
-          <h4 className="text-sm font-bold text-slate-800 flex items-center gap-2">
-            <DollarSign className="h-4 w-4 text-emerald-600" />
-            Monthly Sales Revenue (Thousands ៛)
-          </h4>
-          <p className="text-xs text-slate-400 mt-0.5">Revenue generated from fattened cattle sold per month</p>
+      {/* OPERATIONAL SECTION 1 — BREEDING PROGRAMS & EXPECTED CALVINGS */}
+      {activeRole !== 'Sire Sourcing Company' && (
+        <div className="bg-white rounded-3xl border border-slate-200/90 p-5 space-y-4 shadow-sm">
+          <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+            <div className="flex items-center gap-2">
+              <Heart className="h-4 w-4 text-[#dc5c15]" />
+              <h4 className="text-xs font-black text-slate-900 uppercase tracking-wider">Breeding Program Overview & Calving Schedule</h4>
+            </div>
+            <Link href="/breeding-programs" className="text-xs font-black text-[#dc5c15] hover:underline flex items-center gap-1">
+              <span>View All Programs</span> <ArrowRight className="h-3 w-3" />
+            </Link>
+          </div>
+
+          <div className="overflow-x-auto">
+            <table className="w-full text-left border-collapse text-xs">
+              <thead>
+                <tr className="border-b border-slate-100 text-[10px] font-black text-slate-400 uppercase tracking-wider bg-slate-50">
+                  <th className="py-2.5 pl-3">Program ID</th>
+                  <th className="py-2.5">Sire (Father)</th>
+                  <th className="py-2.5">Dam (Mother)</th>
+                  <th className="py-2.5">Service Date</th>
+                  <th className="py-2.5">Expected Calving (+283d)</th>
+                  <th className="py-2.5">Status</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {filteredData.programs.length > 0 ? (
+                  filteredData.programs.slice(0, 5).map(prog => (
+                    <tr
+                      key={prog.id}
+                      onClick={() => router.push(`/breeding-programs/${prog.id}`)}
+                      className="hover:bg-orange-50/50 cursor-pointer transition-colors"
+                    >
+                      <td className="py-3 pl-3 font-mono font-black text-slate-900">{prog.programNumber || prog.id}</td>
+                      <td className="py-3 font-bold text-slate-800">{prog.sireName || prog.sireId}</td>
+                      <td className="py-3 font-bold text-purple-700">{prog.damName || prog.damId}</td>
+                      <td className="py-3 text-slate-600 font-semibold">{prog.breedingDate || prog.startDate}</td>
+                      <td className="py-3 font-black text-emerald-700">{prog.expectedCalvingDate || 'N/A'}</td>
+                      <td className="py-3">
+                        <span className={`inline-block px-2.5 py-0.5 rounded-full text-[9.5px] font-black uppercase ${
+                          prog.status === 'Pregnant' ? 'bg-emerald-100 text-emerald-800' : 'bg-orange-100 text-[#dc5c15]'
+                        }`}>
+                          {prog.status}
+                        </span>
+                      </td>
+                    </tr>
+                  ))
+                ) : (
+                  <tr>
+                    <td colSpan={6} className="py-8 text-center text-slate-400 font-semibold">
+                      No active breeding programs recorded.
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
         </div>
-        <div className="h-[240px]">
-          {revenueChartData.length > 0 ? (
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={revenueChartData} margin={{ top: 5, right: 10, left: -20, bottom: 0 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
-                <XAxis dataKey="month" stroke="#94a3b8" fontSize={9} tickLine={false} />
-                <YAxis stroke="#94a3b8" fontSize={9} tickLine={false} />
-                <Tooltip
-                  contentStyle={{ backgroundColor: '#ffffff', borderColor: '#e2e8f0', borderRadius: '10px', fontSize: '11px' }}
-                  itemStyle={{ color: '#059669', fontWeight: 'bold' }}
-                  formatter={(v: any) => [`${v}K ៛`, 'Revenue']}
-                />
-                <Bar dataKey="revenue" fill="#10b981" radius={[6, 6, 0, 0]} name="Revenue (K ៛)" />
-              </BarChart>
-            </ResponsiveContainer>
-          ) : (
-            <div className="h-full flex items-center justify-center text-slate-400 text-xs font-semibold">
-              No sales data available yet.
+      )}
+
+      {/* OPERATIONAL SECTION 2 — SIRE SOURCING COMPANY VIEW */}
+      {activeRole === 'Sire Sourcing Company' && (
+        <div className="bg-white rounded-3xl border border-slate-200/90 p-5 space-y-4 shadow-sm">
+          <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+            <div className="flex items-center gap-2">
+              <Building2 className="h-4 w-4 text-[#dc5c15]" />
+              <h4 className="text-xs font-black text-slate-900 uppercase tracking-wider">Company Supplied Sires & Semen Straw Inventory</h4>
+            </div>
+            <Link href="/sires" className="text-xs font-black text-[#dc5c15] hover:underline flex items-center gap-1">
+              <span>Manage Sires</span> <ArrowRight className="h-3 w-3" />
+            </Link>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {filteredData.sires.map(sire => (
+              <div key={sire.id} className="p-3.5 bg-slate-50 border border-slate-200 rounded-2xl flex items-center gap-3">
+                <div className="h-14 w-14 rounded-xl border border-slate-200 overflow-hidden bg-white shrink-0">
+                  <StandardAnimalImage src={sire.imageUrl} alt={sire.name} />
+                </div>
+                <div className="flex-1 min-w-0 text-xs">
+                  <h5 className="font-black text-slate-900 truncate">{sire.name}</h5>
+                  <p className="text-[10px] text-slate-500 font-semibold">ID: {sire.id} • Breed: <span className="font-bold text-[#dc5c15]">{sire.breed}</span></p>
+                  <p className="text-[10px] text-slate-500 font-semibold truncate">Supplier: {sire.sourcingCompany || 'ABS Global'}</p>
+                </div>
+                <Link href={`/sires/${sire.id}`} className="px-3 py-1.5 bg-white border border-slate-200 text-slate-700 text-[10px] font-bold rounded-xl hover:bg-slate-100">
+                  View Profile
+                </Link>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* OPERATIONAL SECTION 3 — CERTIFICATE CENTER SUMMARY */}
+      <div className="bg-white rounded-3xl border border-slate-200/90 p-5 space-y-4 shadow-sm">
+        <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+          <div className="flex items-center gap-2">
+            <Award className="h-4 w-4 text-emerald-600" />
+            <h4 className="text-xs font-black text-slate-900 uppercase tracking-wider">Official Certificate & Dynamic QR Verification Hub</h4>
+          </div>
+          <Link href="/certificates" className="text-xs font-black text-emerald-600 hover:underline flex items-center gap-1">
+            <span>Certificate Center</span> <ArrowRight className="h-3 w-3" />
+          </Link>
+        </div>
+
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 text-xs">
+          {filteredData.certificates.slice(0, 3).map(cert => (
+            <div key={cert.id} className="p-3.5 bg-emerald-50/70 border border-emerald-200 rounded-2xl space-y-1">
+              <div className="flex items-center justify-between">
+                <span className="text-[9.5px] font-black uppercase text-emerald-800 bg-emerald-100 px-2 py-0.5 rounded">{cert.animalType} Certificate</span>
+                <CheckCircle2 className="h-4 w-4 text-emerald-600" />
+              </div>
+              <h5 className="font-black text-slate-900 mt-1">{cert.animalName || cert.animalId}</h5>
+              <p className="text-[10px] text-slate-500 font-semibold">Reg No: {cert.registrationNumber}</p>
+              <Link href={`/certificates/${cert.id}`} className="text-[10px] font-black text-emerald-700 hover:underline block pt-1">
+                View & Download PNG →
+              </Link>
+            </div>
+          ))}
+          {filteredData.certificates.length === 0 && (
+            <div className="sm:col-span-3 py-6 text-center text-slate-400 font-semibold text-xs">
+              No certificates issued for this scope.
             </div>
           )}
         </div>
       </div>
 
-      {/* Bottom: Recent Intake & Recent Sales */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-
-        {/* Left: Recently Acquired Cattle */}
-        <div className="bg-white border border-slate-100 p-6 rounded-2xl shadow-sm">
-          <div className="flex items-center justify-between mb-4">
-            <h4 className="text-sm font-extrabold text-slate-800 uppercase tracking-wider">Recently Acquired Cattle</h4>
-            <button onClick={() => onNavigateToTab('cow-inventory')} className="text-[10px] text-emerald-600 hover:underline font-bold flex items-center gap-1">
-              View All <ArrowRight className="h-3 w-3" />
-            </button>
-          </div>
-          <div className="divide-y divide-slate-100">
-            {recentCows.length > 0 ? recentCows.map((c, idx) => (
-              <div key={idx} className="py-3 flex items-center justify-between hover:bg-slate-50/50 px-2 rounded-lg transition-colors">
-                <div className="flex items-center gap-3">
-                  <div className="h-8 w-8 rounded-full bg-emerald-50 text-emerald-700 flex items-center justify-center font-black text-xs border border-emerald-100">
-                    {c.id.substring(0, 2)}
-                  </div>
-                  <div>
-                    <p className="text-xs font-bold text-slate-800">{c.id}</p>
-                    <p className="text-[10px] text-slate-400 font-semibold">{c.breed} • {c.sex} • {(c as any).currentWeight ?? '—'} kg</p>
-                  </div>
-                </div>
-                <div className="text-right">
-                  <p className="text-xs font-bold text-slate-800">៛ {c.totalPrice.toLocaleString()}</p>
-                  <p className="text-[10px] text-slate-400">{c.purchaseDate ? new Date(c.purchaseDate).toLocaleDateString() : 'N/A'}</p>
-                </div>
-              </div>
-            )) : (
-              <p className="text-xs text-slate-400 text-center py-8 font-semibold">No cattle acquired yet.</p>
-            )}
-          </div>
-        </div>
-
-        {/* Right: Recent Fattening Sales */}
-        <div className="bg-white border border-slate-100 p-6 rounded-2xl shadow-sm">
-          <div className="flex items-center justify-between mb-4">
-            <h4 className="text-sm font-extrabold text-slate-800 uppercase tracking-wider">Recent Fattening Sales</h4>
-            <button onClick={() => onNavigateToTab('sales-finance')} className="text-[10px] text-emerald-600 hover:underline font-bold flex items-center gap-1">
-              View Ledger <ArrowRight className="h-3 w-3" />
-            </button>
-          </div>
-          <div className="divide-y divide-slate-100">
-            {recentSales.length > 0 ? recentSales.map((s, idx) => (
-              <div key={idx} className="py-3 flex items-center justify-between hover:bg-slate-50/50 px-2 rounded-lg transition-colors">
-                <div className="flex items-center gap-3">
-                  <div className="h-8 w-8 rounded-full bg-amber-50 text-amber-700 flex items-center justify-center font-black text-xs border border-amber-100">
-                    {s.cowId.substring(0, 2)}
-                  </div>
-                  <div>
-                    <p className="text-xs font-bold text-slate-800">{s.cowId}</p>
-                    <p className="text-[10px] text-slate-400 font-semibold">{s.breed} • {s.weight} kg sold</p>
-                  </div>
-                </div>
-                <div className="text-right">
-                  <p className="text-xs font-extrabold text-emerald-600">+៛ {s.totalPrice.toLocaleString()}</p>
-                  <p className="text-[10px] text-slate-400">{s.salesDate ? new Date(s.salesDate).toLocaleDateString() : 'N/A'}</p>
-                </div>
-              </div>
-            )) : (
-              <p className="text-xs text-slate-400 text-center py-8 font-semibold">No sales finalized yet.</p>
-            )}
-          </div>
-        </div>
-      </div>
     </div>
   );
 }

@@ -8,7 +8,7 @@ const host = process.env.DB_HOST || 'localhost';
 const port = parseInt(process.env.DB_PORT || '5432', 10);
 const user = process.env.DB_USER || 'postgres';
 const password = process.env.DB_PASSWORD || 'postgres123';
-const database = process.env.DB_NAME || 'livestock_db';
+const database = process.env.DB_NAME || 'kaksedthan_herdbook';
 const ssl = process.env.DB_SSL === 'true' ? { rejectUnauthorized: false } : false;
 
 const max = parseInt(process.env.DB_POOL_MAX || '20', 10);

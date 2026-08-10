@@ -4,6 +4,16 @@ import { HealthLogItem } from './health.types';
 import { ExpenseItem } from './finance.types';
 import { MasterSetup } from './settings.types';
 import { FeedProductItem, FeedStockTransaction } from './feed.types';
+import {
+  SireItem,
+  StockInseminationItem,
+  DamItem,
+  BreedingProgramItem,
+  CalfItem,
+  HerdbookRegistrationItem,
+  PedigreeTree,
+  HerdbookCertificateItem
+} from './breeding.types';
 
 export * from './stock.types';
 export * from './batch.types';
@@ -17,12 +27,19 @@ export interface ERPLivestockData {
   stock: StockItem[];
   weightTracking: WeightRecord[];
   salesTracking: SalesRecord[];
-  common: Record<string, unknown>; // original reference sheets
+  common: Record<string, unknown>;
   batches: BatchItem[];
   healthLogs: HealthLogItem[];
   expenses: ExpenseItem[];
   settings: MasterSetup;
   feedProducts?: FeedProductItem[];
   feedTransactions?: FeedStockTransaction[];
-  breedingRecords?: import('./breeding.types').BreedingRecord[];
+  sires?: SireItem[];
+  stockInsemination?: StockInseminationItem[];
+  dams?: DamItem[];
+  breedingPrograms?: BreedingProgramItem[];
+  calves?: CalfItem[];
+  herdbookRegistrations?: HerdbookRegistrationItem[];
+  pedigrees?: PedigreeTree[];
+  certificates?: HerdbookCertificateItem[];
 }

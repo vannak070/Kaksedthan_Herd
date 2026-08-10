@@ -1,0 +1,88 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="100%" height="100%">
+  <defs>
+    <!-- Gradients -->
+    <linearGradient id="bg-grad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#1e293b"/>
+      <stop offset="100%" stop-color="#0f172a"/>
+    </linearGradient>
+
+    <linearGradient id="orange-grad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#f97316"/>
+      <stop offset="50%" stop-color="#dc5c15"/>
+      <stop offset="100%" stop-color="#c2410c"/>
+    </linearGradient>
+
+    <linearGradient id="gold-grad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#fbbf24"/>
+      <stop offset="50%" stop-color="#d97706"/>
+      <stop offset="100%" stop-color="#b45309"/>
+    </linearGradient>
+
+    <linearGradient id="emerald-grad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#34d399"/>
+      <stop offset="100%" stop-color="#047857"/>
+    </linearGradient>
+
+    <filter id="shadow" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="6" stdDeviation="8" flood-color="#000000" flood-opacity="0.3"/>
+    </filter>
+  </defs>
+
+  <!-- Outer Rounded Badge Background -->
+  <rect width="512" height="512" rx="100" fill="url(#bg-grad)"/>
+
+  <!-- Inner Decorative Ring -->
+  <circle cx="256" cy="256" r="230" fill="none" stroke="url(#orange-grad)" stroke-width="8" opacity="0.6"/>
+  <circle cx="256" cy="256" r="215" fill="none" stroke="url(#gold-grad)" stroke-width="3" stroke-dasharray="8 8" opacity="0.8"/>
+
+  <!-- Majestic Bull Head Silhouette (Vector Artwork) -->
+  <g filter="url(#shadow)">
+    <!-- Horns Left & Right -->
+    <path d="M120 180 C90 120 130 60 190 70 C170 100 165 140 175 175 Z" fill="url(#gold-grad)"/>
+    <path d="M392 180 C422 120 382 60 322 70 C342 100 347 140 337 175 Z" fill="url(#gold-grad)"/>
+
+    <!-- Ears -->
+    <path d="M165 200 C110 210 95 190 130 175 C150 170 165 185 165 200 Z" fill="url(#orange-grad)"/>
+    <path d="M347 200 C402 210 417 190 382 175 C362 170 347 185 347 200 Z" fill="url(#orange-grad)"/>
+
+    <!-- Head Main Crown & Crown Shield -->
+    <path d="M175 160 L256 120 L337 160 L320 250 L256 310 L192 250 Z" fill="url(#orange-grad)"/>
+
+    <!-- Forehead Star Shield Emblem -->
+    <polygon points="256,150 268,175 295,178 275,196 280,223 256,210 232,223 237,196 217,178 244,175" fill="url(#gold-grad)"/>
+
+    <!-- Muzzle / Nose Area -->
+    <path d="M210 260 L256 245 L302 260 L290 330 C280 355 232 355 222 330 Z" fill="#ffffff" opacity="0.95"/>
+    <circle cx="235" cy="305" r="9" fill="#1e293b"/>
+    <circle cx="277" cy="305" r="9" fill="#1e293b"/>
+    <!-- Bull Nose Ring -->
+    <path d="M238 320 C238 340 274 340 274 320" fill="none" stroke="url(#gold-grad)" stroke-width="7" stroke-linecap="round"/>
+  </g>
+
+  <!-- Golden Laurel / Rice Wheat Ears Decor Left & Right -->
+  <g stroke="url(#gold-grad)" stroke-width="4" stroke-linecap="round" fill="none" opacity="0.85">
+    <!-- Left Stem -->
+    <path d="M90 320 C80 260 100 200 135 150"/>
+    <path d="M85 290 L105 285"/>
+    <path d="M92 250 L112 248"/>
+    <path d="M106 210 L125 212"/>
+
+    <!-- Right Stem -->
+    <path d="M422 320 C432 260 412 200 377 150"/>
+    <path d="M427 290 L407 285"/>
+    <path d="M420 250 L400 248"/>
+    <path d="M406 210 L387 212"/>
+  </g>
+
+  <!-- KAKSEDTHAN Banner Ribbon Base -->
+  <path d="M80 395 Q256 425 432 395 L445 445 Q256 480 67 445 Z" fill="url(#orange-grad)" filter="url(#shadow)"/>
+  <path d="M85 402 Q256 430 427 402" fill="none" stroke="url(#gold-grad)" stroke-width="3"/>
+
+  <!-- Typography Text -->
+  <text x="256" y="432" font-family="'Inter', 'Montserrat', 'Arial Black', sans-serif" font-weight="900" font-size="28" fill="#ffffff" text-anchor="middle" letter-spacing="4">
+    KAKSEDTHAN
+  </text>
+  <text x="256" y="465" font-family="'Inter', sans-serif" font-weight="800" font-size="13" fill="url(#gold-grad)" text-anchor="middle" letter-spacing="6">
+    HERDBOOK SYSTEM
+  </text>
+</svg>

@@ -35,8 +35,18 @@ export class StockRepository {
   }
 
   async findAll(): Promise<StockItem[]> {
-    const res = await query('SELECT * FROM stock ORDER BY created_at ASC');
-    return res.rows.map(row => this.mapRowToStock(row));
+    try {
+      const res = await query('SELECT * FROM stock ORDER BY created_at ASC');
+      return res.rows.map(row => this.mapRowToStock(row));
+    } catch (e) {
+      try {
+        const res = await query('SELECT * FROM stock ORDER BY id ASC');
+        return res.rows.map(row => this.mapRowToStock(row));
+      } catch (err) {
+        console.warn('[StockRepository.findAll] Failed to fetch stock from DB:', err);
+        return [];
+      }
+    }
   }
 
   async findById(id: string): Promise<StockItem | null> {

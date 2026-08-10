@@ -62,24 +62,34 @@ import { FeedProductItem, FeedStockTransaction } from './types';
 
 import { processDailyFeedStockOuts } from './daily-feed-cron';
 
-/**
- * Aggregates all ERP domain data from PostgreSQL (or instant JSON fallback if PostgreSQL is unreachable)
- */
+import { herdbookRepository } from '../repositories/herdbook.repository';
+
 export async function getDbData(): Promise<ERPLivestockData> {
   try {
-    const [stock, weightTracking, salesTracking, batches, healthLogs, expenses, settings, feedProducts, feedTransactions] = await Promise.all([
-      stockService.getAllStock(),
-      weightService.getAllWeightRecords(),
-      salesService.getAllSales(),
-      batchService.getAllBatches(),
-      healthService.getAllHealthLogs(),
-      expenseService.getAllExpenses(),
-      settingsService.getSettings(),
-      feedRepository.getProducts().catch(() => []),
-      feedRepository.getTransactions().catch(() => [])
+    const jsonDb = getJsonDbData();
+    const [
+      stock, weightTracking, salesTracking, batches, healthLogs, expenses, settings,
+      feedProducts, feedTransactions,
+      sires, stockInsemination, dams, breedingPrograms, calves, herdbookRegistrations, certificates
+    ] = await Promise.all([
+      stockService.getAllStock().catch(() => jsonDb.stock || []),
+      weightService.getAllWeightRecords().catch(() => jsonDb.weightTracking || []),
+      salesService.getAllSales().catch(() => jsonDb.salesTracking || []),
+      batchService.getAllBatches().catch(() => jsonDb.batches || []),
+      healthService.getAllHealthLogs().catch(() => jsonDb.healthLogs || []),
+      expenseService.getAllExpenses().catch(() => jsonDb.expenses || []),
+      settingsService.getSettings().catch(() => jsonDb.settings || {}),
+      feedRepository.getProducts().catch(() => jsonDb.feedProducts || []),
+      feedRepository.getTransactions().catch(() => jsonDb.feedTransactions || []),
+      herdbookRepository.getSires().catch(() => []),
+      herdbookRepository.getStockInsemination().catch(() => []),
+      herdbookRepository.getDams().catch(() => []),
+      herdbookRepository.getBreedingPrograms().catch(() => []),
+      herdbookRepository.getCalves().catch(() => []),
+      herdbookRepository.getHerdbookRegistrations().catch(() => []),
+      herdbookRepository.getCertificates().catch(() => [])
     ]);
 
-    const jsonDb = getJsonDbData();
     const batchMap = new Map<string, BatchItem>();
     for (const b of jsonDb.batches || []) {
       batchMap.set(b.id, b);
@@ -106,7 +116,14 @@ export async function getDbData(): Promise<ERPLivestockData> {
       expenses,
       settings,
       feedProducts: feedProducts && feedProducts.length > 0 ? feedProducts : (jsonDb.feedProducts || []),
-      feedTransactions: feedTransactions && feedTransactions.length > 0 ? feedTransactions : (jsonDb.feedTransactions || [])
+      feedTransactions: feedTransactions && feedTransactions.length > 0 ? feedTransactions : (jsonDb.feedTransactions || []),
+      sires,
+      stockInsemination,
+      dams,
+      breedingPrograms,
+      calves,
+      herdbookRegistrations,
+      certificates
     };
 
     // Auto-calculate daily feed stock outs based on Daily Feed Ration

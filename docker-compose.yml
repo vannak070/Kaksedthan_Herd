@@ -4,32 +4,32 @@ services:
   # 1. PostgreSQL Relational Database Service
   db:
     image: postgres:16-alpine
-    container_name: livestock_postgres_db
+    container_name: kaksedthan_postgres_db
     restart: always
     environment:
       POSTGRES_USER: ${DB_USER:-postgres}
       POSTGRES_PASSWORD: ${DB_PASSWORD:-postgres123}
-      POSTGRES_DB: ${DB_NAME:-livestock_db}
+      POSTGRES_DB: ${DB_NAME:-kaksedthan_herdbook}
     ports:
       - "5433:5432"
     volumes:
-      - livestock_postgres_data:/var/lib/postgresql/data
+      - kaksedthan_postgres_data:/var/lib/postgresql/data
       - ./src/db/schema.sql:/docker-entrypoint-initdb.d/01_schema.sql
     networks:
-      - livestock_net
+      - kaksedthan_net
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-postgres} -d ${DB_NAME:-livestock_db}"]
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-postgres} -d ${DB_NAME:-kaksedthan_herdbook}"]
       interval: 5s
       timeout: 5s
       retries: 10
       start_period: 5s
 
-  # 2. Livestock Backend & Next.js Application Service
+  # 2. Kaksedthan Backend & Next.js Application Service
   app:
     build:
       context: .
       dockerfile: Dockerfile
-    container_name: livestock_app_backend
+    container_name: kaksedthan_app_backend
     restart: always
     ports:
       - "3000:3000"
@@ -41,12 +41,11 @@ services:
       NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:5001/api/v1}
       NEXT_PUBLIC_LAN_IP: ${NEXT_PUBLIC_LAN_IP:-}
       LAN_IP: ${LAN_IP:-}
-      # Use the Docker Compose service name 'db' as the database host
       DB_HOST: db
       DB_PORT: 5432
       DB_USER: ${DB_USER:-postgres}
       DB_PASSWORD: ${DB_PASSWORD:-postgres123}
-      DB_NAME: ${DB_NAME:-livestock_db}
+      DB_NAME: ${DB_NAME:-kaksedthan_herdbook}
       DB_SSL: "false"
       DB_POOL_MIN: 2
       DB_POOL_MAX: 20
@@ -56,13 +55,12 @@ services:
       db:
         condition: service_healthy
     networks:
-      - livestock_net
+      - kaksedthan_net
 
 networks:
-  livestock_net:
+  kaksedthan_net:
     driver: bridge
 
 volumes:
-  livestock_postgres_data:
+  kaksedthan_postgres_data:
     driver: local
-

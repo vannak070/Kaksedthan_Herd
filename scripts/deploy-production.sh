@@ -45,7 +45,7 @@ mkdir -p "$BACKUP_DIR"
 node << 'JSEOF'
 const fs = require("fs");
 const { Pool } = require("/root/LiveStock/node_modules/pg");
-const pool = new Pool({ host:"localhost", port:5432, user:"postgres", password:"postgres123", database:"livestock_db" });
+const pool = new Pool({ host:"localhost", port:5432, user:"postgres", password:"postgres123", database:"kaksedthan_herdbook" });
 const BACKUP_FILE = process.env.BACKUP_FILE;
 async function dump() {
   const c = await pool.connect();

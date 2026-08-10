@@ -31,6 +31,12 @@ export const DynamicUpload: React.FC<DynamicUploadProps> = ({
     const file = e.target.files?.[0];
     if (!file) return;
 
+    // File size validation (Max 10 MB)
+    if (file.size > 10 * 1024 * 1024) {
+      alert('Image is too large. Please upload an image smaller than 10 MB.');
+      return;
+    }
+
     if (mode === 'image' && file.type.startsWith('image/')) {
       const reader = new FileReader();
       reader.onload = () => {

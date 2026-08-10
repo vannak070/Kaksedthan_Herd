@@ -2,7 +2,7 @@
 # ─────────────────────────────────────────────────────────────────────────────
 # clone-prod-to-local.sh
 # Clones ALL production data from http://104.248.149.103 into your local
-# PostgreSQL (localhost:5433/livestock_db).  Useful for local development
+# PostgreSQL (localhost:5433/kaksedthan_herdbook).  Useful for local development
 # and testing with real data.
 #
 # Usage: bash scripts/clone-prod-to-local.sh
@@ -14,7 +14,7 @@ LOCAL_HOST="localhost"
 LOCAL_PORT="5433"
 LOCAL_USER="postgres"
 LOCAL_PASS="postgres123"
-LOCAL_DB="livestock_db"
+LOCAL_DB="kaksedthan_herdbook"
 
 echo "=== 📦 Clone Production → Local Development Environment ==="
 echo "  Source : $PROD_HOST (production)"
@@ -25,7 +25,7 @@ echo ""
 echo "[1/3] Dumping data from production..."
 ssh -o StrictHostKeyChecking=no "$PROD_HOST" 'node << '"'"'EOF'"'"'
 const { Pool } = require("/root/LiveStock/node_modules/pg");
-const pool = new Pool({ host:"localhost", port:5432, user:"postgres", password:"postgres123", database:"livestock_db" });
+const pool = new Pool({ host:"localhost", port:5432, user:"postgres", password:"postgres123", database:"kaksedthan_herdbook" });
 async function dump() {
   const c = await pool.connect();
   try {

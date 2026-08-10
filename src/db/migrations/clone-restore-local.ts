@@ -1,6 +1,6 @@
 /**
  * RESTORE PROD DATA SNAPSHOT TO LOCAL DATABASE
- * Reads /tmp/clone_from_prod.json and updates local PostgreSQL (localhost:5433/livestock_db)
+ * Reads /tmp/clone_from_prod.json and updates local PostgreSQL (localhost:5433/kaksedthan_herdbook)
  */
 import fs from 'fs';
 import { pool, connectWithRetry } from '../../config/database';

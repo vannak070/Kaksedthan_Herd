@@ -14,7 +14,7 @@ const localPool = new Pool({
   port:     Number(process.env.DB_PORT) || 5433,
   user:     process.env.DB_USER     || 'postgres',
   password: process.env.DB_PASSWORD || 'postgres123',
-  database: process.env.DB_NAME     || 'livestock_db',
+  database: process.env.DB_NAME     || 'kaksedthan_herdbook',
   ssl: false,
 });
 
@@ -24,7 +24,7 @@ const prodPool = new Pool({
   port:     Number(process.env.PROD_DB_PORT) || 5432,
   user:     process.env.PROD_DB_USER     || 'postgres',
   password: process.env.PROD_DB_PASSWORD || 'postgres',
-  database: process.env.PROD_DB_NAME     || 'livestock_db',
+  database: process.env.PROD_DB_NAME     || 'kaksedthan_herdbook',
   ssl: false,
 });
 
