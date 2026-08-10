@@ -10,7 +10,7 @@
     "seed": "npx tsx src/db/seed.ts",
     "db:migrate": "npx tsx src/db/migrations/safe-migrate.ts",
     "db:seed": "npx tsx src/db/seed.ts",
-    "build": "next build",
+    "build": "next build --webpack",
     "start": "next start",
     "lint": "eslint",
     "restore-db": "npx tsx src/db/migrations/init-db.ts",
