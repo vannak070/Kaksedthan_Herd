@@ -77,27 +77,54 @@ function NavSection({ label, children }: { label: string; children: React.ReactN
 
 export default function SidebarLayout({
   children,
-  currentUser = { id: '1', name: 'Vannak Admin', role: 'Super Admin', email: 'vannak@snrfarm.com', status: 'Active' },
+  currentUser: initialUser = null,
   onLogout,
 }: SidebarLayoutProps) {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
-  const [selectedRole, setSelectedRole] = useState<string>('Super Admin');
+  const [activeUser, setActiveUser] = useState<UserRoleItem | null>(initialUser);
+  const [selectedRole, setSelectedRole] = useState<string>('');
   const pathname = usePathname();
   const router = useRouter();
   const { t } = useLanguage();
   const { can } = useAccessControl();
 
-  const userRole = selectedRole;
-  const isAdmin = userRole === 'Super Admin' || userRole === 'Admin';
+  // Load persisted user & role from localStorage
+  React.useEffect(() => {
+    try {
+      const rawUser = localStorage.getItem('kaksedthan_user');
+      if (rawUser) {
+        const parsed = JSON.parse(rawUser);
+        setActiveUser(parsed);
+        setSelectedRole(parsed.role || parsed.userLevel || '');
+      } else {
+        const savedRole = localStorage.getItem('kaksedthan_active_role');
+        if (savedRole) setSelectedRole(savedRole);
+      }
+    } catch {}
+  }, []);
+
+  const currentUser = activeUser || initialUser || { id: '0', name: 'User Account', role: selectedRole || 'Guest', email: '', status: 'Active' };
+  const userRole = currentUser.role || selectedRole;
+
+  const isSuperAdmin = userRole === 'Super Admin' || userRole === 'Super Administrator' || (currentUser as any).userLevel === 'Super Admin';
+  const isAdmin = isSuperAdmin || userRole === 'Admin' || userRole === 'System Administrator';
   const isSourcingCompany = userRole === 'Sire Sourcing Company' || userRole === 'Company';
   const isFarmOwner = userRole === 'Farm Owner';
-  const isBreeder = userRole === 'Breeder' || userRole === 'Breeder Account';
+  const isBreeder = userRole === 'Breeder' || userRole === 'Breeder Account' || (currentUser as any).userLevel === 'Breeder Account';
   const isFarmManager = userRole === 'Farmer / Farm Manager Account' || userRole === 'Farm Manager';
 
-  // Route Access Security Guard based on active user level (Hook called unconditionally at top level)
+  // Strict Route Access Security Guard: NON-ADMIN ACCOUNTS CANNOT ACCESS ADMIN ROUTES
   const isUnauthorizedRoute = React.useMemo(() => {
     if (isAdmin) return false;
-    if (pathname.startsWith('/admin/') || pathname.startsWith('/settings/users') || pathname.startsWith('/settings/roles') || pathname.startsWith('/settings/permissions')) {
+    // Non-Admin (Breeder, Farm Owner, Sourcing Co, Customer, etc.) attempting to open Admin / Settings management
+    if (
+      pathname.startsWith('/admin/') ||
+      pathname.startsWith('/settings/users') ||
+      pathname.startsWith('/settings/user-levels') ||
+      pathname.startsWith('/settings/roles') ||
+      pathname.startsWith('/settings/permissions') ||
+      pathname.startsWith('/settings/audit-logs')
+    ) {
       return true;
     }
     if (isSourcingCompany && (pathname.startsWith('/farms') || pathname.startsWith('/customers'))) {
@@ -106,21 +133,14 @@ export default function SidebarLayout({
     return false;
   }, [pathname, isAdmin, isSourcingCompany]);
 
-  // Load persisted operational role from localStorage on client mount & check logout session
+  // Check logout session
   React.useEffect(() => {
     const isLoggedOut = localStorage.getItem('kaksedthan_logged_out') === 'true';
     if (isLoggedOut && pathname !== '/login' && !pathname.startsWith('/public/')) {
       router.push('/login');
       return;
     }
-
-    const savedRole = localStorage.getItem('kaksedthan_active_role');
-    if (savedRole) {
-      setSelectedRole(savedRole);
-    } else if (currentUser?.role) {
-      setSelectedRole(currentUser.role);
-    }
-  }, [currentUser, pathname, router]);
+  }, [pathname, router]);
 
   // If viewing unauthenticated public verify routes or login page, render clean page without sidebar
   if (pathname.startsWith('/public/') || pathname === '/login') {

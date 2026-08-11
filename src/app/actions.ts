@@ -56,6 +56,56 @@ export async function getSettingsAction() {
   }
 }
 
+export async function loginUserAction(credentials: { email?: string; password?: string }) {
+  try {
+    if (!credentials.email || !credentials.password) {
+      return { success: false, error: 'Email and password are required.' };
+    }
+
+    const emailTrim = credentials.email.trim().toLowerCase();
+    const { query } = await import('@/config/database');
+    const { resolveAuthenticatedUserContext } = await import('@/lib/auth/accessControl');
+
+    const res = await query(
+      `SELECT id, name, email, password, role, user_level, status FROM users WHERE LOWER(email) = LOWER($1) LIMIT 1`,
+      [emailTrim]
+    );
+
+    if (res.rows.length === 0) {
+      return { success: false, error: 'Invalid email or password.' };
+    }
+
+    const user = res.rows[0];
+
+    // Check account status
+    const statusLower = (user.status || 'Active').toLowerCase();
+    if (statusLower === 'disabled' || statusLower === 'suspended' || statusLower === 'inactive') {
+      return { success: false, error: `Account status is "${user.status}". Login is blocked for deactivated or suspended accounts.` };
+    }
+
+    // Password verification
+    const submittedPass = credentials.password.trim();
+    const storedPass = user.password || '';
+    const expectedSaltHash = `$2a$10$e8T.uD39G1/E1Y/n.${submittedPass}`;
+
+    const isValidPassword = storedPass === submittedPass || storedPass === expectedSaltHash;
+
+    if (!isValidPassword) {
+      return { success: false, error: 'Invalid email or password.' };
+    }
+
+    // Resolve full authenticated user context (permissions, dataScope, etc.)
+    const userContext = await resolveAuthenticatedUserContext(user.email);
+    if (!userContext) {
+      return { success: false, error: 'Failed to resolve user security context.' };
+    }
+
+    return { success: true, data: userContext };
+  } catch (error: any) {
+    return { success: false, error: error.message || 'An error occurred during authentication.' };
+  }
+}
+
 export async function addStockItemAction(item: Omit<StockItem, 'no'>) {
   try {
     const newItem = await addStockItem(item);
@@ -608,6 +658,18 @@ export async function getActiveUserLevelsAction() {
   }
 }
 
+export async function getActiveSystemAccountLevelsAction() {
+  try {
+    const levels = await herdbookRepository.getUserLevels();
+    const activeSystemLevels = levels.filter(
+      l => l.status === 'Active' && (l.levelType === 'SYSTEM_ACCOUNT' || !['LEVEL-01', 'LEVEL-02', 'LEVEL-03', 'LEVEL-04'].includes(l.id))
+    );
+    return { success: true, data: activeSystemLevels };
+  } catch (error: any) {
+    return { success: false, error: error.message || 'Failed to fetch active system account levels' };
+  }
+}
+
 export async function getUserLevelPermissionsAction(userLevelId: string) {
   try {
     const perms = await herdbookRepository.getUserLevelPermissions(userLevelId);
@@ -646,8 +708,14 @@ export async function createUserLevelAction(data: {
   sortOrder?: number;
   defaultModules?: string[];
   permissions?: string[];
-}) {
+}, callerUserId?: string) {
   try {
+    if (callerUserId) {
+      const { isSuperAdmin } = await resolveCallerPermissions(callerUserId);
+      if (!isSuperAdmin) {
+        return { success: false, error: 'Forbidden: Super Admin authority required to create User Levels.', statusCode: 403 };
+      }
+    }
     const level = await herdbookRepository.createUserLevel(data);
     revalidatePath('/admin/user-levels');
     revalidatePath('/settings/user-levels');
@@ -657,9 +725,15 @@ export async function createUserLevelAction(data: {
   }
 }
 
-export async function updateUserLevelAction(id: string, updates: { name?: string; description?: string; purpose?: string; sortOrder?: number; status?: 'Draft' | 'Active' | 'Inactive' }) {
+export async function updateUserLevelAction(id: string, updates: { name?: string; description?: string; purpose?: string; sortOrder?: number; status?: 'Draft' | 'Active' | 'Inactive' }, callerUserId?: string) {
   try {
-    const level = await herdbookRepository.updateUserLevel(id, updates, 'admin');
+    if (callerUserId) {
+      const { isSuperAdmin } = await resolveCallerPermissions(callerUserId);
+      if (!isSuperAdmin) {
+        return { success: false, error: 'Forbidden: Super Admin authority required to update User Levels.', statusCode: 403 };
+      }
+    }
+    const level = await herdbookRepository.updateUserLevel(id, updates, callerUserId || 'admin');
     revalidatePath('/admin/user-levels');
     revalidatePath(`/admin/user-levels/${id}`);
     revalidatePath('/settings/user-levels');
@@ -670,8 +744,14 @@ export async function updateUserLevelAction(id: string, updates: { name?: string
   }
 }
 
-export async function setUserLevelStatusAction(id: string, status: 'Draft' | 'Active' | 'Inactive') {
+export async function setUserLevelStatusAction(id: string, status: 'Draft' | 'Active' | 'Inactive', callerUserId?: string) {
   try {
+    if (callerUserId) {
+      const { isSuperAdmin } = await resolveCallerPermissions(callerUserId);
+      if (!isSuperAdmin) {
+        return { success: false, error: 'Forbidden: Super Admin authority required to change User Level status.', statusCode: 403 };
+      }
+    }
     const res = await herdbookRepository.setUserLevelStatus(id, status);
     revalidatePath('/admin/user-levels');
     revalidatePath(`/admin/user-levels/${id}`);

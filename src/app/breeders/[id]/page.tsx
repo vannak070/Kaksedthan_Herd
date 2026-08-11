@@ -65,8 +65,8 @@ export default async function BreederDetailPage({ params }: PageProps) {
       >
         <div className="flex items-center gap-2">
           <Link
-            href="/breeders"
-            className="inline-flex items-center gap-1.5 bg-slate-100 hover:bg-slate-200 text-slate-800 text-xs font-bold px-3.5 py-2 rounded-xl transition-colors"
+            href={`/breeders?edit=${breeder.id}`}
+            className="inline-flex items-center gap-1.5 bg-[#dc5c15] hover:bg-[#c44f0e] text-white text-xs font-black px-4 py-2 rounded-xl transition-all shadow-md shadow-[#dc5c15]/20 cursor-pointer"
           >
             <Edit className="h-4 w-4" />
             <span>Edit Breeder Account</span>

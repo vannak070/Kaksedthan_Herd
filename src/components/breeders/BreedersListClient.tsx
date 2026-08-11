@@ -47,7 +47,10 @@ interface Props {
 import GlobalPagination from '@/components/common/GlobalPagination';
 import GlobalExport from '@/components/common/GlobalExport';
 
+import { useSearchParams } from 'next/navigation';
+
 export default function BreedersListClient({ initialBreeders }: Props) {
+  const searchParams = useSearchParams();
   const [breeders, setBreeders] = useState<BreederItem[]>(initialBreeders);
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('All');
@@ -72,11 +75,14 @@ export default function BreedersListClient({ initialBreeders }: Props) {
   const [notes, setNotes] = useState('');
   const [imageUrl, setImageUrl] = useState('');
   const [nationalId, setNationalId] = useState('');
+  const [idFrontUrl, setIdFrontUrl] = useState('');
+  const [idBackUrl, setIdBackUrl] = useState('');
 
   // Section 4: Login Account (Authentication)
   const [createAccount, setCreateAccount] = useState(true);
   const [accountEmail, setAccountEmail] = useState('');
   const [accountPassword, setAccountPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
   const [accountStatus, setAccountStatus] = useState<'Active' | 'Inactive' | 'Suspended'>('Active');
   const [userLevel, setUserLevel] = useState<'Professional Breeder Account' | 'Senior Breeder Account'>('Professional Breeder Account');
 
@@ -87,6 +93,17 @@ export default function BreedersListClient({ initialBreeders }: Props) {
     setToast({ type, message });
     setTimeout(() => setToast(null), 5000);
   };
+
+  // Auto-open modal if URL contains ?edit=BREEDER_ID
+  useEffect(() => {
+    const editId = searchParams?.get('edit');
+    if (editId) {
+      const targetBreeder = breeders.find(b => b.id === editId);
+      if (targetBreeder) {
+        openEditModal(targetBreeder);
+      }
+    }
+  }, [searchParams, breeders]);
 
   const openCreateModal = () => {
     setEditingBreeder(null);
@@ -103,9 +120,12 @@ export default function BreedersListClient({ initialBreeders }: Props) {
     setNotes('');
     setImageUrl('');
     setNationalId('');
+    setIdFrontUrl('');
+    setIdBackUrl('');
     setCreateAccount(true);
     setAccountEmail('');
     setAccountPassword('');
+    setConfirmPassword('');
     setAccountStatus('Active');
     setUserLevel('Professional Breeder Account');
     setIsModalOpen(true);
@@ -126,11 +146,14 @@ export default function BreedersListClient({ initialBreeders }: Props) {
     setNotes(brd.notes || '');
     setImageUrl(brd.imageUrl || '');
     setNationalId(brd.nationalId || '');
+    setIdFrontUrl(brd.idFrontUrl || '');
+    setIdBackUrl(brd.idBackUrl || '');
     
     const hasUser = Boolean(brd.userId || brd.accountEmail);
     setCreateAccount(hasUser);
     setAccountEmail(brd.accountEmail || brd.email || '');
     setAccountPassword('');
+    setConfirmPassword('');
     setAccountStatus((brd.accountStatus as any) || 'Active');
     setUserLevel((brd.userLevel as any) || 'Professional Breeder Account');
     setIsModalOpen(true);
@@ -139,6 +162,21 @@ export default function BreedersListClient({ initialBreeders }: Props) {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!name.trim()) return;
+
+    if (createAccount && accountPassword.trim()) {
+      if (accountPassword.trim().length < 6) {
+        showToast('error', 'Password must be at least 6 characters long.');
+        return;
+      }
+      if (accountPassword.trim() !== confirmPassword.trim()) {
+        showToast('error', 'Passwords do not match. Please verify your confirm password.');
+        return;
+      }
+    } else if (createAccount && !editingBreeder && !accountPassword.trim()) {
+      showToast('error', 'Initial password is required when creating a new login account.');
+      return;
+    }
+
     setSaving(true);
 
     try {
@@ -154,11 +192,13 @@ export default function BreedersListClient({ initialBreeders }: Props) {
         village: village.trim() || undefined,
         imageUrl: imageUrl.trim() || undefined,
         nationalId: nationalId.trim() || undefined,
+        idFrontUrl: idFrontUrl.trim() || undefined,
+        idBackUrl: idBackUrl.trim() || undefined,
         notes: notes.trim() || undefined,
         status,
         createAccount,
-        accountEmail: createAccount ? accountEmail.trim() : undefined,
-        accountPassword: createAccount && accountPassword ? accountPassword : undefined,
+        accountEmail: createAccount ? (accountEmail.trim() || email.trim()) : undefined,
+        accountPassword: createAccount && accountPassword.trim() ? accountPassword.trim() : undefined,
         accountStatus: createAccount ? accountStatus : undefined,
         userLevel: createAccount ? userLevel : undefined
       };
@@ -504,10 +544,10 @@ export default function BreedersListClient({ initialBreeders }: Props) {
               <div className="space-y-3.5 bg-slate-50/70 p-4 rounded-2xl border border-slate-200/80">
                 <div className="flex items-center gap-2 border-b border-slate-200/80 pb-2">
                   <span className="h-5 w-5 rounded-md bg-purple-600 text-white font-black text-[11px] flex items-center justify-center">3</span>
-                  <h4 className="font-black text-slate-900 uppercase text-[11px] tracking-wider">SECTION 3 — IDENTIFICATION</h4>
+                  <h4 className="font-black text-slate-900 uppercase text-[11px] tracking-wider">SECTION 3 — IDENTIFICATION & CARDS</h4>
                 </div>
 
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div className="space-y-3">
                   <div className="space-y-1">
                     <label className="font-bold text-slate-700 block">National ID / Verification No.</label>
                     <input
@@ -518,6 +558,21 @@ export default function BreedersListClient({ initialBreeders }: Props) {
                       className="w-full px-3.5 py-2 rounded-xl border border-slate-300 font-mono font-semibold focus:outline-none focus:ring-2 focus:ring-purple-500 bg-white"
                     />
                   </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <DynamicUpload
+                      label="National ID Card (Front Photo)"
+                      value={idFrontUrl}
+                      onChange={(url) => setIdFrontUrl(url)}
+                      targetSizeText="ID Front Photo (Auto-optimized & compressed)"
+                    />
+                    <DynamicUpload
+                      label="National ID Card (Back Photo)"
+                      value={idBackUrl}
+                      onChange={(url) => setIdBackUrl(url)}
+                      targetSizeText="ID Back Photo (Auto-optimized & compressed)"
+                    />
+                  </div>
                 </div>
               </div>
 
@@ -526,7 +581,7 @@ export default function BreedersListClient({ initialBreeders }: Props) {
                 <div className="flex items-center justify-between border-b border-indigo-200/80 pb-2">
                   <div className="flex items-center gap-2">
                     <span className="h-5 w-5 rounded-md bg-indigo-600 text-white font-black text-[11px] flex items-center justify-center">4</span>
-                    <h4 className="font-black text-indigo-950 uppercase text-[11px] tracking-wider">SECTION 4 — LOGIN ACCOUNT (AUTHENTICATION)</h4>
+                    <h4 className="font-black text-indigo-950 uppercase text-[11px] tracking-wider">SECTION 4 — LOGIN ACCOUNT & PASSWORD MANAGEMENT</h4>
                   </div>
                   <label className="flex items-center gap-2 cursor-pointer bg-white px-3 py-1 rounded-xl border border-indigo-200 text-xs font-bold text-indigo-900 shadow-2xs">
                     <input
@@ -535,54 +590,74 @@ export default function BreedersListClient({ initialBreeders }: Props) {
                       onChange={e => setCreateAccount(e.target.checked)}
                       className="h-4 w-4 text-indigo-600 rounded border-indigo-300 focus:ring-indigo-500"
                     />
-                    <span>Create / Enable Login Account</span>
+                    <span>{editingBreeder ? 'Enable Login Account' : 'Create Login Account'}</span>
                   </label>
                 </div>
 
                 {createAccount ? (
                   <div className="space-y-3 pt-1">
+                    <div className="space-y-1">
+                      <label className="font-bold text-indigo-900 block flex items-center gap-1.5">
+                        <Mail className="h-3.5 w-3.5 text-indigo-600" />
+                        <span>Login Email / Username *</span>
+                      </label>
+                      <input
+                        type="email"
+                        required={createAccount}
+                        value={accountEmail}
+                        onChange={e => setAccountEmail(e.target.value)}
+                        placeholder="e.g. sokha.breeder@snrfarm.com"
+                        className="w-full px-3.5 py-2 rounded-xl border border-indigo-300 font-bold text-indigo-950 focus:outline-none focus:ring-2 focus:ring-indigo-600 bg-white"
+                      />
+                    </div>
+
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                       <div className="space-y-1">
                         <label className="font-bold text-indigo-900 block flex items-center gap-1.5">
-                          <Mail className="h-3.5 w-3.5 text-indigo-600" />
-                          <span>Login Email / Username *</span>
-                        </label>
-                        <input
-                          type="email"
-                          required={createAccount}
-                          value={accountEmail}
-                          onChange={e => setAccountEmail(e.target.value)}
-                          placeholder="e.g. sokha.breeder@snrfarm.com"
-                          className="w-full px-3.5 py-2 rounded-xl border border-indigo-300 font-bold text-indigo-950 focus:outline-none focus:ring-2 focus:ring-indigo-600 bg-white"
-                        />
-                      </div>
-
-                      <div className="space-y-1">
-                        <label className="font-bold text-indigo-900 block flex items-center gap-1.5">
                           <Lock className="h-3.5 w-3.5 text-indigo-600" />
-                          <span>{editingBreeder ? 'New Password (Leave blank to keep existing)' : 'Password *'}</span>
+                          <span>{editingBreeder ? 'New Password (Optional)' : 'Password *'}</span>
                         </label>
                         <input
                           type="password"
                           required={createAccount && !editingBreeder}
                           value={accountPassword}
                           onChange={e => setAccountPassword(e.target.value)}
-                          placeholder="••••••••••••"
+                          placeholder={editingBreeder ? "Leave blank to keep existing" : "••••••••••••"}
+                          className="w-full px-3.5 py-2 rounded-xl border border-indigo-300 font-medium text-indigo-950 focus:outline-none focus:ring-2 focus:ring-indigo-600 bg-white"
+                        />
+                      </div>
+
+                      <div className="space-y-1">
+                        <label className="font-bold text-indigo-900 block flex items-center gap-1.5">
+                          <Lock className="h-3.5 w-3.5 text-indigo-600" />
+                          <span>Confirm {editingBreeder ? 'New ' : ''}Password</span>
+                        </label>
+                        <input
+                          type="password"
+                          required={createAccount && !editingBreeder && accountPassword.length > 0}
+                          value={confirmPassword}
+                          onChange={e => setConfirmPassword(e.target.value)}
+                          placeholder={editingBreeder ? "Leave blank to keep existing" : "••••••••••••"}
                           className="w-full px-3.5 py-2 rounded-xl border border-indigo-300 font-medium text-indigo-950 focus:outline-none focus:ring-2 focus:ring-indigo-600 bg-white"
                         />
                       </div>
                     </div>
+                    {editingBreeder && (
+                      <p className="text-[10.5px] text-slate-500 font-medium italic">
+                        💡 Leave password fields empty to keep the breeder&apos;s current password unchanged.
+                      </p>
+                    )}
 
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                       <div className="space-y-1">
-                        <label className="font-bold text-indigo-900 block">User Level</label>
+                        <label className="font-bold text-indigo-900 block">Account Level</label>
                         <select
                           value={userLevel}
                           onChange={e => setUserLevel(e.target.value as any)}
                           className="w-full px-3.5 py-2 rounded-xl border border-indigo-300 font-bold text-indigo-950 focus:outline-none focus:ring-2 focus:ring-indigo-600 bg-white cursor-pointer"
                         >
-                          <option value="Professional Breeder Account">🩺 Professional Breeder Account (LEVEL-04)</option>
-                          <option value="Senior Breeder Account">👑 Senior Breeder Account (LEVEL-05)</option>
+                          <option value="Professional Breeder Account">🩺 Breeder Account (LEVEL-01)</option>
+                          <option value="Senior Breeder Account">👑 Senior Breeder Account (LEVEL-01)</option>
                         </select>
                       </div>
 
@@ -593,16 +668,16 @@ export default function BreedersListClient({ initialBreeders }: Props) {
                           onChange={e => setAccountStatus(e.target.value as any)}
                           className="w-full px-3.5 py-2 rounded-xl border border-indigo-300 font-bold text-indigo-950 focus:outline-none focus:ring-2 focus:ring-indigo-600 bg-white cursor-pointer"
                         >
-                          <option value="Active">Active</option>
-                          <option value="Inactive">Inactive</option>
-                          <option value="Suspended">Suspended</option>
+                          <option value="Active">🟢 Active (Authorized to log in)</option>
+                          <option value="Inactive">⚪ Inactive (Deactivated account)</option>
+                          <option value="Suspended">🔴 Suspended (Temporarily blocked)</option>
                         </select>
                       </div>
                     </div>
                   </div>
                 ) : (
                   <p className="text-[11px] font-medium text-slate-500 italic py-1">
-                    Check the box above to generate a login account for this Breeder. (Uses standard <code className="bg-white px-1.5 py-0.5 rounded border text-indigo-700 font-mono">/login</code>)
+                    Check the box above to enable a login account for this Breeder.
                   </p>
                 )}
               </div>

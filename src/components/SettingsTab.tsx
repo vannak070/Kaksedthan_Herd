@@ -88,8 +88,9 @@ export default function SettingsTab({ settings: rawSettings, data, currentUser, 
   const [userEmail, setUserEmail] = useState('');
   const [userPassword, setUserPassword] = useState('');
   const [userLevel, setUserLevel] = useState<string>('Farm Owner Account');
-  const [userRole, setUserRole] = useState<string>('Farm Manager');
-  const [userDataScope, setUserDataScope] = useState<DataScopeType>('FARM');
+  const [userRole, setUserRole] = useState<string>('System Administrator');
+  const [userDataScope, setUserDataScope] = useState<DataScopeType>('GLOBAL');
+  const [userPermissions, setUserPermissions] = useState<PermissionKey[]>(ALL_PERMISSIONS);
   const [editingUserId, setEditingUserId] = useState<string | null>(null);
   const [userFarmLocation, setUserFarmLocation] = useState<string>('');
   const [userCompanyName, setUserCompanyName] = useState<string>('');
@@ -666,30 +667,70 @@ export default function SettingsTab({ settings: rawSettings, data, currentUser, 
               </div>
 
               <div>
-                <label className="block font-bold text-slate-700 mb-1">User Level (Access Template)</label>
-                <select
-                  value={userLevel}
-                  onChange={e => {
-                    const val = e.target.value;
-                    setUserLevel(val);
-                    if (val.includes('Super Admin')) {
-                      setUserDataScope('GLOBAL');
-                    } else if (val.includes('Farm Owner')) {
-                      setUserDataScope('FARM');
-                    }
-                  }}
-                  className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2 font-bold text-indigo-700 focus:ring-2 focus:ring-indigo-500 focus:outline-none"
-                >
-                  {currentUserLevels
-                    .filter(lvl => lvl.status === 'Active')
-                    .map(lvl => (
-                      <option key={lvl.id} value={lvl.name}>{lvl.name}</option>
-                    ))}
-                </select>
-                <div className="mt-1.5 p-2 bg-emerald-50 border border-emerald-100 rounded-xl text-[10.5px] text-emerald-800 font-medium flex items-center gap-1.5">
-                  <ShieldCheck className="h-3.5 w-3.5 text-emerald-600 shrink-0" />
-                  <span><strong>Automatic Inheritance:</strong> Account automatically inherits CRUD permissions configured for this User Level.</span>
-                </div>
+                {(() => {
+                  const activeSystemLevels = currentUserLevels.filter(lvl => lvl.status === 'Active' && (lvl.levelType === 'SYSTEM_ACCOUNT' || !['LEVEL-01', 'LEVEL-02', 'LEVEL-03', 'LEVEL-04'].includes(lvl.id)));
+                  const selectedLevelObj = activeSystemLevels.find(l => l.name === userLevel || l.id === userLevel) || activeSystemLevels[0];
+
+                  return (
+                    <>
+                      <label className="block font-bold text-slate-700 mb-1">
+                        System Account Level (Access Template) <span className="text-rose-500">*</span>
+                      </label>
+
+                      {activeSystemLevels.length === 0 ? (
+                        <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl text-xs text-amber-900 font-bold">
+                          ⚠️ No active System Account Levels available. Please create and activate a System Account Level in User Level Management.
+                        </div>
+                      ) : (
+                        <select
+                          value={userLevel}
+                          onChange={e => {
+                            const val = e.target.value;
+                            setUserLevel(val);
+                            if (val.includes('Super Admin')) {
+                              setUserDataScope('GLOBAL');
+                            } else if (val.includes('Farm')) {
+                              setUserDataScope('FARM');
+                            }
+                          }}
+                          className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2 font-bold text-purple-900 focus:ring-2 focus:ring-purple-500 focus:outline-none"
+                        >
+                          {activeSystemLevels.map(lvl => (
+                            <option key={lvl.id} value={lvl.name}>{lvl.name}</option>
+                          ))}
+                        </select>
+                      )}
+
+                      {selectedLevelObj && (
+                        <div className="mt-2.5 p-3.5 bg-purple-50/80 border border-purple-200 rounded-2xl space-y-2 text-xs">
+                          <div className="flex items-center justify-between">
+                            <span className="font-black text-purple-900 flex items-center gap-1.5">
+                              <ShieldCheck className="h-4 w-4 text-purple-600" />
+                              {selectedLevelObj.name}
+                            </span>
+                            <span className="font-mono text-[10px] font-bold text-purple-700 bg-purple-100 px-2 py-0.5 rounded-md">
+                              {selectedLevelObj.id}
+                            </span>
+                          </div>
+                          <p className="text-slate-600 font-medium leading-relaxed">
+                            {selectedLevelObj.description}
+                          </p>
+                          {(selectedLevelObj as any).purpose && (
+                            <p className="text-[11px] text-indigo-700 font-semibold italic">
+                              Scope/Purpose: {(selectedLevelObj as any).purpose}
+                            </p>
+                          )}
+                          <div className="pt-2 border-t border-purple-200/60 flex items-center justify-between text-[10.5px] font-bold text-purple-900">
+                            <span>Automatic Access Inheritance:</span>
+                            <span className="text-emerald-700 bg-emerald-100 px-2 py-0.5 rounded-full text-[10px] font-black">
+                              Configured in User Level Management
+                            </span>
+                          </div>
+                        </div>
+                      )}
+                    </>
+                  );
+                })()}
               </div>
 
               <div>

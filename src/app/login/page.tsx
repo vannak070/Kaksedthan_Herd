@@ -5,28 +5,49 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { Lock, Mail, ArrowRight, ShieldCheck, CheckCircle2 } from 'lucide-react';
 
+import { loginUserAction } from '@/app/actions';
+
 export default function LoginPage() {
   const router = useRouter();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [success, setSuccess] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
-  const handleLogin = (e: React.FormEvent) => {
+  const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!email.trim() || !password.trim()) {
+      setError('Please enter both email and password.');
+      return;
+    }
+
     setLoading(true);
+    setError(null);
 
-    localStorage.removeItem('kaksedthan_logged_out');
-    localStorage.setItem('kaksedthan_user_session', 'active');
-    document.cookie = 'kaksedthan_token=active_session; path=/; max-age=86400';
+    try {
+      const res = await loginUserAction({ email: email.trim(), password: password.trim() });
+      if (res.success && res.data) {
+        const user = res.data;
+        localStorage.removeItem('kaksedthan_logged_out');
+        localStorage.setItem('kaksedthan_user_session', 'active');
+        localStorage.setItem('kaksedthan_user', JSON.stringify(user));
+        localStorage.setItem('kaksedthan_active_role', user.role || user.userLevel || 'Breeder Account');
+        document.cookie = `kaksedthan_token=${user.id}; path=/; max-age=86400`;
 
-    setTimeout(() => {
+        setLoading(false);
+        setSuccess(true);
+        setTimeout(() => {
+          router.push('/');
+        }, 500);
+      } else {
+        setLoading(false);
+        setError(res.error || 'Invalid credentials or account is not authorized.');
+      }
+    } catch (err: any) {
       setLoading(false);
-      setSuccess(true);
-      setTimeout(() => {
-        router.push('/');
-      }, 600);
-    }, 600);
+      setError(err.message || 'An unexpected error occurred during login.');
+    }
   };
 
   return (
@@ -57,12 +78,18 @@ export default function LoginPage() {
           </p>
         </div>
 
-        {/* Login Form */}
         <form onSubmit={handleLogin} className="space-y-4 pt-2">
           {success && (
             <div className="bg-emerald-50 border border-emerald-200 text-emerald-800 p-3 rounded-2xl text-xs font-bold flex items-center gap-2">
               <CheckCircle2 className="h-4 w-4 text-emerald-600 shrink-0" />
               <span>Authentication successful! Redirecting to Dashboard...</span>
+            </div>
+          )}
+
+          {error && (
+            <div className="bg-rose-50 border border-rose-200 text-rose-900 p-3 rounded-2xl text-xs font-bold flex items-center gap-2">
+              <ShieldCheck className="h-4 w-4 text-rose-600 shrink-0" />
+              <span>{error}</span>
             </div>
           )}
 

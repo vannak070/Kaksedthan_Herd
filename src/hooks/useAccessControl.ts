@@ -19,12 +19,12 @@ export interface UserAccessContext {
 
 export function useAccessControl() {
   const [currentUser, setCurrentUser] = useState<UserAccessContext | null>(null);
-  const [activeRole, setActiveRole] = useState<string>('Super Admin');
+  const [activeRole, setActiveRole] = useState<string>('');
   const [isLoaded, setIsLoaded] = useState(false);
 
   useEffect(() => {
     try {
-      const savedRole = localStorage.getItem('kaksedthan_active_role') || 'Super Admin';
+      const savedRole = localStorage.getItem('kaksedthan_active_role') || '';
       setActiveRole(savedRole);
 
       const rawUser = localStorage.getItem('kaksedthan_user');
@@ -39,7 +39,7 @@ export function useAccessControl() {
     }
   }, []);
 
-  const effectiveRole = currentUser?.role || activeRole || 'Super Admin';
+  const effectiveRole = currentUser?.role || currentUser?.userLevel || activeRole || '';
 
   // ─── ROLE FLAGS ───────────────────────────────────────────────────────────
   const isSuperAdmin =

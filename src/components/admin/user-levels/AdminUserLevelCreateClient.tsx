@@ -1,29 +1,36 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
-import { ArrowLeft, Layers, Plus, AlertTriangle, Info } from 'lucide-react';
+import { useRouter, useSearchParams } from 'next/navigation';
+import { ArrowLeft, Layers, Plus, AlertTriangle, Info, Building, Shield } from 'lucide-react';
 import { createUserLevelAction } from '@/app/actions';
 
 export default function AdminUserLevelCreateClient() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const initialType = (searchParams.get('type') === 'SYSTEM_ACCOUNT' ? 'SYSTEM_ACCOUNT' : 'ACCOUNT_MANAGEMENT') as 'ACCOUNT_MANAGEMENT' | 'SYSTEM_ACCOUNT';
 
+  const [levelType, setLevelType] = useState<'ACCOUNT_MANAGEMENT' | 'SYSTEM_ACCOUNT'>(initialType);
   const [name, setName] = useState('');
   const [code, setCode] = useState('');
   const [description, setDescription] = useState('');
   const [purpose, setPurpose] = useState('');
+  const [businessFunction, setBusinessFunction] = useState('');
+  const [navKey, setNavKey] = useState('');
   const [sortOrder, setSortOrder] = useState(10);
   
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [codeManual, setCodeManual] = useState(false);
 
-  // Auto-generate code from name
+  // Auto-generate code & navKey from name
   const handleNameChange = (val: string) => {
     setName(val);
     if (!codeManual) {
       setCode(val.trim().toUpperCase().replace(/[^A-Z0-9]+/g, '_').replace(/^_|_$/g, ''));
+      setNavKey(val.trim().toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, ''));
+      setBusinessFunction(val.trim());
     }
   };
 
@@ -40,10 +47,13 @@ export default function AdminUserLevelCreateClient() {
         name: name.trim(),
         code: code.trim().toUpperCase(),
         description: description.trim(),
+        levelType,
+        businessFunction: businessFunction.trim() || name.trim(),
+        navKey: navKey.trim() || name.trim().toLowerCase().replace(/[^a-z0-9]+/g, '_'),
         sortOrder: Number(sortOrder) || 10,
         status: 'Draft',
         purpose: purpose.trim(),
-        defaultModules: [], // no longer configured on this screen
+        defaultModules: [],
       } as any);
       
       if (res.success && res.data) {
@@ -97,11 +107,60 @@ export default function AdminUserLevelCreateClient() {
           </div>
         )}
 
+        {/* 1. LEVEL CATEGORY SELECTOR */}
+        <div className="bg-white rounded-3xl border border-slate-200 shadow-xs p-6 space-y-4">
+          <div className="border-b border-slate-100 pb-3">
+            <h2 className="text-sm font-black text-slate-900 uppercase tracking-wider">1. User Level Category</h2>
+            <p className="text-xs text-slate-500 font-medium mt-0.5">
+              Select whether this is a Business Account level (dynamically registered in Account Management navigation) or an Internal System Operation staff level.
+            </p>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <button
+              type="button"
+              onClick={() => setLevelType('ACCOUNT_MANAGEMENT')}
+              className={`p-4 rounded-2xl border text-left transition-all cursor-pointer ${
+                levelType === 'ACCOUNT_MANAGEMENT'
+                  ? 'border-purple-600 bg-purple-50/70 ring-2 ring-purple-600/20'
+                  : 'border-slate-200 hover:border-slate-300 bg-white'
+              }`}
+            >
+              <div className="flex items-center gap-2 font-black text-purple-900 text-sm mb-1">
+                <Building className="h-4 w-4 text-purple-600" />
+                <span>🏢 Account Management</span>
+              </div>
+              <p className="text-xs text-slate-600 font-medium leading-relaxed">
+                Business & customer-facing accounts (e.g. Breeders, Farm Stations, Sourcing Co). Automatically registers dynamic sidebar navigation under Account Management.
+              </p>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setLevelType('SYSTEM_ACCOUNT')}
+              className={`p-4 rounded-2xl border text-left transition-all cursor-pointer ${
+                levelType === 'SYSTEM_ACCOUNT'
+                  ? 'border-indigo-600 bg-indigo-50/70 ring-2 ring-indigo-600/20'
+                  : 'border-slate-200 hover:border-slate-300 bg-white'
+              }`}
+            >
+              <div className="flex items-center gap-2 font-black text-indigo-900 text-sm mb-1">
+                <Shield className="h-4 w-4 text-indigo-600" />
+                <span>⚙️ System Account</span>
+              </div>
+              <p className="text-xs text-slate-600 font-medium leading-relaxed">
+                Internal system operation staff (e.g. Super Admin, Operations Officer, Certification Officer). Becomes selectable inside User Management → Create Internal Account.
+              </p>
+            </button>
+          </div>
+        </div>
+
+        {/* 2. LEVEL INFORMATION */}
         <div className="bg-white rounded-3xl border border-slate-200 shadow-xs p-6 space-y-5">
           <div className="border-b border-slate-100 pb-3">
-            <h2 className="text-sm font-black text-slate-900 uppercase tracking-wider">User Level Information</h2>
+            <h2 className="text-sm font-black text-slate-900 uppercase tracking-wider">2. Level Details & Identity</h2>
             <p className="text-xs text-slate-500 font-medium mt-0.5">
-              Define the basic identity for this business account type.
+              Define identity code, description, and business purpose.
             </p>
           </div>
 
@@ -115,7 +174,7 @@ export default function AdminUserLevelCreateClient() {
                 required
                 value={name}
                 onChange={e => handleNameChange(e.target.value)}
-                placeholder="e.g. Veterinarian Specialist"
+                placeholder={levelType === 'ACCOUNT_MANAGEMENT' ? "e.g. Livestock Partner Account" : "e.g. Field Inspector Officer"}
                 className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 font-medium text-slate-900 focus:outline-none focus:border-purple-600 focus:ring-2 focus:ring-purple-600/10 placeholder:text-slate-400"
               />
             </div>
@@ -129,10 +188,36 @@ export default function AdminUserLevelCreateClient() {
                 required
                 value={code}
                 onChange={e => { setCode(e.target.value.toUpperCase().replace(/[^A-Z0-9_]/g, '')); setCodeManual(true); }}
-                placeholder="e.g. VET_SPECIALIST"
+                placeholder="e.g. LIVESTOCK_PARTNER"
                 className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 font-mono font-bold text-slate-900 focus:outline-none focus:border-purple-600 focus:ring-2 focus:ring-purple-600/10 placeholder:text-slate-400"
               />
             </div>
+
+            {levelType === 'ACCOUNT_MANAGEMENT' && (
+              <>
+                <div className="space-y-1.5">
+                  <label className="font-bold text-slate-700 block">Business Function Display Name</label>
+                  <input
+                    type="text"
+                    value={businessFunction}
+                    onChange={e => setBusinessFunction(e.target.value)}
+                    placeholder="e.g. Livestock Partners"
+                    className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 font-medium text-slate-900 focus:outline-none focus:border-purple-600 focus:ring-2 focus:ring-purple-600/10"
+                  />
+                </div>
+
+                <div className="space-y-1.5">
+                  <label className="font-bold text-slate-700 block">Navigation Key / Slug</label>
+                  <input
+                    type="text"
+                    value={navKey}
+                    onChange={e => setNavKey(e.target.value.toLowerCase().replace(/[^a-z0-9_]/g, ''))}
+                    placeholder="e.g. partners"
+                    className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 font-mono text-slate-900 focus:outline-none focus:border-purple-600 focus:ring-2 focus:ring-purple-600/10"
+                  />
+                </div>
+              </>
+            )}
 
             <div className="sm:col-span-2 space-y-1.5">
               <label className="font-bold text-slate-700 block">Description</label>
@@ -140,7 +225,7 @@ export default function AdminUserLevelCreateClient() {
                 rows={2}
                 value={description}
                 onChange={e => setDescription(e.target.value)}
-                placeholder="e.g. Specialized role for certified veterinarians."
+                placeholder="Brief summary of what this user level is for."
                 className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 font-medium text-slate-800 focus:outline-none focus:border-purple-600 focus:ring-2 focus:ring-purple-600/10 placeholder:text-slate-400 resize-none"
               />
             </div>
@@ -151,7 +236,7 @@ export default function AdminUserLevelCreateClient() {
                 rows={2}
                 value={purpose}
                 onChange={e => setPurpose(e.target.value)}
-                placeholder="e.g. Medical oversight and certification approvals."
+                placeholder="Business rationale and operational scope."
                 className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 font-medium text-slate-800 focus:outline-none focus:border-purple-600 focus:ring-2 focus:ring-purple-600/10 placeholder:text-slate-400 resize-none"
               />
             </div>

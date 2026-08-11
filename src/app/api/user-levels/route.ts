@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { herdbookRepository } from '@/repositories/herdbook.repository';
+import { verifySuperAdminRequest } from '@/lib/auth/securityGuard';
 
 // GET /api/user-levels — List all user levels with user counts
 export async function GET(req: NextRequest) {
@@ -17,6 +18,8 @@ export async function GET(req: NextRequest) {
 
 // POST /api/user-levels — Create a new user level
 export async function POST(req: NextRequest) {
+  const guard = await verifySuperAdminRequest(req);
+  if (!guard.authorized && guard.response) return guard.response;
   try {
     const body = await req.json();
     const { name, code, description, purpose, sortOrder, defaultModules } = body;

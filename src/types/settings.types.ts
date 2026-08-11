@@ -450,20 +450,33 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<string, PermissionKey[]> = {
 };
 
 // ─── USER LEVEL ───────────────────────────────────────────────────────────────
+export type UserLevelType = 'ACCOUNT_MANAGEMENT' | 'SYSTEM_ACCOUNT';
+
 export interface UserLevelItem {
   id: string;
   name: string;
   description: string;
+  levelType: UserLevelType;
+  businessFunction?: string;
+  navKey?: string;
   status: 'Active' | 'Inactive';
   createdAt?: string;
   updatedAt?: string;
 }
 
 export const APPROVED_USER_LEVELS: UserLevelItem[] = [
-  { id: 'LEVEL-01', name: 'Breeder Account', description: 'Breeding specialist & AI operations professional managing services and programs.', status: 'Active' },
-  { id: 'LEVEL-02', name: 'Farm Owner Account', description: 'Owner/manager of farm stations controlling farm animals, breeding, and costs.', status: 'Active' },
-  { id: 'LEVEL-03', name: 'Farmer / Farm Manager Account', description: 'Day-to-day operational manager of an authorized farm under a Farm Owner.', status: 'Active' },
-  { id: 'LEVEL-04', name: 'Sire Sourcing Company Account', description: 'Supplier supplying Sires or Sire/Semen stock to the herdbook system.', status: 'Active' },
+  // 🏢 ACCOUNT MANAGEMENT (Business / Operational Account Levels)
+  { id: 'LEVEL-01', name: 'Breeder Account', description: 'Breeder business accounts managing breeding operations and AI services.', levelType: 'ACCOUNT_MANAGEMENT', businessFunction: 'Breeder Management', navKey: 'breeders', status: 'Active' },
+  { id: 'LEVEL-02', name: 'Farm Station Account', description: 'Farm station business accounts controlling cattle, breeding, and farm stations.', levelType: 'ACCOUNT_MANAGEMENT', businessFunction: 'Farm Stations', navKey: 'farms', status: 'Active' },
+  { id: 'LEVEL-03', name: 'Sire Sourcing Company Account', description: 'Sire supplier business accounts supplying sires and semen stock.', levelType: 'ACCOUNT_MANAGEMENT', businessFunction: 'Sire Sourcing Companies', navKey: 'sires', status: 'Active' },
+  { id: 'LEVEL-04', name: 'Customer / Cow Owner Account', description: 'Customer business accounts owning registered cattle and calves.', levelType: 'ACCOUNT_MANAGEMENT', businessFunction: 'Customers / Cow Owners', navKey: 'customers', status: 'Active' },
+
+  // ⚙️ SYSTEM ACCOUNT (Internal System Operation Accounts)
+  { id: 'LEVEL-05', name: 'Super Admin Account', description: 'Super Administrator level with full security authority and system management.', levelType: 'SYSTEM_ACCOUNT', status: 'Active' },
+  { id: 'LEVEL-06', name: 'System Administrator', description: 'System IT & operational administrator.', levelType: 'SYSTEM_ACCOUNT', status: 'Active' },
+  { id: 'LEVEL-07', name: 'Operations Officer', description: 'Internal field operations officer managing livestock and breeding workflows.', levelType: 'SYSTEM_ACCOUNT', status: 'Active' },
+  { id: 'LEVEL-08', name: 'Certification Officer', description: 'Internal certification officer reviewing and approving official credentials.', levelType: 'SYSTEM_ACCOUNT', status: 'Active' },
+  { id: 'LEVEL-09', name: 'Data Officer', description: 'Internal data officer managing herdbook registries and master data.', levelType: 'SYSTEM_ACCOUNT', status: 'Active' },
 ];
 
 // ─── ROLE ─────────────────────────────────────────────────────────────────────

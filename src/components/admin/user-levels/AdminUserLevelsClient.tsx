@@ -96,13 +96,25 @@ export default function AdminUserLevelsClient({ initialLevels }: Props) {
     setTimeout(() => setToast(null), 5000);
   };
 
-  const totalLevels = levels.length;
-  const activeLevels = levels.filter(l => l.status === 'Active').length;
-  const draftLevels = levels.filter(l => l.status === 'Draft').length;
-  const totalUsers = levels.reduce((sum, l) => sum + (l.userCount || 0), 0);
+  const [categoryTab, setCategoryTab] = useState<'ACCOUNT_MANAGEMENT' | 'SYSTEM_ACCOUNT'>('ACCOUNT_MANAGEMENT');
+
+  const accountLevelsCount = levels.filter(l => (l as any).levelType === 'ACCOUNT_MANAGEMENT' || ['LEVEL-01', 'LEVEL-02', 'LEVEL-03', 'LEVEL-04'].includes(l.id)).length;
+  const systemLevelsCount = levels.filter(l => (l as any).levelType === 'SYSTEM_ACCOUNT' || !['LEVEL-01', 'LEVEL-02', 'LEVEL-03', 'LEVEL-04'].includes(l.id)).length;
+
+  const categoryLevels = useMemo(() => {
+    return levels.filter(l => {
+      const isAccountMgmt = (l as any).levelType === 'ACCOUNT_MANAGEMENT' || ['LEVEL-01', 'LEVEL-02', 'LEVEL-03', 'LEVEL-04'].includes(l.id);
+      return categoryTab === 'ACCOUNT_MANAGEMENT' ? isAccountMgmt : !isAccountMgmt;
+    });
+  }, [levels, categoryTab]);
+
+  const totalLevels = categoryLevels.length;
+  const activeLevels = categoryLevels.filter(l => l.status === 'Active').length;
+  const draftLevels = categoryLevels.filter(l => l.status === 'Draft').length;
+  const totalUsers = categoryLevels.reduce((sum, l) => sum + (l.userCount || 0), 0);
 
   const filteredLevels = useMemo(() => {
-    return levels.filter(l => {
+    return categoryLevels.filter(l => {
       const matchesSearch = !search ||
         l.name.toLowerCase().includes(search.toLowerCase()) ||
         l.code.toLowerCase().includes(search.toLowerCase()) ||
@@ -111,7 +123,7 @@ export default function AdminUserLevelsClient({ initialLevels }: Props) {
       const matchesStatus = statusFilter === 'All' || l.status === statusFilter;
       return matchesSearch && matchesStatus;
     }).sort((a, b) => (a.sortOrder || 0) - (b.sortOrder || 0));
-  }, [levels, search, statusFilter]);
+  }, [categoryLevels, search, statusFilter]);
 
   const handleToggleStatus = async (level: UserLevelItem) => {
     setConfirmState({ open: false, type: 'toggle' });
@@ -201,17 +213,17 @@ export default function AdminUserLevelsClient({ initialLevels }: Props) {
       />
 
       <div className="bg-white rounded-3xl border border-slate-200 shadow-sm overflow-hidden">
-        <div className="bg-gradient-to-r from-purple-700 to-purple-500 p-6 text-white">
+        <div className="bg-gradient-to-r from-purple-700 to-indigo-700 p-6 text-white">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
             <div className="flex items-center gap-3">
               <div className="h-12 w-12 bg-white/20 rounded-2xl flex items-center justify-center backdrop-blur-sm border border-white/30">
                 <Layers className="h-6 w-6 text-white" />
               </div>
               <div>
-                <p className="text-white/70 text-[11px] font-bold uppercase tracking-wider">Administration</p>
+                <p className="text-white/70 text-[11px] font-bold uppercase tracking-wider">Administration & Access Control</p>
                 <h1 className="text-xl font-black text-white">User Level Management</h1>
                 <p className="text-white/70 text-xs font-medium mt-0.5">
-                  Business account types — defines WHO a user is in the system.
+                  Two distinct categories: Business Account Management & Internal System Account Levels.
                 </p>
               </div>
             </div>
@@ -224,14 +236,38 @@ export default function AdminUserLevelsClient({ initialLevels }: Props) {
                 <RefreshCw className="h-4 w-4" />
               </button>
               <Link
-                href="/admin/user-levels/new"
+                href={`/admin/user-levels/new?type=${categoryTab}`}
                 className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-white text-purple-700 text-xs font-black shadow-lg hover:shadow-xl transition-all"
               >
                 <Plus className="h-4 w-4" />
-                <span>+ Create User Level</span>
+                <span>{categoryTab === 'ACCOUNT_MANAGEMENT' ? '+ Create Account Level' : '+ Create System Level'}</span>
               </Link>
             </div>
           </div>
+        </div>
+
+        {/* TWO CATEGORY TABS */}
+        <div className="flex border-b border-slate-100 bg-slate-50/50 p-2 gap-2">
+          <button
+            onClick={() => setCategoryTab('ACCOUNT_MANAGEMENT')}
+            className={`flex-1 py-3 px-4 rounded-2xl text-xs font-black transition-all cursor-pointer flex items-center justify-center gap-2 ${
+              categoryTab === 'ACCOUNT_MANAGEMENT'
+                ? 'bg-purple-600 text-white shadow-md shadow-purple-600/20'
+                : 'text-slate-600 hover:bg-white hover:text-slate-900'
+            }`}
+          >
+            <span>🏢 1. Account Management ({accountLevelsCount})</span>
+          </button>
+          <button
+            onClick={() => setCategoryTab('SYSTEM_ACCOUNT')}
+            className={`flex-1 py-3 px-4 rounded-2xl text-xs font-black transition-all cursor-pointer flex items-center justify-center gap-2 ${
+              categoryTab === 'SYSTEM_ACCOUNT'
+                ? 'bg-purple-600 text-white shadow-md shadow-purple-600/20'
+                : 'text-slate-600 hover:bg-white hover:text-slate-900'
+            }`}
+          >
+            <span>⚙️ 2. System Account ({systemLevelsCount})</span>
+          </button>
         </div>
       </div>
 

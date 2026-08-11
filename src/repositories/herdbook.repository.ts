@@ -2928,6 +2928,8 @@ export class HerdbookRepository {
     if (updates.village !== undefined) { fields.push(`village = $${idx++}`); params.push(updates.village); }
     if (updates.imageUrl !== undefined) { fields.push(`image_url = $${idx++}`); params.push(updates.imageUrl); }
     if (updates.nationalId !== undefined) { fields.push(`national_id = $${idx++}`); params.push(updates.nationalId); }
+    if (updates.idFrontUrl !== undefined) { fields.push(`id_front_url = $${idx++}`); params.push(updates.idFrontUrl); }
+    if (updates.idBackUrl !== undefined) { fields.push(`id_back_url = $${idx++}`); params.push(updates.idBackUrl); }
     if (updates.notes !== undefined) { fields.push(`notes = $${idx++}`); params.push(updates.notes); }
     if (updates.status !== undefined) { fields.push(`status = $${idx++}`); params.push(updates.status); }
 
@@ -2937,36 +2939,60 @@ export class HerdbookRepository {
       await query(`UPDATE breeders SET ${fields.join(', ')} WHERE id = $${idx}`, params);
     }
 
-    // 2. Handle Login Account
-    if (updates.createAccount && updates.accountEmail) {
-      if (existing.userId) {
-        // Update existing user account
+    // 2. Handle Login Account & Password Reset
+    const targetUserId = existing.userId;
+    const shouldUpdateAccount = Boolean(
+      targetUserId || updates.createAccount || updates.accountEmail || updates.accountPassword || updates.accountStatus
+    );
+
+    if (shouldUpdateAccount) {
+      const emailToUse = updates.accountEmail?.trim() || existing.accountEmail || updates.email?.trim() || existing.email;
+
+      if (targetUserId) {
+        // Update existing auth user account
         const uFields: string[] = [];
         const uParams: any[] = [];
         let uIdx = 1;
 
-        uFields.push(`email = $${uIdx++}`); uParams.push(updates.accountEmail);
+        if (emailToUse) { uFields.push(`email = $${uIdx++}`); uParams.push(emailToUse); }
         if (updates.name) { uFields.push(`name = $${uIdx++}`); uParams.push(updates.name); }
-        if (updates.accountStatus) { uFields.push(`status = $${uIdx++}`); uParams.push(updates.accountStatus); }
+        if (updates.accountStatus || updates.status) {
+          uFields.push(`status = $${uIdx++}`);
+          uParams.push(updates.accountStatus || updates.status);
+        }
         if (updates.userLevel) { uFields.push(`user_level = $${uIdx++}`); uParams.push(updates.userLevel); }
-        if (updates.accountPassword) {
-          const hashed = `$2a$10$e8T.uD39G1/E1Y/n.${updates.accountPassword}`;
+        if (updates.phone) { uFields.push(`phone = $${uIdx++}`); uParams.push(updates.phone); }
+        if (updates.nationalId) { uFields.push(`national_id = $${uIdx++}`); uParams.push(updates.nationalId); }
+
+        if (updates.accountPassword && updates.accountPassword.trim().length > 0) {
+          const hashed = `$2a$10$e8T.uD39G1/E1Y/n.${updates.accountPassword.trim()}`;
           uFields.push(`password = $${uIdx++}`); uParams.push(hashed);
         }
 
-        uFields.push(`updated_at = CURRENT_TIMESTAMP`);
-        uParams.push(existing.userId);
-        await query(`UPDATE users SET ${uFields.join(', ')} WHERE id = $${uIdx}`, uParams);
-      } else {
-        // Create new user account
+        if (uFields.length > 0) {
+          uFields.push(`updated_at = CURRENT_TIMESTAMP`);
+          uParams.push(targetUserId);
+          await query(`UPDATE users SET ${uFields.join(', ')} WHERE id = $${uIdx}`, uParams);
+        }
+      } else if (emailToUse && (updates.createAccount || updates.accountPassword)) {
+        // Create new user account for this breeder
         const userId = `USR-BRD-${Date.now().toString().slice(-6)}`;
-        const plainPassword = updates.accountPassword || 'Breeder@2026';
+        const plainPassword = updates.accountPassword?.trim() || 'Breeder@2026';
         const hashedPassword = `$2a$10$e8T.uD39G1/E1Y/n.${plainPassword}`;
 
         await query(`
-          INSERT INTO users (id, name, email, password, role, user_type, user_level, status, breeder_id)
-          VALUES ($1, $2, $3, $4, 'Breeder', 'Breeder', $5, $6, $7)
-        `, [userId, updates.name || existing.name, updates.accountEmail, hashedPassword, updates.userLevel || 'Professional Breeder Account', updates.accountStatus || 'Active', id]);
+          INSERT INTO users (id, name, email, password, role, user_type, user_level, user_level_id, status, breeder_id)
+          VALUES ($1, $2, $3, $4, 'Breeder', 'Breeder', $5, 'LEVEL-01', $6, $7)
+          ON CONFLICT (id) DO NOTHING
+        `, [
+          userId,
+          updates.name || existing.name,
+          emailToUse,
+          hashedPassword,
+          updates.userLevel || 'Professional Breeder Account',
+          updates.accountStatus || updates.status || 'Active',
+          id
+        ]);
 
         await query(`UPDATE breeders SET user_id = $1 WHERE id = $2`, [userId, id]);
       }
