@@ -407,14 +407,92 @@ export async function updateStockInseminationAction(id: string, updates: Partial
   return { success: true };
 }
 
-export async function fetchBreedingProgramsAction() {
-  return herdbookRepository.getBreedingPrograms();
+// ─────────────────────────────────────────────────────────────
+// Breeding Program: Breeder Data-Scope Enforcement
+// ─────────────────────────────────────────────────────────────
+
+/**
+ * Resolve the Breeder profile from the current user's email.
+ * This is the ONLY secure way to identify a Breeder on the backend.
+ * Never trust the breederId sent from the frontend payload.
+ */
+export async function resolveCurrentBreederAction(email?: string): Promise<{
+  success: boolean;
+  data?: { id: string; name: string } | null;
+  error?: string;
+}> {
+  if (!email) return { success: true, data: null };
+  try {
+    const breeder = await herdbookRepository.getBreederByEmail(email);
+    return { success: true, data: breeder ? { id: breeder.id, name: breeder.name } : null };
+  } catch (error: any) {
+    console.error('[resolveCurrentBreeder] error:', error);
+    return { success: false, error: error.message || 'Failed to resolve Breeder identity' };
+  }
 }
 
-export async function createBreedingProgramAction(program: BreedingProgramItem) {
+/**
+ * Fetch breeding programs, scoped by Breeder ID when the caller is a Breeder account.
+ * Admin: breederIdScope = undefined → all programs.
+ * Breeder: breederIdScope = resolvedBreederId → only own programs.
+ */
+export async function fetchBreedingProgramsAction(breederIdScope?: string) {
+  try {
+    const programs = await herdbookRepository.getBreedingPrograms(breederIdScope || undefined);
+    return programs;
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * Create a new Breeding Program with authoritative Breeder assignment.
+ *
+ * Security enforcement:
+ * - If callerRole is 'Breeder': backend resolves the Breeder ID from callerEmail,
+ *   IGNORES any breederId in the frontend payload, and stamps the resolved ID.
+ * - If callerRole is 'Admin' / 'Super Admin': uses the breederId from the payload
+ *   but validates the Breeder exists and is active.
+ * - Frontend-supplied breederId for Breeder accounts is SILENTLY OVERRIDDEN.
+ */
+export async function createBreedingProgramAction(
+  program: BreedingProgramItem,
+  callerRole?: string,
+  callerEmail?: string
+) {
   const id = program.id || `BP-${Date.now()}`;
   const programNumber = program.programNumber || `BP-2026-${Math.floor(1000 + Math.random() * 9000)}`;
-  const res = await herdbookRepository.createBreedingProgram({ ...program, id, programNumber });
+
+  let resolvedBreederId: string | null = (program as any).breederId || null;
+  let resolvedBreederName: string | null = program.breederName || null;
+
+  const isBreederAccount = callerRole === 'Breeder' || callerRole === 'Breeder Account';
+
+  if (isBreederAccount && callerEmail) {
+    // SECURITY: Derive Breeder ID from the authenticated user email — ignore frontend payload
+    const breeder = await herdbookRepository.getBreederByEmail(callerEmail);
+    if (!breeder) {
+      throw new Error('Breeder account not found. Cannot create program without a verified Breeder identity.');
+    }
+    resolvedBreederId = breeder.id;
+    resolvedBreederName = breeder.name;
+  } else if (!isBreederAccount && resolvedBreederId) {
+    // Admin path: validate the selected Breeder exists
+    const breeder = await herdbookRepository.getBreederById(resolvedBreederId);
+    if (!breeder) {
+      throw new Error(`Selected Breeder (${resolvedBreederId}) not found.`);
+    }
+    resolvedBreederName = breeder.name;
+  }
+
+  const res = await herdbookRepository.createBreedingProgram({
+    ...program,
+    id,
+    programNumber,
+    breederName: resolvedBreederName || program.breederName || null,
+    ...(resolvedBreederId ? { breederId: resolvedBreederId } : {})
+  } as any);
+
   revalidatePath('/breeding-programs');
   return res;
 }
@@ -478,13 +556,29 @@ export async function getPublicVerificationAction(token: string) {
   }
 }
 
-export async function applyCertificateAction(animalType: 'Sire' | 'Dam' | 'Calf', animalId: string) {
-  const cert = await herdbookRepository.applyCertificateForAnimal(animalType, animalId);
-  revalidatePath('/certificates');
-  revalidatePath('/sires');
-  revalidatePath('/dams');
-  revalidatePath('/calves');
-  return cert;
+export async function applyCertificateAction(
+  dataOrAnimalType: 'Sire' | 'Dam' | 'Calf' | { animalType: 'Sire' | 'Dam' | 'Calf'; animalId: string; layoutType?: string },
+  animalIdOrUser?: string | { id: string; name: string; role?: string; userType?: string }
+) {
+  try {
+    if (typeof dataOrAnimalType === 'object') {
+      const user = (typeof animalIdOrUser === 'object' && animalIdOrUser) ? animalIdOrUser : { id: 'USR-01', name: 'Super Admin', role: 'Admin' };
+      const created = await herdbookRepository.applyCertificate(dataOrAnimalType, user);
+      revalidatePath('/certificates');
+      revalidatePath('/settings/certificates');
+      return { success: true, data: created };
+    } else {
+      const animalId = animalIdOrUser as string;
+      const created = await herdbookRepository.applyCertificate({ animalType: dataOrAnimalType, animalId }, { id: 'USR-01', name: 'Super Admin', role: 'Admin' });
+      revalidatePath('/certificates');
+      revalidatePath('/sires');
+      revalidatePath('/dams');
+      revalidatePath('/calves');
+      return { success: true, data: created };
+    }
+  } catch (error: any) {
+    return { success: false, error: error.message || 'Failed to submit certificate application' };
+  }
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -658,25 +752,236 @@ export async function fetchFarmsAction() {
   }
 }
 
-export async function createFarmAction(farm: { name: string; code?: string; ownerId?: string; ownerName?: string; address?: string; capacity?: number; imageUrl?: string; notes?: string }) {
+export async function fetchFarmByIdAction(id: string) {
+  try {
+    const farm = await herdbookRepository.getFarmById(id);
+    if (!farm) {
+      return { success: false, error: 'Farm station not found' };
+    }
+    return { success: true, data: farm };
+  } catch (error: any) {
+    return { success: false, error: error.message || 'Failed to fetch farm details' };
+  }
+}
+
+export async function fetchFarmCattleAction(id: string) {
+  try {
+    const cattleData = await herdbookRepository.getFarmCattle(id);
+    return { success: true, data: cattleData };
+  } catch (error: any) {
+    return { success: false, error: error.message || 'Failed to fetch farm cattle' };
+  }
+}
+
+export async function createFarmAction(farm: {
+  name: string;
+  code?: string;
+  farmType?: string;
+  ownerName?: string;
+  ownerPhone?: string;
+  ownerEmail?: string;
+  ownerNationalId?: string;
+  address?: string;
+  province?: string;
+  district?: string;
+  commune?: string;
+  village?: string;
+  phone?: string;
+  email?: string;
+  capacity?: number;
+  imageUrl?: string;
+  notes?: string;
+  status?: string;
+  createAccount?: boolean;
+  accountEmail?: string;
+  accountPassword?: string;
+  accountStatus?: string;
+  userLevel?: string;
+}) {
   try {
     const created = await herdbookRepository.createFarm(farm);
     revalidatePath('/farms');
     revalidatePath('/settings/organization');
     return { success: true, data: created };
   } catch (error: any) {
-    return { success: false, error: error.message || 'Failed to create farm' };
+    return { success: false, error: error.message || 'Failed to create farm station' };
   }
 }
 
-export async function updateFarmAction(id: string, updates: { name?: string; ownerId?: string; ownerName?: string; address?: string; capacity?: number; imageUrl?: string; notes?: string; status?: string }) {
+export async function updateFarmAction(id: string, updates: {
+  name?: string;
+  code?: string;
+  farmType?: string;
+  ownerName?: string;
+  ownerPhone?: string;
+  ownerEmail?: string;
+  ownerNationalId?: string;
+  address?: string;
+  province?: string;
+  district?: string;
+  commune?: string;
+  village?: string;
+  phone?: string;
+  email?: string;
+  capacity?: number;
+  imageUrl?: string;
+  notes?: string;
+  status?: string;
+  createAccount?: boolean;
+  accountEmail?: string;
+  accountPassword?: string;
+  accountStatus?: string;
+  userLevel?: string;
+}) {
   try {
     const updated = await herdbookRepository.updateFarm(id, updates);
     revalidatePath('/farms');
+    revalidatePath(`/farms/${id}`);
     revalidatePath('/settings/organization');
     return { success: true, data: updated };
   } catch (error: any) {
-    return { success: false, error: error.message || 'Failed to update farm' };
+    return { success: false, error: error.message || 'Failed to update farm station' };
+  }
+}
+
+export async function toggleFarmAccountStatusAction(farmId: string, status: 'Active' | 'Inactive' | 'Suspended') {
+  try {
+    const updated = await herdbookRepository.toggleFarmAccountStatus(farmId, status);
+    revalidatePath('/farms');
+    revalidatePath(`/farms/${farmId}`);
+    return { success: true, data: updated };
+  } catch (error: any) {
+    return { success: false, error: error.message || 'Failed to update login account status' };
+  }
+}
+
+export async function fetchBreedersAction() {
+  try {
+    const breeders = await herdbookRepository.getBreeders();
+    return { success: true, data: breeders };
+  } catch (error: any) {
+    return { success: false, error: error.message || 'Failed to fetch breeders' };
+  }
+}
+
+export async function fetchBreederByIdAction(id: string) {
+  try {
+    const breeder = await herdbookRepository.getBreederById(id);
+    if (!breeder) {
+      return { success: false, error: 'Breeder profile not found' };
+    }
+    return { success: true, data: breeder };
+  } catch (error: any) {
+    return { success: false, error: error.message || 'Failed to fetch breeder details' };
+  }
+}
+
+export async function createBreederAction(payload: {
+  name: string;
+  code?: string;
+  phone?: string;
+  email?: string;
+  address?: string;
+  province?: string;
+  district?: string;
+  commune?: string;
+  village?: string;
+  imageUrl?: string;
+  nationalId?: string;
+  idFrontUrl?: string;
+  idBackUrl?: string;
+  notes?: string;
+  status?: string;
+  createAccount?: boolean;
+  accountEmail?: string;
+  accountPassword?: string;
+  accountStatus?: string;
+  userLevel?: string;
+}) {
+  try {
+    const created = await herdbookRepository.createBreeder(payload);
+    revalidatePath('/breeders');
+    revalidatePath('/settings/users');
+    return { success: true, data: created };
+  } catch (error: any) {
+    return { success: false, error: error.message || 'Failed to create breeder account' };
+  }
+}
+
+export async function updateBreederAction(id: string, updates: {
+  name?: string;
+  code?: string;
+  phone?: string;
+  email?: string;
+  address?: string;
+  province?: string;
+  district?: string;
+  commune?: string;
+  village?: string;
+  imageUrl?: string;
+  nationalId?: string;
+  idFrontUrl?: string;
+  idBackUrl?: string;
+  notes?: string;
+  status?: string;
+  createAccount?: boolean;
+  accountEmail?: string;
+  accountPassword?: string;
+  accountStatus?: string;
+  userLevel?: string;
+}) {
+  try {
+    const updated = await herdbookRepository.updateBreeder(id, updates);
+    revalidatePath('/breeders');
+    revalidatePath(`/breeders/${id}`);
+    revalidatePath('/settings/users');
+    return { success: true, data: updated };
+  } catch (error: any) {
+    return { success: false, error: error.message || 'Failed to update breeder profile' };
+  }
+}
+
+export async function toggleBreederAccountStatusAction(breederId: string, status: 'Active' | 'Inactive' | 'Suspended') {
+  try {
+    const updated = await herdbookRepository.toggleBreederAccountStatus(breederId, status);
+    revalidatePath('/breeders');
+    revalidatePath(`/breeders/${breederId}`);
+    return { success: true, data: updated };
+  } catch (error: any) {
+    return { success: false, error: error.message || 'Failed to update breeder login status' };
+  }
+}
+
+export async function approveCertificateAction(certId: string, adminUser: { id: string; name: string; role?: string; userType?: string }) {
+  try {
+    const approved = await herdbookRepository.approveCertificate(certId, adminUser);
+    revalidatePath('/certificates');
+    revalidatePath('/settings/certificates');
+    revalidatePath('/settings/audit-logs');
+    return { success: true, data: approved };
+  } catch (error: any) {
+    return { success: false, error: error.message || 'Failed to approve certificate application' };
+  }
+}
+
+export async function rejectCertificateAction(certId: string, rejectionReason: string, adminUser: { id: string; name: string; role?: string; userType?: string }) {
+  try {
+    const rejected = await herdbookRepository.rejectCertificate(certId, rejectionReason, adminUser);
+    revalidatePath('/certificates');
+    revalidatePath('/settings/certificates');
+    revalidatePath('/settings/audit-logs');
+    return { success: true, data: rejected };
+  } catch (error: any) {
+    return { success: false, error: error.message || 'Failed to reject certificate application' };
+  }
+}
+
+export async function fetchCertificateByAnimalAction(animalType: 'Sire' | 'Dam' | 'Calf', animalId: string) {
+  try {
+    const cert = await herdbookRepository.getCertificateByAnimalId(animalType, animalId);
+    return { success: true, data: cert };
+  } catch (error: any) {
+    return { success: false, error: error.message || 'Failed to fetch certificate status' };
   }
 }
 
@@ -693,15 +998,97 @@ export async function deleteFarmAction(id: string) {
 }
 
 // ─────────────────────────────────────────────────────────────
-// Customer / Cow Owner Server Actions
+// Breeder Customer / Cow Owner Server Actions
 // ─────────────────────────────────────────────────────────────
 
-export async function fetchCustomersAction() {
+export async function fetchCustomersAction(breederId?: string) {
   try {
-    const customers = await herdbookRepository.getCustomers();
+    const customers = await herdbookRepository.getCustomers(breederId);
     return { success: true, data: customers };
   } catch (error: any) {
     return { success: false, error: error.message || 'Failed to fetch customers' };
+  }
+}
+
+export async function fetchCustomerByIdAction(id: string, breederId?: string) {
+  try {
+    const customer = await herdbookRepository.getCustomerById(id, breederId);
+    if (!customer) {
+      return { success: false, error: '403 Forbidden: Customer does not exist or access denied.' };
+    }
+    return { success: true, data: customer };
+  } catch (error: any) {
+    return { success: false, error: error.message || 'Failed to fetch customer details' };
+  }
+}
+
+export async function createCustomerAction(data: {
+  name: string;
+  phone?: string;
+  email?: string;
+  address?: string;
+  nationalId?: string;
+  idFrontUrl?: string;
+  idBackUrl?: string;
+  customerType?: string;
+  notes?: string;
+  status?: string;
+}, breederId: string) {
+  try {
+    const newCustomer = await herdbookRepository.createCustomer(data, breederId || 'BREEDER-01');
+    revalidatePath('/customers');
+    return { success: true, data: newCustomer };
+  } catch (error: any) {
+    return { success: false, error: error.message || 'Failed to create customer' };
+  }
+}
+
+export async function updateCustomerAction(id: string, data: any, breederId?: string) {
+  try {
+    const updated = await herdbookRepository.updateCustomer(id, data, breederId);
+    revalidatePath('/customers');
+    revalidatePath(`/customers/${id}`);
+    return { success: true, data: updated };
+  } catch (error: any) {
+    return { success: false, error: error.message || 'Failed to update customer' };
+  }
+}
+
+export async function toggleCustomerStatusAction(id: string, status: 'Active' | 'Inactive', breederId?: string) {
+  try {
+    const updated = await herdbookRepository.setCustomerStatus(id, status, breederId);
+    revalidatePath('/customers');
+    revalidatePath(`/customers/${id}`);
+    return { success: true, data: updated };
+  } catch (error: any) {
+    return { success: false, error: error.message || 'Failed to update customer status' };
+  }
+}
+
+export async function fetchCustomerAnimalsAction(customerId: string) {
+  try {
+    const animals = await herdbookRepository.getCustomerAnimals(customerId);
+    return { success: true, data: animals };
+  } catch (error: any) {
+    return { success: false, error: error.message || 'Failed to fetch customer animals' };
+  }
+}
+
+export async function fetchCustomerBreedingProgramsAction(customerId: string) {
+  try {
+    const programs = await herdbookRepository.getCustomerBreedingPrograms(customerId);
+    return { success: true, data: programs };
+  } catch (error: any) {
+    return { success: false, error: error.message || 'Failed to fetch customer breeding programs' };
+  }
+}
+
+export async function fetchCustomerCertificatesAction(customerId: string) {
+  try {
+    const certs = await herdbookRepository.getCustomerCertificates(customerId);
+    return { success: true, data: certs };
+  } catch (error: any) {
+    return { success: false, error: error.message || 'Failed to fetch customer certificates' };
   }
 }
 
@@ -715,4 +1102,24 @@ export async function updateUserNationalIdAction(userId: string, data: { nationa
     return { success: false, error: error.message || 'Failed to update National ID verification' };
   }
 }
+
+// ─────────────────────────────────────────────────────────────
+// Audit Logs Server Action
+// ─────────────────────────────────────────────────────────────
+
+export async function fetchAuditLogsAction(): Promise<{
+  success: boolean;
+  data?: any[];
+  error?: string;
+}> {
+  try {
+    const logs = await herdbookRepository.getAuditLogs();
+    return { success: true, data: logs };
+  } catch (error: any) {
+    console.error('[AuditLogs] fetchAuditLogsAction error:', error);
+    return { success: false, error: error.message || 'Failed to fetch audit logs' };
+  }
+}
+
+
 

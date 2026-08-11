@@ -13,6 +13,7 @@ export interface SireItem {
   ownerName?: string;
   farmLocation?: string;
   status: 'Active' | 'Retired' | 'Sold' | 'Deceased' | 'Archived';
+  certificationStatus?: 'NOT_APPLIED' | 'PENDING_APPROVAL' | 'APPROVED' | 'REJECTED';
   createdAt?: string;
   updatedAt?: string;
 }
@@ -53,6 +54,7 @@ export interface DamItem {
   availability: 'Available' | 'In Breeding' | 'Pregnant' | 'Sold' | 'Transferred' | 'Deceased' | 'Archived';
   breedingStatus: 'Open' | 'In Breeding' | 'Confirmed Pregnant' | 'Calved';
   pregnancyStatus: 'Open' | 'Pending Check' | 'Confirmed Pregnant';
+  certificationStatus?: 'NOT_APPLIED' | 'PENDING_APPROVAL' | 'APPROVED' | 'REJECTED';
   createdAt?: string;
   updatedAt?: string;
 }
@@ -96,8 +98,6 @@ export interface BreedingProgramItem {
   farmId?: string;
   breederName?: string;
   breederId?: string;
-  farmLocation?: string;
-  breederName?: string;
   serviceFee?: number;
   semenPrice?: number;
   semenCost?: number;
@@ -140,9 +140,9 @@ export interface CalfItem {
   color?: string;
   ownerName?: string;
   farmLocation?: string;
-  breederName?: string;
   imageUrl?: string;
-  status: 'Active' | 'Registered to Herdbook' | 'Sold' | 'Deceased' | 'Archived';
+  status: 'Registered to Herdbook' | 'Under Inspection' | 'Transferred' | 'Deceased' | 'Archived';
+  certificationStatus?: 'NOT_APPLIED' | 'PENDING_APPROVAL' | 'APPROVED' | 'REJECTED';
   createdAt?: string;
   updatedAt?: string;
 }

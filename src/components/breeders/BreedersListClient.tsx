@@ -1,85 +1,84 @@
 'use client';
 
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import Link from 'next/link';
 import PageHeader from '@/components/common/PageHeader';
 import StandardAnimalImage from '@/components/common/StandardAnimalImage';
 import {
-  Building, Plus, Search, MapPin, Users, Beef, CheckCircle2,
-  XCircle, Edit3, Trash2, Save, X, AlertTriangle, ShieldCheck, Lock, Mail,
-  Phone, UserCheck, Key, ArrowUpRight, ChevronRight
+  Users, Plus, Search, MapPin, Beef, CheckCircle2, AlertTriangle,
+  XCircle, Save, X, ShieldCheck, Lock, Mail, Phone, UserCheck, Key,
+  Heart, ChevronRight, Award, Edit3
 } from 'lucide-react';
-import { createFarmAction, updateFarmAction, deleteFarmAction } from '@/app/actions';
+import { createBreederAction, updateBreederAction } from '@/app/actions';
 import { DynamicUpload } from '@/components/common/DynamicUpload';
 
-interface FarmItem {
+interface BreederItem {
   id: string;
   code: string;
   name: string;
-  farmType?: string;
-  ownerId?: string;
-  ownerName?: string;
-  ownerPhone?: string;
-  ownerEmail?: string;
-  ownerNationalId?: string;
+  phone?: string;
+  email?: string;
   address?: string;
   province?: string;
   district?: string;
   commune?: string;
   village?: string;
-  phone?: string;
-  email?: string;
-  capacity?: number;
   imageUrl?: string;
+  nationalId?: string;
+  idFrontUrl?: string;
+  idBackUrl?: string;
+  idVerificationStatus?: string;
   notes?: string;
   status: 'Active' | 'Inactive';
   userId?: string;
   accountEmail?: string;
   accountStatus?: string;
   userLevel?: string;
-  animalCount?: number;
-  userCount?: number;
+  role?: string;
+  customerCount?: number;
+  breedingCount?: number;
   createdAt?: string;
 }
 
 interface Props {
-  initialFarms: FarmItem[];
+  initialBreeders: BreederItem[];
 }
 
-export default function FarmsListClient({ initialFarms }: Props) {
-  const [farms, setFarms] = useState<FarmItem[]>(initialFarms);
-  const [search, setSearch] = useState('');
-  const [typeFilter, setTypeFilter] = useState('All');
-  const [statusFilter, setStatusFilter] = useState('All');
-  const [isModalOpen, setIsModalOpen] = useState(false);
-  const [editingFarm, setEditingFarm] = useState<FarmItem | null>(null);
+import GlobalPagination from '@/components/common/GlobalPagination';
+import GlobalExport from '@/components/common/GlobalExport';
 
-  // ── Form State (4 Sections) ──────────────────────
+export default function BreedersListClient({ initialBreeders }: Props) {
+  const [breeders, setBreeders] = useState<BreederItem[]>(initialBreeders);
+  const [search, setSearch] = useState('');
+  const [statusFilter, setStatusFilter] = useState('All');
+
+  // Global Pagination State
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState(20);
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [editingBreeder, setEditingBreeder] = useState<BreederItem | null>(null);
+
+  // ── Form State (4 Sections — Aligned with Farm Station) ──────────────────
   const [name, setName] = useState('');
   const [code, setCode] = useState('');
-  const [farmType, setFarmType] = useState('General Livestock Station');
+  const [phone, setPhone] = useState('');
+  const [email, setEmail] = useState('');
   const [address, setAddress] = useState('');
   const [province, setProvince] = useState('');
   const [district, setDistrict] = useState('');
   const [commune, setCommune] = useState('');
   const [village, setVillage] = useState('');
-  const [phone, setPhone] = useState('');
-  const [email, setEmail] = useState('');
-  const [capacity, setCapacity] = useState(100);
-  const [notes, setNotes] = useState('');
   const [status, setStatus] = useState<'Active' | 'Inactive'>('Active');
+  const [notes, setNotes] = useState('');
   const [imageUrl, setImageUrl] = useState('');
-  const [ownerName, setOwnerName] = useState('');
-  const [ownerPhone, setOwnerPhone] = useState('');
-  const [ownerEmail, setOwnerEmail] = useState('');
-  const [ownerNationalId, setOwnerNationalId] = useState('');
+  const [nationalId, setNationalId] = useState('');
 
-  // Account State
-  const [createAccount, setCreateAccount] = useState(false);
+  // Section 4: Login Account (Authentication)
+  const [createAccount, setCreateAccount] = useState(true);
   const [accountEmail, setAccountEmail] = useState('');
   const [accountPassword, setAccountPassword] = useState('');
   const [accountStatus, setAccountStatus] = useState<'Active' | 'Inactive' | 'Suspended'>('Active');
-  const [userLevel, setUserLevel] = useState<'Farm Owner Account' | 'Farmer / Farm Manager Account'>('Farm Owner Account');
+  const [userLevel, setUserLevel] = useState<'Professional Breeder Account' | 'Senior Breeder Account'>('Professional Breeder Account');
 
   const [saving, setSaving] = useState(false);
   const [toast, setToast] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
@@ -90,60 +89,50 @@ export default function FarmsListClient({ initialFarms }: Props) {
   };
 
   const openCreateModal = () => {
-    setEditingFarm(null);
+    setEditingBreeder(null);
     setName('');
     setCode('');
-    setFarmType('General Livestock Station');
+    setPhone('');
+    setEmail('');
     setAddress('');
     setProvince('');
     setDistrict('');
     setCommune('');
     setVillage('');
-    setPhone('');
-    setEmail('');
-    setCapacity(100);
-    setNotes('');
     setStatus('Active');
+    setNotes('');
     setImageUrl('');
-    setOwnerName('');
-    setOwnerPhone('');
-    setOwnerEmail('');
-    setOwnerNationalId('');
-    setCreateAccount(false);
+    setNationalId('');
+    setCreateAccount(true);
     setAccountEmail('');
     setAccountPassword('');
     setAccountStatus('Active');
-    setUserLevel('Farm Owner Account');
+    setUserLevel('Professional Breeder Account');
     setIsModalOpen(true);
   };
 
-  const openEditModal = (farm: FarmItem) => {
-    setEditingFarm(farm);
-    setName(farm.name);
-    setCode(farm.code);
-    setFarmType(farm.farmType || 'General Livestock Station');
-    setAddress(farm.address || '');
-    setProvince(farm.province || '');
-    setDistrict(farm.district || '');
-    setCommune(farm.commune || '');
-    setVillage(farm.village || '');
-    setPhone(farm.phone || '');
-    setEmail(farm.email || '');
-    setCapacity(farm.capacity || 100);
-    setNotes(farm.notes || '');
-    setStatus(farm.status || 'Active');
-    setImageUrl(farm.imageUrl || '');
-    setOwnerName(farm.ownerName || '');
-    setOwnerPhone(farm.ownerPhone || '');
-    setOwnerEmail(farm.ownerEmail || '');
-    setOwnerNationalId(farm.ownerNationalId || '');
+  const openEditModal = (brd: BreederItem) => {
+    setEditingBreeder(brd);
+    setName(brd.name);
+    setCode(brd.code);
+    setPhone(brd.phone || '');
+    setEmail(brd.email || '');
+    setAddress(brd.address || '');
+    setProvince(brd.province || '');
+    setDistrict(brd.district || '');
+    setCommune(brd.commune || '');
+    setVillage(brd.village || '');
+    setStatus(brd.status || 'Active');
+    setNotes(brd.notes || '');
+    setImageUrl(brd.imageUrl || '');
+    setNationalId(brd.nationalId || '');
     
-    const hasUser = Boolean(farm.userId || farm.accountEmail);
+    const hasUser = Boolean(brd.userId || brd.accountEmail);
     setCreateAccount(hasUser);
-    setAccountEmail(farm.accountEmail || farm.email || '');
+    setAccountEmail(brd.accountEmail || brd.email || '');
     setAccountPassword('');
-    setAccountStatus((farm.accountStatus as any) || 'Active');
-    setUserLevel((farm.userLevel as any) || 'Farm Owner Account');
+    setAccountStatus((brd.accountStatus as any) || 'Active');
+    setUserLevel((brd.userLevel as any) || 'Professional Breeder Account');
     setIsModalOpen(true);
   };
 
@@ -156,20 +145,15 @@ export default function FarmsListClient({ initialFarms }: Props) {
       const payload = {
         name: name.trim(),
         code: code.trim() || undefined,
-        farmType,
-        ownerName: ownerName.trim() || undefined,
-        ownerPhone: ownerPhone.trim() || undefined,
-        ownerEmail: ownerEmail.trim() || undefined,
-        ownerNationalId: ownerNationalId.trim() || undefined,
+        phone: phone.trim() || undefined,
+        email: email.trim() || undefined,
         address: address.trim() || undefined,
         province: province.trim() || undefined,
         district: district.trim() || undefined,
         commune: commune.trim() || undefined,
         village: village.trim() || undefined,
-        phone: phone.trim() || undefined,
-        email: email.trim() || undefined,
-        capacity: Number(capacity),
         imageUrl: imageUrl.trim() || undefined,
+        nationalId: nationalId.trim() || undefined,
         notes: notes.trim() || undefined,
         status,
         createAccount,
@@ -179,23 +163,23 @@ export default function FarmsListClient({ initialFarms }: Props) {
         userLevel: createAccount ? userLevel : undefined
       };
 
-      if (editingFarm) {
-        const res = await updateFarmAction(editingFarm.id, payload);
+      if (editingBreeder) {
+        const res = await updateBreederAction(editingBreeder.id, payload);
         if (res.success && res.data) {
-          setFarms(prev => prev.map(f => f.id === editingFarm.id ? { ...f, ...res.data } : f));
-          showToast('success', `Farm "${name}" updated successfully.`);
+          setBreeders(prev => prev.map(b => b.id === editingBreeder.id ? { ...b, ...res.data } : b));
+          showToast('success', `Breeder "${name}" updated successfully.`);
           setIsModalOpen(false);
         } else {
-          showToast('error', res.error || 'Failed to update farm station.');
+          showToast('error', res.error || 'Failed to update breeder profile.');
         }
       } else {
-        const res = await createFarmAction(payload);
+        const res = await createBreederAction(payload);
         if (res.success && res.data) {
-          setFarms(prev => [res.data, ...prev]);
-          showToast('success', `Farm "${name}" created successfully.`);
+          setBreeders(prev => [res.data, ...prev]);
+          showToast('success', `Breeder "${name}" created successfully.`);
           setIsModalOpen(false);
         } else {
-          showToast('error', res.error || 'Failed to create farm station.');
+          showToast('error', res.error || 'Failed to create breeder account.');
         }
       }
     } catch (err: any) {
@@ -205,37 +189,40 @@ export default function FarmsListClient({ initialFarms }: Props) {
     }
   };
 
-  const handleDelete = async (farm: FarmItem) => {
-    if (!window.confirm(`Are you sure you want to delete "${farm.name}"?`)) return;
-    try {
-      const res = await deleteFarmAction(farm.id);
-      if (res.success) {
-        setFarms(prev => prev.filter(f => f.id !== farm.id));
-        showToast('success', `Farm "${farm.name}" deleted.`);
-      } else {
-        showToast('error', res.error || 'Cannot delete farm.');
-      }
-    } catch {
-      showToast('error', 'An error occurred while deleting farm.');
-    }
-  };
-
-  const filteredFarms = useMemo(() => {
-    return farms.filter(f => {
+  const filteredBreeders = useMemo(() => {
+    return breeders.filter(b => {
       const matchesSearch = !search ||
-        f.name.toLowerCase().includes(search.toLowerCase()) ||
-        f.code.toLowerCase().includes(search.toLowerCase()) ||
-        (f.province || '').toLowerCase().includes(search.toLowerCase()) ||
-        (f.address || '').toLowerCase().includes(search.toLowerCase()) ||
-        (f.ownerName || '').toLowerCase().includes(search.toLowerCase());
+        b.name.toLowerCase().includes(search.toLowerCase()) ||
+        b.code.toLowerCase().includes(search.toLowerCase()) ||
+        (b.phone || '').toLowerCase().includes(search.toLowerCase()) ||
+        (b.email || '').toLowerCase().includes(search.toLowerCase()) ||
+        (b.province || '').toLowerCase().includes(search.toLowerCase());
 
-      const matchesType = typeFilter === 'All' || f.farmType === typeFilter;
-      const matchesStatus = statusFilter === 'All' || f.status === statusFilter;
-      return matchesSearch && matchesType && matchesStatus;
+      const matchesStatus = statusFilter === 'All' || b.status === statusFilter;
+      return matchesSearch && matchesStatus;
     });
-  }, [farms, search, typeFilter, statusFilter]);
+  }, [breeders, search, statusFilter]);
 
-  const availableTypes = Array.from(new Set(farms.map(f => f.farmType || 'General Livestock Station')));
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [search, statusFilter]);
+
+  const totalCount = filteredBreeders.length;
+  const paginatedBreeders = useMemo(() => {
+    return filteredBreeders.slice((currentPage - 1) * pageSize, currentPage * pageSize);
+  }, [filteredBreeders, currentPage, pageSize]);
+
+  const breederExportColumns = [
+    { header: 'Breeder ID', key: 'id' },
+    { header: 'Breeder Code', key: 'code' },
+    { header: 'Breeder Name', key: 'name' },
+    { header: 'Phone', key: 'phone' },
+    { header: 'Email', key: 'email' },
+    { header: 'Province', key: 'province' },
+    { header: 'Status', key: 'status' },
+    { header: 'Account Email', key: 'accountEmail' },
+    { header: 'User Level', key: 'userLevel' }
+  ];
 
   return (
     <div className="space-y-6">
@@ -251,130 +238,122 @@ export default function FarmsListClient({ initialFarms }: Props) {
         </div>
       )}
 
-      {/* ── Page Header (Stock Insemination Layout Standard) ────────────────── */}
+      {/* ── Page Header (Farm Station Standard) ────────────────── */}
       <PageHeader
-        title="Farm Station Management"
-        subtitle="Manage farm station locations, login accounts, barn capacities, and housed livestock."
-        breadcrumbs={[{ label: 'Farm Stations' }]}
+        title="Breeder Account Management"
+        subtitle="Manage breeder profiles, login user accounts, assigned user levels, and managed customer relationships."
+        breadcrumbs={[{ label: 'Breeders' }]}
         searchQuery={search}
         onSearchChange={setSearch}
-        searchPlaceholder="Search Station Name, Code, Province, Owner..."
+        searchPlaceholder="Search Breeder Name, Code, Phone, Province..."
         onActionClick={openCreateModal}
-        actionLabel="+ Add New Farm Station"
+        actionLabel="+ Add New Breeder Account"
       >
         <div className="flex items-center gap-2">
-          {/* Station Type Filter */}
-          <select
-            value={typeFilter}
-            onChange={(e) => setTypeFilter(e.target.value)}
-            className="bg-slate-50 border border-slate-200 text-xs font-semibold rounded-xl px-3 py-2 text-slate-700 focus:outline-none focus:ring-2 focus:ring-purple-600"
-          >
-            <option value="All">All Station Types</option>
-            {availableTypes.map(t => (
-              <option key={t} value={t}>{t}</option>
-            ))}
-          </select>
-
           {/* Status Filter */}
           <select
             value={statusFilter}
             onChange={(e) => setStatusFilter(e.target.value)}
-            className="bg-slate-50 border border-slate-200 text-xs font-semibold rounded-xl px-3 py-2 text-slate-700 focus:outline-none focus:ring-2 focus:ring-purple-600"
+            className="bg-slate-50 border border-slate-200 text-xs font-semibold rounded-xl px-3 py-2 text-slate-700 focus:outline-none focus:ring-2 focus:ring-purple-600 cursor-pointer"
           >
             <option value="All">All Statuses</option>
             <option value="Active">Active</option>
             <option value="Inactive">Inactive</option>
           </select>
+
+          <GlobalExport
+            filenamePrefix="breeder-accounts"
+            columns={breederExportColumns}
+            currentPageData={paginatedBreeders}
+            fetchAllFilteredData={async () => filteredBreeders}
+          />
         </div>
       </PageHeader>
 
-      {/* ── Stock Insemination Card Standard Grid (5 Columns on XL Desktop) ────────────────── */}
-      {filteredFarms.length === 0 ? (
+      {/* ── Farm Station Standard 5-Column Grid ────────────────── */}
+      {filteredBreeders.length === 0 ? (
         <div className="bg-white rounded-2xl border border-slate-200 p-12 text-center my-6">
-          <Building className="h-12 w-12 text-slate-300 mx-auto mb-3" />
-          <h3 className="text-base font-bold text-slate-800">No Farm Stations Found</h3>
+          <Users className="h-12 w-12 text-slate-300 mx-auto mb-3" />
+          <h3 className="text-base font-bold text-slate-800">No Breeders Found</h3>
           <p className="text-xs text-slate-500 mt-1 max-w-sm mx-auto">
-            No farm station items match your search filter. Create a new farm station.
+            No breeder records match your search filter. Create a new breeder.
           </p>
           <button
             onClick={openCreateModal}
             className="inline-flex items-center gap-2 bg-purple-600 text-white font-bold text-xs px-4 py-2.5 rounded-xl mt-4 hover:bg-purple-700 transition-colors cursor-pointer"
           >
             <Plus className="h-4 w-4" />
-            <span>+ Add New Farm Station</span>
+            <span>+ Add New Breeder Account</span>
           </button>
         </div>
       ) : (
-        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
-          {filteredFarms.map((farm) => {
-            const stationName = farm.name;
-            const stationType = farm.farmType || 'General Livestock Station';
-            const photoUrl = farm.imageUrl;
-            const housedCount = farm.animalCount || 0;
-
-            return (
+        <>
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
+            {paginatedBreeders.map((breeder) => (
               <Link
-                key={farm.id}
-                href={`/farms/${farm.id}`}
-                className="group bg-white rounded-3xl border border-slate-200/90 shadow-2xs hover:shadow-xl hover:border-purple-500 transition-all duration-200 overflow-hidden flex flex-col justify-between cursor-pointer p-3.5"
+                key={breeder.id}
+                href={`/breeders/${breeder.id}`}
+                className="group bg-white rounded-3xl border border-slate-200/90 shadow-2xs hover:shadow-xl hover:border-purple-600 transition-all duration-200 overflow-hidden flex flex-col justify-between cursor-pointer p-3.5"
               >
                 <div>
-                  {/* Standard Image Container with Stock Insemination Badge placement */}
                   <div className="relative mb-3">
-                    <StandardAnimalImage src={photoUrl} alt={stationName} fallbackText="Farm Station" />
-                    <span className={`absolute top-2.5 right-2.5 font-black text-[9px] px-2 py-0.5 rounded-full uppercase tracking-wider shadow-xs ${
-                      farm.status === 'Active' ? 'bg-emerald-600 text-white' : 'bg-slate-500 text-white'
-                    }`}>
-                      {farm.status}
+                    <StandardAnimalImage src={breeder.imageUrl} alt={breeder.name} />
+                    <span className="absolute top-2.5 left-2.5 bg-slate-900/80 backdrop-blur-md text-white font-black text-[9px] px-2.5 py-0.5 rounded-full uppercase tracking-wider">
+                      {breeder.code || breeder.id}
                     </span>
-                    {(farm.userId || farm.accountEmail) && (
-                      <span className="absolute top-2.5 left-2.5 bg-indigo-600 text-white font-black text-[8.5px] px-2 py-0.5 rounded-full uppercase tracking-wider shadow-xs flex items-center gap-1">
-                        <ShieldCheck className="h-2.5 w-2.5" /> Account
-                      </span>
-                    )}
+                    <span className={`absolute top-2.5 right-2.5 font-black text-[9px] px-2.5 py-0.5 rounded-full uppercase tracking-wider shadow-xs ${
+                      breeder.status === 'Active' ? 'bg-emerald-600 text-white' : 'bg-slate-600 text-white'
+                    }`}>
+                      {breeder.status}
+                    </span>
                   </div>
 
-                  {/* Title & Metadata Hierarchy */}
                   <div className="space-y-1">
                     <h3 className="text-sm font-black text-slate-900 group-hover:text-purple-600 transition-colors truncate">
-                      {stationName}
+                      {breeder.name}
                     </h3>
-                    <p className="text-xs font-extrabold text-[#dc5c15] truncate">{stationType}</p>
+                    <p className="text-xs font-extrabold text-purple-700 truncate">{breeder.province || 'Phnom Penh'}</p>
 
-                    {/* Stock Insemination Style Specs Box */}
-                    <div className="mt-2.5 space-y-1 text-[11px] bg-slate-50 p-2.5 rounded-xl border border-slate-100 text-slate-600">
+                    <div className="mt-2.5 space-y-1 text-[11px] text-slate-600 bg-slate-50 p-2.5 rounded-xl border border-slate-100">
                       <div className="flex justify-between">
-                        <span className="text-slate-400 font-medium">Code:</span>
-                        <span className="font-mono font-bold text-purple-700">{farm.code}</span>
+                        <span className="text-slate-400 font-medium">Account:</span>
+                        <span className="font-bold text-slate-800 truncate max-w-[110px]">
+                          {breeder.accountEmail ? breeder.accountEmail.split('@')[0] : 'No Account'}
+                        </span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-slate-400 font-medium">User Level:</span>
+                        <span className="font-bold text-purple-800 truncate max-w-[110px]">
+                          {breeder.userLevel || 'Professional'}
+                        </span>
                       </div>
                       <div className="flex justify-between border-t border-slate-200/60 pt-1 mt-1">
-                        <span className="font-extrabold text-slate-500">Location:</span>
-                        <span className="font-bold text-slate-900 truncate max-w-[110px]">{farm.province || farm.address || 'N/A'}</span>
-                      </div>
-                      <div className="flex justify-between">
-                        <span className="font-extrabold text-slate-500">Owner:</span>
-                        <span className="font-bold text-slate-800 truncate max-w-[110px]">{farm.ownerName || 'Bona Owner'}</span>
-                      </div>
-                      <div className="flex justify-between">
-                        <span className="font-extrabold text-slate-500">Capacity:</span>
-                        <span className="font-black text-amber-700">{farm.capacity || 100} heads</span>
+                        <span className="font-extrabold text-slate-500">Customers:</span>
+                        <span className="font-black text-slate-900">{breeder.customerCount || 0} Records</span>
                       </div>
                     </div>
                   </div>
                 </div>
 
-                {/* Card Footer (View Details link matching Stock Insemination) */}
                 <div className="mt-3 pt-2.5 border-t border-slate-100 flex items-center justify-between text-xs font-bold text-purple-600">
-                  <span>View Details</span>
+                  <span>View Breeder Profile</span>
                   <span className="group-hover:translate-x-0.5 transition-transform">→</span>
                 </div>
               </Link>
-            );
-          })}
-        </div>
+            ))}
+          </div>
+
+          <GlobalPagination
+            currentPage={currentPage}
+            pageSize={pageSize}
+            totalCount={totalCount}
+            onPageChange={setCurrentPage}
+            onPageSizeChange={setPageSize}
+          />
+        </>
       )}
 
-      {/* ── 4-Section Create / Edit Modal ───────────────────────── */}
+      {/* ── 4-Section Create / Edit Modal (Aligned with Farm Station) ───────────────────────── */}
       {isModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/60 backdrop-blur-sm p-4 overflow-y-auto">
           <div className="bg-white rounded-3xl shadow-2xl max-w-2xl w-full p-6 space-y-6 border border-slate-200 my-8 max-h-[90vh] overflow-y-auto animate-in fade-in zoom-in duration-150">
@@ -382,10 +361,10 @@ export default function FarmsListClient({ initialFarms }: Props) {
             {/* Modal Header */}
             <div className="flex items-center justify-between border-b border-slate-100 pb-4">
               <div>
-                <span className="text-[10px] font-black text-purple-600 uppercase tracking-widest block">Operational Setup</span>
+                <span className="text-[10px] font-black text-purple-600 uppercase tracking-widest block">Account & Profile Setup</span>
                 <h3 className="font-black text-slate-900 text-base flex items-center gap-2">
-                  <Building className="h-5 w-5 text-purple-600" />
-                  {editingFarm ? 'Edit Farm Station Profile' : 'Create New Farm Station'}
+                  <Users className="h-5 w-5 text-purple-600" />
+                  {editingBreeder ? 'Edit Breeder Profile' : 'Create New Breeder User Account'}
                 </h3>
               </div>
               <button onClick={() => setIsModalOpen(false)} className="text-slate-400 hover:text-slate-700 cursor-pointer">
@@ -395,33 +374,33 @@ export default function FarmsListClient({ initialFarms }: Props) {
 
             <form onSubmit={handleSubmit} className="space-y-6 text-xs">
               
-              {/* SECTION 1 — FARM STATION INFORMATION */}
+              {/* SECTION 1 — BREEDER INFORMATION */}
               <div className="space-y-3.5 bg-slate-50/70 p-4 rounded-2xl border border-slate-200/80">
                 <div className="flex items-center gap-2 border-b border-slate-200/80 pb-2">
                   <span className="h-5 w-5 rounded-md bg-purple-600 text-white font-black text-[11px] flex items-center justify-center">1</span>
-                  <h4 className="font-black text-slate-900 uppercase text-[11px] tracking-wider">SECTION 1 — FARM STATION INFORMATION</h4>
+                  <h4 className="font-black text-slate-900 uppercase text-[11px] tracking-wider">SECTION 1 — BREEDER INFORMATION</h4>
                 </div>
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div className="space-y-1">
-                    <label className="font-bold text-slate-700 block">Farm Station Name *</label>
+                    <label className="font-bold text-slate-700 block">Full Name *</label>
                     <input
                       type="text"
                       required
                       value={name}
                       onChange={e => setName(e.target.value)}
-                      placeholder="e.g. Green Valley Station"
+                      placeholder="e.g. Sokha Vannak"
                       className="w-full px-3.5 py-2 rounded-xl border border-slate-300 font-bold focus:outline-none focus:ring-2 focus:ring-purple-500 bg-white"
                     />
                   </div>
 
                   <div className="space-y-1">
-                    <label className="font-bold text-slate-700 block">Farm Code / Reg. Number</label>
+                    <label className="font-bold text-slate-700 block">Breeder Reg. Code</label>
                     <input
                       type="text"
                       value={code}
                       onChange={e => setCode(e.target.value.toUpperCase())}
-                      placeholder="e.g. GREEN_VALLEY"
+                      placeholder="e.g. BRD-101"
                       className="w-full px-3.5 py-2 rounded-xl border border-slate-300 font-mono font-bold focus:outline-none focus:ring-2 focus:ring-purple-500 bg-white"
                     />
                   </div>
@@ -429,26 +408,23 @@ export default function FarmsListClient({ initialFarms }: Props) {
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div className="space-y-1">
-                    <label className="font-bold text-slate-700 block">Farm Type</label>
-                    <select
-                      value={farmType}
-                      onChange={e => setFarmType(e.target.value)}
-                      className="w-full px-3.5 py-2 rounded-xl border border-slate-300 font-bold focus:outline-none focus:ring-2 focus:ring-purple-500 bg-white cursor-pointer"
-                    >
-                      <option value="General Livestock Station">General Livestock Station</option>
-                      <option value="Breeding Station">Breeding Station</option>
-                      <option value="Fattening Station">Fattening Station</option>
-                      <option value="Artificial Insemination Station">Artificial Insemination Station</option>
-                    </select>
-                  </div>
-
-                  <div className="space-y-1">
-                    <label className="font-bold text-slate-700 block">Capacity (Heads)</label>
+                    <label className="font-bold text-slate-700 block">Contact Phone</label>
                     <input
-                      type="number"
-                      value={capacity}
-                      onChange={e => setCapacity(Number(e.target.value))}
-                      className="w-full px-3.5 py-2 rounded-xl border border-slate-300 font-bold focus:outline-none focus:ring-2 focus:ring-purple-500 bg-white"
+                      type="text"
+                      value={phone}
+                      onChange={e => setPhone(e.target.value)}
+                      placeholder="e.g. 012 999 888"
+                      className="w-full px-3.5 py-2 rounded-xl border border-slate-300 font-semibold focus:outline-none focus:ring-2 focus:ring-purple-500 bg-white"
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <label className="font-bold text-slate-700 block">Contact Email</label>
+                    <input
+                      type="email"
+                      value={email}
+                      onChange={e => setEmail(e.target.value)}
+                      placeholder="e.g. sokha@snrfarm.com"
+                      className="w-full px-3.5 py-2 rounded-xl border border-slate-300 font-semibold focus:outline-none focus:ring-2 focus:ring-purple-500 bg-white"
                     />
                   </div>
                 </div>
@@ -461,7 +437,7 @@ export default function FarmsListClient({ initialFarms }: Props) {
                       type="text"
                       value={province}
                       onChange={e => setProvince(e.target.value)}
-                      placeholder="e.g. Prey Veng"
+                      placeholder="e.g. Phnom Penh"
                       className="w-full px-2.5 py-1.5 rounded-lg border border-slate-300 font-semibold focus:outline-none focus:ring-2 focus:ring-purple-500 bg-white"
                     />
                   </div>
@@ -471,7 +447,7 @@ export default function FarmsListClient({ initialFarms }: Props) {
                       type="text"
                       value={district}
                       onChange={e => setDistrict(e.target.value)}
-                      placeholder="e.g. Peam Ro"
+                      placeholder="e.g. Chamkarmon"
                       className="w-full px-2.5 py-1.5 rounded-lg border border-slate-300 font-semibold focus:outline-none focus:ring-2 focus:ring-purple-500 bg-white"
                     />
                   </div>
@@ -481,7 +457,7 @@ export default function FarmsListClient({ initialFarms }: Props) {
                       type="text"
                       value={commune}
                       onChange={e => setCommune(e.target.value)}
-                      placeholder="e.g. Neak Loeung"
+                      placeholder="e.g. Tonle Bassac"
                       className="w-full px-2.5 py-1.5 rounded-lg border border-slate-300 font-semibold focus:outline-none focus:ring-2 focus:ring-purple-500 bg-white"
                     />
                   </div>
@@ -491,113 +467,55 @@ export default function FarmsListClient({ initialFarms }: Props) {
                       type="text"
                       value={village}
                       onChange={e => setVillage(e.target.value)}
-                      placeholder="e.g. Village 1"
+                      placeholder="e.g. Village 4"
                       className="w-full px-2.5 py-1.5 rounded-lg border border-slate-300 font-semibold focus:outline-none focus:ring-2 focus:ring-purple-500 bg-white"
                     />
                   </div>
                 </div>
 
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  <div className="space-y-1">
-                    <label className="font-bold text-slate-700 block">Station Phone</label>
-                    <input
-                      type="text"
-                      value={phone}
-                      onChange={e => setPhone(e.target.value)}
-                      placeholder="e.g. 012 998 332"
-                      className="w-full px-3.5 py-2 rounded-xl border border-slate-300 font-semibold focus:outline-none focus:ring-2 focus:ring-purple-500 bg-white"
-                    />
-                  </div>
-                  <div className="space-y-1">
-                    <label className="font-bold text-slate-700 block">Station Email</label>
-                    <input
-                      type="email"
-                      value={email}
-                      onChange={e => setEmail(e.target.value)}
-                      placeholder="e.g. contact@greenvalley.com"
-                      className="w-full px-3.5 py-2 rounded-xl border border-slate-300 font-semibold focus:outline-none focus:ring-2 focus:ring-purple-500 bg-white"
-                    />
-                  </div>
-                </div>
-
                 <div className="space-y-1">
-                  <label className="font-bold text-slate-700 block">Farm Description & Notes</label>
+                  <label className="font-bold text-slate-700 block">Full Address & Notes</label>
                   <textarea
                     rows={2}
                     value={notes}
                     onChange={e => setNotes(e.target.value)}
-                    placeholder="Optional facilities, description, notes..."
+                    placeholder="Optional address, description, notes..."
                     className="w-full px-3 py-2 rounded-xl border border-slate-300 font-medium focus:outline-none focus:ring-2 focus:ring-purple-500 bg-white"
                   />
                 </div>
               </div>
 
-              {/* SECTION 2 — FARM STATION IMAGE */}
+              {/* SECTION 2 — BREEDER IMAGE */}
               <div className="space-y-3.5 bg-slate-50/70 p-4 rounded-2xl border border-slate-200/80">
                 <div className="flex items-center gap-2 border-b border-slate-200/80 pb-2">
                   <span className="h-5 w-5 rounded-md bg-purple-600 text-white font-black text-[11px] flex items-center justify-center">2</span>
-                  <h4 className="font-black text-slate-900 uppercase text-[11px] tracking-wider">SECTION 2 — FARM STATION IMAGE</h4>
+                  <h4 className="font-black text-slate-900 uppercase text-[11px] tracking-wider">SECTION 2 — BREEDER IMAGE</h4>
                 </div>
 
                 <DynamicUpload
-                  label="Farm Station Display Image (Up to 200 MB)"
+                  label="Breeder Profile Image (Up to 200 MB)"
                   value={imageUrl}
                   onChange={(url) => setImageUrl(url)}
                   targetSizeText="Supports up to 200 MB (Auto-optimized & compressed)"
                 />
               </div>
 
-              {/* SECTION 3 — OWNER / RESPONSIBLE PERSON */}
+              {/* SECTION 3 — IDENTIFICATION */}
               <div className="space-y-3.5 bg-slate-50/70 p-4 rounded-2xl border border-slate-200/80">
                 <div className="flex items-center gap-2 border-b border-slate-200/80 pb-2">
                   <span className="h-5 w-5 rounded-md bg-purple-600 text-white font-black text-[11px] flex items-center justify-center">3</span>
-                  <h4 className="font-black text-slate-900 uppercase text-[11px] tracking-wider">SECTION 3 — OWNER / RESPONSIBLE PERSON</h4>
+                  <h4 className="font-black text-slate-900 uppercase text-[11px] tracking-wider">SECTION 3 — IDENTIFICATION</h4>
                 </div>
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  <div className="space-y-1">
-                    <label className="font-bold text-slate-700 block">Owner / Responsible Person Name</label>
-                    <input
-                      type="text"
-                      value={ownerName}
-                      onChange={e => setOwnerName(e.target.value)}
-                      placeholder="e.g. Bona Farm Owner"
-                      className="w-full px-3.5 py-2 rounded-xl border border-slate-300 font-bold focus:outline-none focus:ring-2 focus:ring-purple-500 bg-white"
-                    />
-                  </div>
-
-                  <div className="space-y-1">
-                    <label className="font-bold text-slate-700 block">Owner Contact Phone</label>
-                    <input
-                      type="text"
-                      value={ownerPhone}
-                      onChange={e => setOwnerPhone(e.target.value)}
-                      placeholder="e.g. 012 445 778"
-                      className="w-full px-3.5 py-2 rounded-xl border border-slate-300 font-semibold focus:outline-none focus:ring-2 focus:ring-purple-500 bg-white"
-                    />
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  <div className="space-y-1">
-                    <label className="font-bold text-slate-700 block">Owner Email Address</label>
-                    <input
-                      type="email"
-                      value={ownerEmail}
-                      onChange={e => setOwnerEmail(e.target.value)}
-                      placeholder="e.g. owner@greenvalley.com"
-                      className="w-full px-3.5 py-2 rounded-xl border border-slate-300 font-semibold focus:outline-none focus:ring-2 focus:ring-purple-500 bg-white"
-                    />
-                  </div>
-
                   <div className="space-y-1">
                     <label className="font-bold text-slate-700 block">National ID / Verification No.</label>
                     <input
                       type="text"
-                      value={ownerNationalId}
-                      onChange={e => setOwnerNationalId(e.target.value)}
-                      placeholder="e.g. 010298374"
-                      className="w-full px-3.5 py-2 rounded-xl border border-slate-300 font-semibold focus:outline-none focus:ring-2 focus:ring-purple-500 bg-white"
+                      value={nationalId}
+                      onChange={e => setNationalId(e.target.value)}
+                      placeholder="e.g. ID-KH-900800"
+                      className="w-full px-3.5 py-2 rounded-xl border border-slate-300 font-mono font-semibold focus:outline-none focus:ring-2 focus:ring-purple-500 bg-white"
                     />
                   </div>
                 </div>
@@ -634,7 +552,7 @@ export default function FarmsListClient({ initialFarms }: Props) {
                           required={createAccount}
                           value={accountEmail}
                           onChange={e => setAccountEmail(e.target.value)}
-                          placeholder="e.g. greenvalley@snrfarm.com"
+                          placeholder="e.g. sokha.breeder@snrfarm.com"
                           className="w-full px-3.5 py-2 rounded-xl border border-indigo-300 font-bold text-indigo-950 focus:outline-none focus:ring-2 focus:ring-indigo-600 bg-white"
                         />
                       </div>
@@ -642,11 +560,11 @@ export default function FarmsListClient({ initialFarms }: Props) {
                       <div className="space-y-1">
                         <label className="font-bold text-indigo-900 block flex items-center gap-1.5">
                           <Lock className="h-3.5 w-3.5 text-indigo-600" />
-                          <span>{editingFarm ? 'New Password (Leave blank to keep existing)' : 'Password *'}</span>
+                          <span>{editingBreeder ? 'New Password (Leave blank to keep existing)' : 'Password *'}</span>
                         </label>
                         <input
                           type="password"
-                          required={createAccount && !editingFarm}
+                          required={createAccount && !editingBreeder}
                           value={accountPassword}
                           onChange={e => setAccountPassword(e.target.value)}
                           placeholder="••••••••••••"
@@ -663,8 +581,8 @@ export default function FarmsListClient({ initialFarms }: Props) {
                           onChange={e => setUserLevel(e.target.value as any)}
                           className="w-full px-3.5 py-2 rounded-xl border border-indigo-300 font-bold text-indigo-950 focus:outline-none focus:ring-2 focus:ring-indigo-600 bg-white cursor-pointer"
                         >
-                          <option value="Farm Owner Account">🏡 Farm Owner Account (LEVEL-02)</option>
-                          <option value="Farmer / Farm Manager Account">🚜 Farm Manager Account (LEVEL-03)</option>
+                          <option value="Professional Breeder Account">🩺 Professional Breeder Account (LEVEL-04)</option>
+                          <option value="Senior Breeder Account">👑 Senior Breeder Account (LEVEL-05)</option>
                         </select>
                       </div>
 
@@ -684,7 +602,7 @@ export default function FarmsListClient({ initialFarms }: Props) {
                   </div>
                 ) : (
                   <p className="text-[11px] font-medium text-slate-500 italic py-1">
-                    Check the box above to generate a login account for this Farm Station. (Uses standard <code className="bg-white px-1.5 py-0.5 rounded border text-indigo-700 font-mono">/login</code>)
+                    Check the box above to generate a login account for this Breeder. (Uses standard <code className="bg-white px-1.5 py-0.5 rounded border text-indigo-700 font-mono">/login</code>)
                   </p>
                 )}
               </div>
@@ -703,7 +621,7 @@ export default function FarmsListClient({ initialFarms }: Props) {
                   disabled={saving}
                   className="px-5 py-2.5 bg-purple-600 text-white font-black rounded-xl hover:bg-purple-700 shadow-md cursor-pointer flex items-center gap-2"
                 >
-                  {saving ? 'Saving Farm Station...' : (editingFarm ? 'Update Farm Station' : 'Create Farm Station & Account')}
+                  {saving ? 'Saving Breeder Account...' : (editingBreeder ? 'Update Breeder Account' : 'Create Breeder Account')}
                 </button>
               </div>
 

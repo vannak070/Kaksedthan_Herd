@@ -16,12 +16,16 @@ export default function LoginPage() {
     e.preventDefault();
     setLoading(true);
 
+    localStorage.removeItem('kaksedthan_logged_out');
+    localStorage.setItem('kaksedthan_user_session', 'active');
+    document.cookie = 'kaksedthan_token=active_session; path=/; max-age=86400';
+
     setTimeout(() => {
       setLoading(false);
       setSuccess(true);
       setTimeout(() => {
         router.push('/');
-      }, 800);
+      }, 600);
     }, 600);
   };
 

@@ -1,7 +1,7 @@
 'use client';
 
-import React, { useState, useRef } from 'react';
-import { Upload, X, Check, Image as ImageIcon, FileText, Download } from 'lucide-react';
+import React, { useState, useRef, useEffect } from 'react';
+import { Upload, X, Check, Image as ImageIcon, RefreshCw, AlertCircle } from 'lucide-react';
 
 interface DynamicUploadProps {
   value?: string;
@@ -10,146 +10,205 @@ interface DynamicUploadProps {
   accept?: string;
   label?: string;
   targetSizeText?: string;
-  aspectRatio?: number; // Default 1:1
+  aspectRatio?: number; // Default 1:1 or 16:9
 }
 
 export const DynamicUpload: React.FC<DynamicUploadProps> = ({
   value,
   onChange,
   mode = 'image',
-  accept = 'image/*',
-  label = 'Upload File',
-  targetSizeText = 'Target Upload Size: 1:1 Square (1280 × 1280 px HD)',
+  accept = 'image/jpeg,image/png,image/webp,image/jpg',
+  label = 'Upload Image',
+  targetSizeText = 'Supports up to 200 MB (Auto-optimized to 1280×1280 HD)',
   aspectRatio = 1,
 }) => {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(value || null);
-  const [isCropping, setIsCropping] = useState(false);
-  const [rawImageSrc, setRawImageSrc] = useState<string | null>(null);
+  const [isProcessing, setIsProcessing] = useState(false);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+
+  useEffect(() => {
+    setPreviewUrl(value || null);
+  }, [value]);
+
+  // Compress & Optimize Image via Canvas (Handles up to 200MB files smoothly)
+  const processAndOptimizeImage = (file: File) => {
+    // 1. File Size Validation (Max 200 MB)
+    const MAX_SIZE_BYTES = 200 * 1024 * 1024;
+    if (file.size > MAX_SIZE_BYTES) {
+      setErrorMessage('File exceeds maximum upload size limit of 200 MB.');
+      return;
+    }
+
+    setErrorMessage(null);
+    setIsProcessing(true);
+
+    const reader = new FileReader();
+    reader.onerror = () => {
+      setErrorMessage('Failed to read image file.');
+      setIsProcessing(false);
+    };
+
+    reader.onload = (event) => {
+      const img = new Image();
+      img.onerror = () => {
+        setErrorMessage('Invalid or corrupt image format.');
+        setIsProcessing(false);
+      };
+
+      img.onload = () => {
+        try {
+          const canvas = document.createElement('canvas');
+          const MAX_DIMENSION = 1280; // Standard HD dimension
+
+          let width = img.width;
+          let height = img.height;
+
+          // Preserve aspect ratio while resizing large images
+          if (width > height) {
+            if (width > MAX_DIMENSION) {
+              height = Math.round((height * MAX_DIMENSION) / width);
+              width = MAX_DIMENSION;
+            }
+          } else {
+            if (height > MAX_DIMENSION) {
+              width = Math.round((width * MAX_DIMENSION) / height);
+              height = MAX_DIMENSION;
+            }
+          }
+
+          canvas.width = width;
+          canvas.height = height;
+
+          const ctx = canvas.getContext('2d');
+          if (!ctx) {
+            throw new Error('Canvas context unavailable');
+          }
+
+          // Smooth rendering algorithm
+          ctx.imageSmoothingEnabled = true;
+          ctx.imageSmoothingQuality = 'high';
+          ctx.drawImage(img, 0, 0, width, height);
+
+          // Compress image to JPEG (Quality: 0.90)
+          const optimizedBase64 = canvas.toDataURL('image/jpeg', 0.90);
+
+          setPreviewUrl(optimizedBase64);
+          onChange(optimizedBase64);
+        } catch (err: any) {
+          setErrorMessage('Failed to process image optimization: ' + err.message);
+        } finally {
+          setIsProcessing(false);
+        }
+      };
+
+      img.src = event.target?.result as string;
+    };
+
+    reader.readAsDataURL(file);
+  };
 
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-
-    // File size validation (Max 10 MB)
-    if (file.size > 10 * 1024 * 1024) {
-      alert('Image is too large. Please upload an image smaller than 10 MB.');
-      return;
-    }
-
-    if (mode === 'image' && file.type.startsWith('image/')) {
-      const reader = new FileReader();
-      reader.onload = () => {
-        setRawImageSrc(reader.result as string);
-        setIsCropping(true);
-      };
-      reader.readAsDataURL(file);
-    } else {
-      // Direct file upload
-      const fakeUrl = URL.createObjectURL(file);
-      setPreviewUrl(fakeUrl);
-      onChange(fakeUrl);
-    }
+    processAndOptimizeImage(file);
   };
 
-  const handleApplyCrop = () => {
-    if (!rawImageSrc) return;
-    const img = new Image();
-    img.crossOrigin = 'anonymous';
-    img.onload = () => {
-      const canvas = document.createElement('canvas');
-      const targetWidth = 1280;
-      const targetHeight = 1280;
-      canvas.width = targetWidth;
-      canvas.height = targetHeight;
-      const ctx = canvas.getContext('2d');
-      if (ctx) {
-        // Center crop square 1:1
-        const minDim = Math.min(img.width, img.height);
-        const startX = (img.width - minDim) / 2;
-        const startY = (img.height - minDim) / 2;
-        ctx.drawImage(img, startX, startY, minDim, minDim, 0, 0, targetWidth, targetHeight);
-        const croppedBase64 = canvas.toDataURL('image/jpeg', 0.92);
-        setPreviewUrl(croppedBase64);
-        onChange(croppedBase64);
-      }
-      setIsCropping(false);
-      setRawImageSrc(null);
-    };
-    img.src = rawImageSrc;
+  const handleRemove = () => {
+    setPreviewUrl(null);
+    setErrorMessage(null);
+    onChange('');
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
+    }
   };
 
   return (
-    <div style={{ marginBottom: '16px' }}>
-      {label && <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: '#374151', marginBottom: '6px' }}>{label}</label>}
+    <div className="space-y-2">
+      {label && (
+        <label className="block text-xs font-bold text-slate-700">
+          {label}
+        </label>
+      )}
 
-      {previewUrl ? (
-        <div style={{ position: 'relative', width: '100%', maxWidth: '280px', borderRadius: '12px', overflow: 'hidden', border: '1px solid #E2E8F0', background: '#F8FAFC' }}>
-          {mode === 'image' ? (
-            <div style={{ width: '100%', aspectRatio: '1/1', overflow: 'hidden', position: 'relative' }}>
-              <img src={previewUrl} alt="Preview" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-              <span style={{ position: 'absolute', bottom: '8px', right: '8px', background: 'rgba(0,0,0,0.65)', color: 'white', fontSize: '10px', padding: '2px 8px', borderRadius: '4px', fontWeight: 700 }}>
-                1280 × 1280 HD
-              </span>
-            </div>
-          ) : (
-            <div style={{ padding: '16px', display: 'flex', alignItems: 'center', gap: '10px' }}>
-              <FileText className="h-6 w-6 text-blue-600" />
-              <span style={{ fontSize: '13px', fontWeight: 600, color: '#1E293B', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>Attachment Loaded</span>
-            </div>
-          )}
-          <button
-            type="button"
-            onClick={() => {
-              setPreviewUrl(null);
-              onChange('');
-            }}
-            style={{ position: 'absolute', top: '8px', right: '8px', width: '28px', height: '28px', borderRadius: '999px', background: 'rgba(239, 68, 68, 0.9)', color: 'white', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
-          >
-            <X className="h-4 w-4" />
-          </button>
-        </div>
-      ) : (
-        <div
-          onClick={() => fileInputRef.current?.click()}
-          style={{
-            border: '2px dashed #CBD5E1',
-            borderRadius: '12px',
-            padding: '24px',
-            textAlign: 'center',
-            background: '#F8FAFC',
-            cursor: 'pointer',
-            transition: 'all 0.2s ease',
-          }}
-        >
-          <Upload className="h-8 w-8 text-slate-400 mx-auto mb-2" />
-          <p style={{ fontSize: '13px', fontWeight: 600, color: '#334155', margin: 0 }}>Click or Drag & Drop to Upload</p>
-          <p style={{ fontSize: '11px', color: '#64748B', margin: '4px 0 0' }}>{targetSizeText}</p>
-          <input ref={fileInputRef} type="file" accept={accept} onChange={handleFileSelect} style={{ display: 'none' }} />
+      {errorMessage && (
+        <div className="p-2.5 bg-rose-50 border border-rose-200 rounded-xl text-xs font-bold text-rose-700 flex items-center gap-2">
+          <AlertCircle className="h-4 w-4 shrink-0 text-rose-600" />
+          <span>{errorMessage}</span>
         </div>
       )}
 
-      {/* Interactive Cropper Modal */}
-      {isCropping && rawImageSrc && (
-        <div style={{ position: 'fixed', inset: 0, zIndex: 9999, background: 'rgba(15,23,42,0.75)', backdropFilter: 'blur(4px)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '16px' }}>
-          <div style={{ background: 'white', borderRadius: '16px', maxWidth: '500px', width: '100%', padding: '24px', boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.25)' }}>
-            <h3 style={{ fontSize: '16px', fontWeight: 700, color: '#0F172A', margin: '0 0 12px' }}>Crop Image (1:1 HD Preset)</h3>
-            <div style={{ width: '100%', height: '280px', borderRadius: '10px', overflow: 'hidden', background: '#0F172A', display: 'flex', alignItems: 'center', justifyContent: 'center', position: 'relative' }}>
-              <img src={rawImageSrc} alt="Cropping Raw" style={{ maxHeight: '100%', maxWidth: '100%', objectFit: 'contain' }} />
-              <div style={{ position: 'absolute', width: '200px', height: '200px', border: '2px solid #16A34A', boxShadow: '0 0 0 9999px rgba(0,0,0,0.5)', pointerEvents: 'none' }} />
-            </div>
-            <p style={{ fontSize: '11px', color: '#64748B', marginTop: '8px', textAlign: 'center' }}>Center 1:1 HD Crop Preset will be applied automatically</p>
-            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px', marginTop: '16px' }}>
-              <button type="button" onClick={() => setIsCropping(false)} style={{ padding: '8px 16px', fontSize: '13px', background: '#F1F5F9', border: 'none', borderRadius: '8px', cursor: 'pointer', color: '#475569' }}>
-                Cancel
+      {previewUrl ? (
+        <div className="relative group rounded-2xl overflow-hidden border border-slate-200 bg-slate-100 shadow-xs max-w-sm">
+          <div className="aspect-video w-full relative overflow-hidden bg-slate-900 flex items-center justify-center">
+            <img
+              src={previewUrl}
+              alt="Uploaded Preview"
+              className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+              onError={() => {
+                setPreviewUrl('/placeholder-image.png');
+              }}
+            />
+            <div className="absolute inset-0 bg-slate-900/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2">
+              <button
+                type="button"
+                onClick={() => fileInputRef.current?.click()}
+                className="px-3 py-1.5 bg-white text-slate-900 font-bold text-xs rounded-xl shadow-lg hover:bg-slate-100 transition-colors flex items-center gap-1.5 cursor-pointer"
+              >
+                <RefreshCw className="h-3.5 w-3.5" /> Replace
               </button>
-              <button type="button" onClick={handleApplyCrop} style={{ padding: '8px 20px', fontSize: '13px', fontWeight: 600, background: '#16A34A', color: 'white', border: 'none', borderRadius: '8px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                <Check className="h-4 w-4" /> Confirm 1280 × 1280 Crop
+              <button
+                type="button"
+                onClick={handleRemove}
+                className="px-3 py-1.5 bg-rose-600 text-white font-bold text-xs rounded-xl shadow-lg hover:bg-rose-700 transition-colors flex items-center gap-1.5 cursor-pointer"
+              >
+                <X className="h-3.5 w-3.5" /> Remove
               </button>
             </div>
           </div>
+          <div className="p-2.5 bg-slate-50 border-t border-slate-200/80 flex items-center justify-between text-[11px] font-bold text-slate-600">
+            <span className="flex items-center gap-1.5 text-emerald-700">
+              <Check className="h-3.5 w-3.5 text-emerald-600 stroke-[3]" />
+              Image Optimized & Saved
+            </span>
+            <span className="text-slate-400 font-mono text-[10px]">1280×1280 HD</span>
+          </div>
+        </div>
+      ) : (
+        <div
+          onClick={() => !isProcessing && fileInputRef.current?.click()}
+          className={`border-2 border-dashed border-slate-300 hover:border-amber-500 hover:bg-amber-50/30 rounded-2xl p-6 text-center bg-slate-50 transition-all cursor-pointer ${
+            isProcessing ? 'opacity-60 cursor-wait' : ''
+          }`}
+        >
+          {isProcessing ? (
+            <div className="flex flex-col items-center justify-center space-y-2 py-2">
+              <RefreshCw className="h-8 w-8 text-amber-600 animate-spin" />
+              <p className="text-xs font-bold text-slate-700">Optimizing & Compressing Image...</p>
+              <p className="text-[10px] text-slate-400">Processing up to 200 MB upload</p>
+            </div>
+          ) : (
+            <div className="space-y-2">
+              <div className="h-10 w-10 bg-amber-100 text-amber-700 rounded-xl flex items-center justify-center mx-auto">
+                <Upload className="h-5 w-5" />
+              </div>
+              <div>
+                <p className="text-xs font-bold text-slate-800">Click or Drag & Drop to Upload Image</p>
+                <p className="text-[10.5px] text-slate-400 font-medium mt-0.5">{targetSizeText}</p>
+                <p className="text-[9.5px] text-slate-400 font-semibold uppercase mt-1">Formats: JPG, JPEG, PNG, WebP (Max 200 MB)</p>
+              </div>
+            </div>
+          )}
         </div>
       )}
+
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept={accept}
+        onChange={handleFileSelect}
+        className="hidden"
+      />
     </div>
   );
 };

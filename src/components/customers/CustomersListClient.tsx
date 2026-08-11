@@ -1,53 +1,86 @@
 'use client';
 
 import React, { useState, useMemo } from 'react';
+import Link from 'next/link';
+import PageHeader from '@/components/common/PageHeader';
+import StandardAnimalImage from '@/components/common/StandardAnimalImage';
 import {
   Users, Search, ShieldCheck, Beef, CheckCircle2, AlertTriangle,
-  Clock, XCircle, FileText, Check, X, Phone, Mail, MapPin, Eye
+  Clock, XCircle, FileText, Check, X, Phone, Mail, MapPin, Eye, Plus,
+  Edit, ToggleLeft, ToggleRight, UserCheck, Heart, Award, ArrowUpRight,
+  Building, Edit3, Trash2
 } from 'lucide-react';
-import { updateUserNationalIdAction } from '@/app/actions';
+import {
+  createCustomerAction,
+  updateCustomerAction,
+  toggleCustomerStatusAction
+} from '@/app/actions';
+import { DynamicUpload } from '@/components/common/DynamicUpload';
 
 interface CustomerItem {
   id: string;
+  code?: string;
   name: string;
-  email: string;
-  role: string;
-  userLevel?: string;
-  status: string;
   phone?: string;
+  email?: string;
+  address?: string;
   farmLocation?: string;
-  companyName?: string;
+  province?: string;
+  district?: string;
+  commune?: string;
+  village?: string;
+  imageUrl?: string;
   nationalId?: string;
   idFrontUrl?: string;
   idBackUrl?: string;
-  idVerificationStatus: 'Pending' | 'Under Review' | 'Verified' | 'Rejected' | 'Action Required';
+  idVerificationStatus?: string;
+  customerType?: string;
+  notes?: string;
+  status: 'Active' | 'Inactive';
+  managedByBreederId?: string;
+  managedByBreederName?: string;
   animalCount: number;
+  breedingCount?: number;
   createdAt?: string;
+  updatedAt?: string;
 }
 
 interface Props {
   initialCustomers: CustomerItem[];
 }
 
-const STATUS_BADGES: Record<string, string> = {
-  Verified: 'bg-emerald-50 text-emerald-700 border-emerald-200',
-  'Under Review': 'bg-amber-50 text-amber-700 border-amber-200',
-  Pending: 'bg-slate-100 text-slate-600 border-slate-200',
-  Rejected: 'bg-rose-50 text-rose-700 border-rose-200',
-  'Action Required': 'bg-orange-50 text-orange-700 border-orange-200',
-};
-
 export default function CustomersListClient({ initialCustomers }: Props) {
   const [customers, setCustomers] = useState<CustomerItem[]>(initialCustomers);
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('All');
-  const [selectedCustomer, setSelectedCustomer] = useState<CustomerItem | null>(null);
+  const [typeFilter, setTypeFilter] = useState<string>('All');
 
-  // Edit Modal State
+  // Modal State
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [editingCustomer, setEditingCustomer] = useState<CustomerItem | null>(null);
+
+  // Form State (3 Sections — NO LOGIN ACCOUNT)
+  const [name, setName] = useState('');
+  const [code, setCode] = useState('');
+  const [customerType, setCustomerType] = useState('Individual Owner');
+  const [phone, setPhone] = useState('');
+  const [email, setEmail] = useState('');
+  const [address, setAddress] = useState('');
+  const [province, setProvince] = useState('');
+  const [district, setDistrict] = useState('');
+  const [commune, setCommune] = useState('');
+  const [village, setVillage] = useState('');
+  const [status, setStatus] = useState<'Active' | 'Inactive'>('Active');
+  const [notes, setNotes] = useState('');
+  
+  // Section 2: Identification
   const [nationalId, setNationalId] = useState('');
-  const [verificationStatus, setVerificationStatus] = useState<string>('Pending');
   const [idFrontUrl, setIdFrontUrl] = useState('');
   const [idBackUrl, setIdBackUrl] = useState('');
+  const [idVerificationStatus, setIdVerificationStatus] = useState('Verified');
+
+  // Section 3: Customer Image
+  const [imageUrl, setImageUrl] = useState('');
 
   const [saving, setSaving] = useState(false);
   const [toast, setToast] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
@@ -57,40 +90,97 @@ export default function CustomersListClient({ initialCustomers }: Props) {
     setTimeout(() => setToast(null), 5000);
   };
 
-  const openVerifyModal = (cust: CustomerItem) => {
-    setSelectedCustomer(cust);
-    setNationalId(cust.nationalId || '');
-    setVerificationStatus(cust.idVerificationStatus || 'Pending');
-    setIdFrontUrl(cust.idFrontUrl || '');
-    setIdBackUrl(cust.idBackUrl || '');
+  const openCreateModal = () => {
+    setEditingCustomer(null);
+    setName('');
+    setCode('');
+    setCustomerType('Individual Owner');
+    setPhone('');
+    setEmail('');
+    setAddress('');
+    setProvince('');
+    setDistrict('');
+    setCommune('');
+    setVillage('');
+    setStatus('Active');
+    setNotes('');
+    setNationalId('');
+    setIdFrontUrl('');
+    setIdBackUrl('');
+    setIdVerificationStatus('Verified');
+    setImageUrl('');
+    setIsModalOpen(true);
   };
 
-  const handleSaveVerification = async (e: React.FormEvent) => {
+  const openEditModal = (cust: CustomerItem) => {
+    setEditingCustomer(cust);
+    setName(cust.name);
+    setCode(cust.code || cust.id);
+    setCustomerType(cust.customerType || 'Individual Owner');
+    setPhone(cust.phone || '');
+    setEmail(cust.email || '');
+    setAddress(cust.address || cust.farmLocation || '');
+    setProvince(cust.province || '');
+    setDistrict(cust.district || '');
+    setCommune(cust.commune || '');
+    setVillage(cust.village || '');
+    setStatus(cust.status || 'Active');
+    setNotes(cust.notes || '');
+    setNationalId(cust.nationalId || '');
+    setIdFrontUrl(cust.idFrontUrl || '');
+    setIdBackUrl(cust.idBackUrl || '');
+    setIdVerificationStatus(cust.idVerificationStatus || 'Verified');
+    setImageUrl(cust.imageUrl || '');
+    setIsModalOpen(true);
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!selectedCustomer) return;
+    if (!name.trim()) return;
     setSaving(true);
+
     try {
-      const res = await updateUserNationalIdAction(selectedCustomer.id, {
-        nationalId: nationalId.trim(),
-        idVerificationStatus: verificationStatus,
-        idFrontUrl: idFrontUrl.trim(),
-        idBackUrl: idBackUrl.trim()
-      });
-      if (res.success) {
-        setCustomers(prev => prev.map(c => c.id === selectedCustomer.id ? {
-          ...c,
-          nationalId,
-          idVerificationStatus: verificationStatus as any,
-          idFrontUrl,
-          idBackUrl
-        } : c));
-        showToast('success', `National ID verification status updated for ${selectedCustomer.name}.`);
-        setSelectedCustomer(null);
+      const payload = {
+        name: name.trim(),
+        code: code.trim() || undefined,
+        customerType,
+        phone: phone.trim() || undefined,
+        email: email.trim() || undefined,
+        address: address.trim() || undefined,
+        province: province.trim() || undefined,
+        district: district.trim() || undefined,
+        commune: commune.trim() || undefined,
+        village: village.trim() || undefined,
+        imageUrl: imageUrl.trim() || undefined,
+        nationalId: nationalId.trim() || undefined,
+        idFrontUrl: idFrontUrl.trim() || undefined,
+        idBackUrl: idBackUrl.trim() || undefined,
+        idVerificationStatus: nationalId.trim() ? 'Verified' : 'Pending',
+        notes: notes.trim() || undefined,
+        status
+      };
+
+      if (editingCustomer) {
+        const res = await updateCustomerAction(editingCustomer.id, payload);
+        if (res.success && res.data) {
+          setCustomers(prev => prev.map(c => c.id === editingCustomer.id ? { ...c, ...res.data } : c));
+          showToast('success', `Customer "${name}" updated successfully.`);
+          setIsModalOpen(false);
+        } else {
+          showToast('error', res.error || 'Failed to update customer.');
+        }
       } else {
-        showToast('error', res.error || 'Failed to update verification status.');
+        const res = await createCustomerAction(payload, 'BREEDER-01');
+        if (res.success && res.data) {
+          setCustomers(prev => [res.data, ...prev]);
+          showToast('success', `Customer "${name}" created successfully.`);
+          setIsModalOpen(false);
+        } else {
+          showToast('error', res.error || 'Failed to create customer.');
+        }
       }
-    } catch {
-      showToast('error', 'An error occurred while updating status.');
+    } catch (err: any) {
+      showToast('error', err.message || 'An error occurred.');
     } finally {
       setSaving(false);
     }
@@ -100,15 +190,21 @@ export default function CustomersListClient({ initialCustomers }: Props) {
     return customers.filter(c => {
       const matchesSearch = !search ||
         c.name.toLowerCase().includes(search.toLowerCase()) ||
-        c.email.toLowerCase().includes(search.toLowerCase()) ||
-        (c.nationalId || '').toLowerCase().includes(search.toLowerCase());
-      const matchesStatus = statusFilter === 'All' || c.idVerificationStatus === statusFilter;
-      return matchesSearch && matchesStatus;
+        (c.code || '').toLowerCase().includes(search.toLowerCase()) ||
+        (c.phone || '').toLowerCase().includes(search.toLowerCase()) ||
+        (c.email || '').toLowerCase().includes(search.toLowerCase()) ||
+        (c.address || '').toLowerCase().includes(search.toLowerCase());
+
+      const matchesStatus = statusFilter === 'All' || c.status === statusFilter;
+      const matchesType = typeFilter === 'All' || c.customerType === typeFilter;
+      return matchesSearch && matchesStatus && matchesType;
     });
-  }, [customers, search, statusFilter]);
+  }, [customers, search, statusFilter, typeFilter]);
+
+  const availableTypes = Array.from(new Set(customers.map(c => c.customerType || 'Individual Owner')));
 
   return (
-    <div className="max-w-7xl mx-auto p-4 sm:p-6 space-y-6">
+    <div className="space-y-6">
 
       {/* Toast Notification */}
       {toast && (
@@ -121,249 +217,346 @@ export default function CustomersListClient({ initialCustomers }: Props) {
         </div>
       )}
 
-      {/* ── Page Header ─────────────────────────────── */}
-      <div className="bg-white rounded-3xl border border-slate-200 shadow-sm overflow-hidden">
-        <div className="bg-gradient-to-r from-purple-700 to-indigo-700 p-6 text-white">
-          <div className="flex items-center gap-3">
-            <div className="h-12 w-12 bg-white/20 rounded-2xl flex items-center justify-center backdrop-blur-sm border border-white/30">
-              <Users className="h-6 w-6 text-white" />
-            </div>
-            <div>
-              <p className="text-white/70 text-[11px] font-bold uppercase tracking-wider">Farm & Ownership</p>
-              <h1 className="text-xl font-black text-white">Customer / Cow Owner Accounts</h1>
-              <p className="text-white/70 text-xs font-medium mt-0.5">
-                Manage registered cow owners, National ID document verification, and animal ownership rights.
-              </p>
-            </div>
-          </div>
-        </div>
-      </div>
+      {/* ── Page Header (Farm Station Layout Standard) ────────────────── */}
+      <PageHeader
+        title="Customer / Cow Owner Management"
+        subtitle="Manage cattle owner profiles, contact records, National ID verification, and animal ownership rights."
+        breadcrumbs={[{ label: 'Customers' }]}
+        searchQuery={search}
+        onSearchChange={setSearch}
+        searchPlaceholder="Search Owner Name, Code, Phone, Province..."
+        onActionClick={openCreateModal}
+        actionLabel="+ Add New Customer"
+      >
+        <div className="flex items-center gap-2">
+          {/* Type Filter */}
+          <select
+            value={typeFilter}
+            onChange={(e) => setTypeFilter(e.target.value)}
+            className="bg-slate-50 border border-slate-200 text-xs font-semibold rounded-xl px-3 py-2 text-slate-700 focus:outline-none focus:ring-2 focus:ring-purple-600 cursor-pointer"
+          >
+            <option value="All">All Customer Types</option>
+            {availableTypes.map(t => (
+              <option key={t} value={t}>{t}</option>
+            ))}
+          </select>
 
-      {/* ── KPI Summary Cards ────────────────────────── */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-        <div className="bg-white rounded-2xl border border-slate-200 shadow-xs p-4 flex items-center gap-3">
-          <div className="h-10 w-10 rounded-xl bg-purple-50 border border-purple-100 flex items-center justify-center">
-            <Users className="h-5 w-5 text-purple-600" />
-          </div>
-          <div>
-            <p className="text-[10px] font-black text-slate-400 uppercase">Total Owners</p>
-            <p className="text-xl font-black text-slate-900">{customers.length}</p>
-          </div>
+          {/* Status Filter */}
+          <select
+            value={statusFilter}
+            onChange={(e) => setStatusFilter(e.target.value)}
+            className="bg-slate-50 border border-slate-200 text-xs font-semibold rounded-xl px-3 py-2 text-slate-700 focus:outline-none focus:ring-2 focus:ring-purple-600 cursor-pointer"
+          >
+            <option value="All">All Statuses</option>
+            <option value="Active">Active</option>
+            <option value="Inactive">Inactive</option>
+          </select>
         </div>
-        <div className="bg-white rounded-2xl border border-slate-200 shadow-xs p-4 flex items-center gap-3">
-          <div className="h-10 w-10 rounded-xl bg-emerald-50 border border-emerald-100 flex items-center justify-center">
-            <ShieldCheck className="h-5 w-5 text-emerald-600" />
-          </div>
-          <div>
-            <p className="text-[10px] font-black text-slate-400 uppercase">ID Verified</p>
-            <p className="text-xl font-black text-slate-900">{customers.filter(c => c.idVerificationStatus === 'Verified').length}</p>
-          </div>
-        </div>
-        <div className="bg-white rounded-2xl border border-slate-200 shadow-xs p-4 flex items-center gap-3">
-          <div className="h-10 w-10 rounded-xl bg-amber-50 border border-amber-100 flex items-center justify-center">
-            <Clock className="h-5 w-5 text-amber-600" />
-          </div>
-          <div>
-            <p className="text-[10px] font-black text-slate-400 uppercase">Under Review</p>
-            <p className="text-xl font-black text-slate-900">{customers.filter(c => c.idVerificationStatus === 'Under Review' || c.idVerificationStatus === 'Pending').length}</p>
-          </div>
-        </div>
-        <div className="bg-white rounded-2xl border border-slate-200 shadow-xs p-4 flex items-center gap-3">
-          <div className="h-10 w-10 rounded-xl bg-blue-50 border border-blue-100 flex items-center justify-center">
-            <Beef className="h-5 w-5 text-blue-600" />
-          </div>
-          <div>
-            <p className="text-[10px] font-black text-slate-400 uppercase">Owned Livestock</p>
-            <p className="text-xl font-black text-slate-900">{customers.reduce((s, c) => s + (c.animalCount || 0), 0)}</p>
-          </div>
-        </div>
-      </div>
+      </PageHeader>
 
-      {/* Filters */}
-      <div className="bg-white rounded-2xl border border-slate-200 p-4 shadow-xs flex flex-col sm:flex-row gap-3">
-        <div className="relative flex-1">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
-          <input
-            type="text"
-            placeholder="Search by owner name, email, or National ID..."
-            value={search}
-            onChange={e => setSearch(e.target.value)}
-            className="w-full pl-9 pr-4 py-2 rounded-xl border border-slate-200 text-xs font-medium focus:outline-none focus:border-purple-600"
-          />
+      {/* ── Farm Station Standard 5-Column Grid ────────────────── */}
+      {filteredCustomers.length === 0 ? (
+        <div className="bg-white rounded-2xl border border-slate-200 p-12 text-center my-6">
+          <Users className="h-12 w-12 text-slate-300 mx-auto mb-3" />
+          <h3 className="text-base font-bold text-slate-800">No Customers Found</h3>
+          <p className="text-xs text-slate-500 mt-1 max-w-sm mx-auto">
+            No customer records match your search query. Add a new customer.
+          </p>
+          <button
+            onClick={openCreateModal}
+            className="inline-flex items-center gap-2 bg-purple-600 text-white font-bold text-xs px-4 py-2.5 rounded-xl mt-4 hover:bg-purple-700 transition-colors cursor-pointer"
+          >
+            <Plus className="h-4 w-4" />
+            <span>+ Add New Customer</span>
+          </button>
         </div>
-        <div className="flex items-center gap-1.5 text-xs overflow-x-auto">
-          {['All', 'Verified', 'Under Review', 'Pending', 'Action Required', 'Rejected'].map(st => (
-            <button
-              key={st}
-              onClick={() => setStatusFilter(st)}
-              className={`px-3 py-1.5 rounded-xl font-bold cursor-pointer transition-all whitespace-nowrap ${
-                statusFilter === st ? 'bg-purple-700 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-              }`}
-            >
-              {st}
-            </button>
-          ))}
-        </div>
-      </div>
+      ) : (
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
+          {filteredCustomers.map((cust) => {
+            const ownerName = cust.name;
+            const typeLabel = cust.customerType || 'Individual Owner';
+            const photoUrl = cust.imageUrl;
+            const animalCount = cust.animalCount || 0;
 
-      {/* Customers Table */}
-      <div className="bg-white rounded-3xl border border-slate-200 shadow-xs overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="w-full text-left border-collapse">
-            <thead>
-              <tr className="border-b border-slate-200 bg-slate-50/50 text-[10px] font-black uppercase text-slate-400 tracking-wider">
-                <th className="py-3.5 px-5">Cow Owner</th>
-                <th className="py-3.5 px-5">National ID</th>
-                <th className="py-3.5 px-5 text-center">ID Verification</th>
-                <th className="py-3.5 px-5 text-center">Owned Animals</th>
-                <th className="py-3.5 px-5 text-center">Account Status</th>
-                <th className="py-3.5 px-5 text-right">Actions</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100 text-xs">
-              {filteredCustomers.length === 0 ? (
-                <tr>
-                  <td colSpan={6} className="py-12 text-center text-slate-500 font-medium">
-                    No customer / cow owner accounts found.
-                  </td>
-                </tr>
-              ) : (
-                filteredCustomers.map(cust => (
-                  <tr key={cust.id} className="hover:bg-slate-50/60 transition-colors">
-                    <td className="py-4 px-5">
-                      <div className="flex items-center gap-3">
-                        <div className="h-9 w-9 rounded-xl bg-purple-100 text-purple-700 flex items-center justify-center font-black text-xs shrink-0">
-                          {cust.name.slice(0, 2).toUpperCase()}
-                        </div>
-                        <div>
-                          <p className="font-black text-slate-900">{cust.name}</p>
-                          <p className="text-[11px] text-slate-500">{cust.email}</p>
-                        </div>
+            return (
+              <Link
+                key={cust.id}
+                href={`/customers/${cust.id}`}
+                className="group bg-white rounded-3xl border border-slate-200/90 shadow-2xs hover:shadow-xl hover:border-purple-500 transition-all duration-200 overflow-hidden flex flex-col justify-between cursor-pointer p-3.5"
+              >
+                <div>
+                  {/* Standard Image Container with Status Badge */}
+                  <div className="relative mb-3">
+                    <StandardAnimalImage
+                      src={photoUrl}
+                      alt={ownerName}
+                      fallbackText="Cow Owner"
+                    />
+                    <span className={`absolute top-2.5 right-2.5 font-black text-[9px] px-2 py-0.5 rounded-full uppercase tracking-wider shadow-xs ${
+                      cust.status === 'Active' ? 'bg-emerald-600 text-white' : 'bg-slate-500 text-white'
+                    }`}>
+                      {cust.status}
+                    </span>
+                    {cust.nationalId && (
+                      <span className="absolute top-2.5 left-2.5 bg-purple-600 text-white font-black text-[8.5px] px-2 py-0.5 rounded-full uppercase tracking-wider shadow-xs flex items-center gap-1">
+                        <ShieldCheck className="h-2.5 w-2.5" /> ID Verified
+                      </span>
+                    )}
+                  </div>
+
+                  {/* Title & Metadata Hierarchy */}
+                  <div className="space-y-1">
+                    <h3 className="text-sm font-black text-slate-900 group-hover:text-purple-600 transition-colors truncate">
+                      {ownerName}
+                    </h3>
+                    <p className="text-xs font-extrabold text-[#dc5c15] truncate">{typeLabel}</p>
+
+                    {/* Specs Box */}
+                    <div className="mt-2.5 space-y-1 text-[11px] bg-slate-50 p-2.5 rounded-xl border border-slate-100 text-slate-600">
+                      <div className="flex justify-between">
+                        <span className="text-slate-400 font-medium">Code:</span>
+                        <span className="font-mono font-bold text-purple-700">{cust.code || cust.id}</span>
                       </div>
-                    </td>
-                    <td className="py-4 px-5">
-                      {cust.nationalId ? (
-                        <span className="font-mono text-[11px] font-bold bg-slate-100 text-slate-800 px-2.5 py-1 rounded-lg border border-slate-200">
-                          {cust.nationalId}
-                        </span>
-                      ) : (
-                        <span className="text-slate-400 italic text-[11px]">Not provided</span>
-                      )}
-                    </td>
-                    <td className="py-4 px-5 text-center">
-                      <span className={`px-2.5 py-1 rounded-full text-[10.5px] font-black border ${STATUS_BADGES[cust.idVerificationStatus || 'Pending']}`}>
-                        {cust.idVerificationStatus || 'Pending'}
-                      </span>
-                    </td>
-                    <td className="py-4 px-5 text-center">
-                      <span className="font-bold text-purple-700 bg-purple-50 px-2.5 py-1 rounded-lg border border-purple-100">
-                        {cust.animalCount} animals
-                      </span>
-                    </td>
-                    <td className="py-4 px-5 text-center">
-                      <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold border ${cust.status === 'Active' ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-slate-100 text-slate-600 border-slate-200'}`}>
-                        {cust.status}
-                      </span>
-                    </td>
-                    <td className="py-4 px-5 text-right">
-                      <button
-                        onClick={() => openVerifyModal(cust)}
-                        className="px-3 py-1.5 rounded-xl bg-purple-700 text-white text-[11px] font-bold hover:bg-purple-800 cursor-pointer shadow-xs"
-                      >
-                        Manage ID Verification
-                      </button>
-                    </td>
-                  </tr>
-                ))
-              )}
-            </tbody>
-          </table>
-        </div>
-      </div>
+                      <div className="flex justify-between border-t border-slate-200/60 pt-1 mt-1">
+                        <span className="font-extrabold text-slate-500">Phone:</span>
+                        <span className="font-bold text-slate-900 truncate max-w-[110px]">{cust.phone || 'N/A'}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="font-extrabold text-slate-500">Location:</span>
+                        <span className="font-bold text-slate-800 truncate max-w-[110px]">{cust.province || cust.address || 'N/A'}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="font-extrabold text-slate-500">Owned Cattle:</span>
+                        <span className="font-black text-amber-700">{animalCount} heads</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
 
-      {/* ── Manage National ID Verification Modal ─────── */}
-      {selectedCustomer && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/60 backdrop-blur-sm p-4">
-          <div className="bg-white rounded-3xl shadow-2xl max-w-lg w-full p-6 space-y-5 border border-slate-200">
-            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-              <h3 className="font-black text-slate-900 text-sm flex items-center gap-2">
-                <ShieldCheck className="h-4 w-4 text-purple-700" />
-                National ID Verification — {selectedCustomer.name}
-              </h3>
-              <button onClick={() => setSelectedCustomer(null)} className="text-slate-400 hover:text-slate-700 cursor-pointer">
+                {/* Card Footer Action */}
+                <div className="mt-3 pt-2.5 border-t border-slate-100 flex items-center justify-between text-xs font-bold text-purple-600">
+                  <span>View Customer Profile</span>
+                  <span className="group-hover:translate-x-0.5 transition-transform">→</span>
+                </div>
+              </Link>
+            );
+          })}
+        </div>
+      )}
+
+      {/* ── 3-Section Create / Edit Modal (NO LOGIN ACCOUNT) ───────────────────────── */}
+      {isModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/60 backdrop-blur-sm p-4 overflow-y-auto">
+          <div className="bg-white rounded-3xl shadow-2xl max-w-2xl w-full p-6 space-y-6 border border-slate-200 my-8 max-h-[90vh] overflow-y-auto animate-in fade-in zoom-in duration-150">
+            
+            {/* Modal Header */}
+            <div className="flex items-center justify-between border-b border-slate-100 pb-4">
+              <div>
+                <span className="text-[10px] font-black text-purple-600 uppercase tracking-widest block">Customer Management</span>
+                <h3 className="font-black text-slate-900 text-base flex items-center gap-2">
+                  <Users className="h-5 w-5 text-purple-600" />
+                  {editingCustomer ? 'Edit Customer Profile' : 'Create New Customer / Cow Owner'}
+                </h3>
+              </div>
+              <button onClick={() => setIsModalOpen(false)} className="text-slate-400 hover:text-slate-700 cursor-pointer">
                 <X className="h-5 w-5" />
               </button>
             </div>
 
-            <form onSubmit={handleSaveVerification} className="space-y-4 text-xs">
-              <div className="space-y-1.5">
-                <label className="font-bold text-slate-700 block">National ID Number</label>
-                <input
-                  type="text"
-                  value={nationalId}
-                  onChange={e => setNationalId(e.target.value)}
-                  placeholder="e.g. 010203040506"
-                  className="w-full px-3.5 py-2 rounded-xl border border-slate-300 font-mono font-bold focus:outline-none focus:border-purple-600"
+            <form onSubmit={handleSubmit} className="space-y-6 text-xs">
+              
+              {/* SECTION 1 — CUSTOMER INFORMATION */}
+              <div className="space-y-3.5 bg-slate-50/70 p-4 rounded-2xl border border-slate-200/80">
+                <div className="flex items-center gap-2 border-b border-slate-200/80 pb-2">
+                  <span className="h-5 w-5 rounded-md bg-purple-600 text-white font-black text-[11px] flex items-center justify-center">1</span>
+                  <h4 className="font-black text-slate-900 uppercase text-[11px] tracking-wider">SECTION 1 — CUSTOMER INFORMATION</h4>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div className="space-y-1">
+                    <label className="font-bold text-slate-700 block">Full Name *</label>
+                    <input
+                      type="text"
+                      required
+                      value={name}
+                      onChange={e => setName(e.target.value)}
+                      placeholder="e.g. Sophea Nhek"
+                      className="w-full px-3.5 py-2 rounded-xl border border-slate-300 font-bold focus:outline-none focus:ring-2 focus:ring-purple-500 bg-white"
+                    />
+                  </div>
+
+                  <div className="space-y-1">
+                    <label className="font-bold text-slate-700 block">Customer Code</label>
+                    <input
+                      type="text"
+                      value={code}
+                      onChange={e => setCode(e.target.value.toUpperCase())}
+                      placeholder="e.g. CUST-101"
+                      className="w-full px-3.5 py-2 rounded-xl border border-slate-300 font-mono font-bold focus:outline-none focus:ring-2 focus:ring-purple-500 bg-white"
+                    />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div className="space-y-1">
+                    <label className="font-bold text-slate-700 block">Customer Type</label>
+                    <select
+                      value={customerType}
+                      onChange={e => setCustomerType(e.target.value)}
+                      className="w-full px-3.5 py-2 rounded-xl border border-slate-300 font-bold focus:outline-none focus:ring-2 focus:ring-purple-500 bg-white cursor-pointer"
+                    >
+                      <option value="Individual Owner">Individual Owner</option>
+                      <option value="Farm Partner">Farm Partner</option>
+                      <option value="Commercial Breeder">Commercial Breeder</option>
+                    </select>
+                  </div>
+
+                  <div className="space-y-1">
+                    <label className="font-bold text-slate-700 block">Phone Number</label>
+                    <input
+                      type="text"
+                      value={phone}
+                      onChange={e => setPhone(e.target.value)}
+                      placeholder="e.g. 012 915 067"
+                      className="w-full px-3.5 py-2 rounded-xl border border-slate-300 font-semibold focus:outline-none focus:ring-2 focus:ring-purple-500 bg-white"
+                    />
+                  </div>
+                </div>
+
+                <div className="space-y-1">
+                  <label className="font-bold text-slate-700 block">Contact Email (Contact Information Only — Not Used For Login)</label>
+                  <input
+                    type="email"
+                    value={email}
+                    onChange={e => setEmail(e.target.value)}
+                    placeholder="e.g. sophea@gmail.com"
+                    className="w-full px-3.5 py-2 rounded-xl border border-slate-300 font-semibold focus:outline-none focus:ring-2 focus:ring-purple-500 bg-white"
+                  />
+                </div>
+
+                {/* Location Grid */}
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-1">
+                  <div>
+                    <label className="font-bold text-slate-600 block text-[10.5px]">Province</label>
+                    <input
+                      type="text"
+                      value={province}
+                      onChange={e => setProvince(e.target.value)}
+                      placeholder="e.g. Prey Veng"
+                      className="w-full px-2.5 py-1.5 rounded-lg border border-slate-300 font-semibold focus:outline-none focus:ring-2 focus:ring-purple-500 bg-white"
+                    />
+                  </div>
+                  <div>
+                    <label className="font-bold text-slate-600 block text-[10.5px]">District</label>
+                    <input
+                      type="text"
+                      value={district}
+                      onChange={e => setDistrict(e.target.value)}
+                      placeholder="e.g. Peam Ro"
+                      className="w-full px-2.5 py-1.5 rounded-lg border border-slate-300 font-semibold focus:outline-none focus:ring-2 focus:ring-purple-500 bg-white"
+                    />
+                  </div>
+                  <div>
+                    <label className="font-bold text-slate-600 block text-[10.5px]">Commune</label>
+                    <input
+                      type="text"
+                      value={commune}
+                      onChange={e => setCommune(e.target.value)}
+                      placeholder="e.g. Neak Loeung"
+                      className="w-full px-2.5 py-1.5 rounded-lg border border-slate-300 font-semibold focus:outline-none focus:ring-2 focus:ring-purple-500 bg-white"
+                    />
+                  </div>
+                  <div>
+                    <label className="font-bold text-slate-600 block text-[10.5px]">Village</label>
+                    <input
+                      type="text"
+                      value={village}
+                      onChange={e => setVillage(e.target.value)}
+                      placeholder="e.g. Village 1"
+                      className="w-full px-2.5 py-1.5 rounded-lg border border-slate-300 font-semibold focus:outline-none focus:ring-2 focus:ring-purple-500 bg-white"
+                    />
+                  </div>
+                </div>
+
+                <div className="space-y-1">
+                  <label className="font-bold text-slate-700 block">Full Address</label>
+                  <input
+                    type="text"
+                    value={address}
+                    onChange={e => setAddress(e.target.value)}
+                    placeholder="Street, Village, Commune, District, Province..."
+                    className="w-full px-3.5 py-2 rounded-xl border border-slate-300 font-semibold focus:outline-none focus:ring-2 focus:ring-purple-500 bg-white"
+                  />
+                </div>
+              </div>
+
+              {/* SECTION 2 — IDENTIFICATION */}
+              <div className="space-y-3.5 bg-slate-50/70 p-4 rounded-2xl border border-slate-200/80">
+                <div className="flex items-center gap-2 border-b border-slate-200/80 pb-2">
+                  <span className="h-5 w-5 rounded-md bg-purple-600 text-white font-black text-[11px] flex items-center justify-center">2</span>
+                  <h4 className="font-black text-slate-900 uppercase text-[11px] tracking-wider">SECTION 2 — IDENTIFICATION</h4>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div className="space-y-1">
+                    <label className="font-bold text-slate-700 block">National ID Number</label>
+                    <input
+                      type="text"
+                      value={nationalId}
+                      onChange={e => setNationalId(e.target.value)}
+                      placeholder="e.g. ID-KH-300301"
+                      className="w-full px-3.5 py-2 rounded-xl border border-slate-300 font-mono font-bold focus:outline-none focus:ring-2 focus:ring-purple-500 bg-white"
+                    />
+                  </div>
+
+                  <div className="space-y-1">
+                    <label className="font-bold text-slate-700 block">Verification Status</label>
+                    <select
+                      value={idVerificationStatus}
+                      onChange={e => setIdVerificationStatus(e.target.value)}
+                      className="w-full px-3.5 py-2 rounded-xl border border-slate-300 font-bold focus:outline-none focus:ring-2 focus:ring-purple-500 bg-white cursor-pointer"
+                    >
+                      <option value="Verified">Verified</option>
+                      <option value="Pending">Pending</option>
+                      <option value="Unverified">Unverified</option>
+                    </select>
+                  </div>
+                </div>
+              </div>
+
+              {/* SECTION 3 — CUSTOMER IMAGE */}
+              <div className="space-y-3.5 bg-slate-50/70 p-4 rounded-2xl border border-slate-200/80">
+                <div className="flex items-center gap-2 border-b border-slate-200/80 pb-2">
+                  <span className="h-5 w-5 rounded-md bg-purple-600 text-white font-black text-[11px] flex items-center justify-center">3</span>
+                  <h4 className="font-black text-slate-900 uppercase text-[11px] tracking-wider">SECTION 3 — CUSTOMER IMAGE</h4>
+                </div>
+
+                <DynamicUpload
+                  label="Customer Profile Image (Up to 200 MB)"
+                  value={imageUrl}
+                  onChange={(url) => setImageUrl(url)}
+                  targetSizeText="Supports up to 200 MB (Auto-optimized & compressed)"
                 />
               </div>
 
-              <div className="space-y-1.5">
-                <label className="font-bold text-slate-700 block">Verification Status</label>
-                <select
-                  value={verificationStatus}
-                  onChange={e => setVerificationStatus(e.target.value)}
-                  className="w-full px-3.5 py-2 rounded-xl border border-slate-300 font-bold focus:outline-none focus:border-purple-600"
-                >
-                  <option value="Pending">Pending</option>
-                  <option value="Under Review">Under Review</option>
-                  <option value="Verified">Verified</option>
-                  <option value="Action Required">Action Required</option>
-                  <option value="Rejected">Rejected</option>
-                </select>
-              </div>
-
-              <div className="space-y-1.5">
-                <label className="font-bold text-slate-700 block">National ID Front Image URL</label>
-                <input
-                  type="text"
-                  value={idFrontUrl}
-                  onChange={e => setIdFrontUrl(e.target.value)}
-                  placeholder="https://..."
-                  className="w-full px-3.5 py-2 rounded-xl border border-slate-300 font-medium focus:outline-none focus:border-purple-600"
-                />
-              </div>
-
-              <div className="space-y-1.5">
-                <label className="font-bold text-slate-700 block">National ID Back Image URL</label>
-                <input
-                  type="text"
-                  value={idBackUrl}
-                  onChange={e => setIdBackUrl(e.target.value)}
-                  placeholder="https://..."
-                  className="w-full px-3.5 py-2 rounded-xl border border-slate-300 font-medium focus:outline-none focus:border-purple-600"
-                />
-              </div>
-
-              <div className="bg-amber-50 p-3 rounded-xl border border-amber-100 text-[11px] text-amber-900 font-medium">
-                🔒 <strong>Privacy Protection:</strong> National ID documents and numbers are encrypted and strictly private. They will <strong>never</strong> be shown on public QR verification pages or certificate exports.
-              </div>
-
-              <div className="flex gap-3 justify-end pt-3 border-t border-slate-100">
+              {/* Submit Buttons */}
+              <div className="flex items-center justify-end gap-3 pt-3 border-t border-slate-100">
                 <button
                   type="button"
-                  onClick={() => setSelectedCustomer(null)}
-                  className="px-4 py-2 rounded-xl border border-slate-200 text-xs font-bold text-slate-700 hover:bg-slate-50 cursor-pointer"
+                  onClick={() => setIsModalOpen(false)}
+                  className="px-4 py-2 bg-slate-100 text-slate-700 font-bold rounded-xl hover:bg-slate-200 cursor-pointer"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
                   disabled={saving}
-                  className="px-5 py-2 rounded-xl bg-purple-700 text-white text-xs font-black hover:bg-purple-800 cursor-pointer disabled:opacity-50"
+                  className="px-5 py-2.5 bg-purple-600 text-white font-black rounded-xl hover:bg-purple-700 shadow-md cursor-pointer flex items-center gap-2"
                 >
-                  {saving ? 'Saving...' : 'Save Verification Status'}
+                  {saving ? 'Saving Customer Record...' : (editingCustomer ? 'Update Customer' : 'Create Customer Record')}
                 </button>
               </div>
+
             </form>
           </div>
         </div>

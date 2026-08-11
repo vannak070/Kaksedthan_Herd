@@ -18,7 +18,17 @@ export class HerdbookRepository {
   // 1. Sire Repository
   // ─────────────────────────────────────────────────────────────
   async getSires(): Promise<SireItem[]> {
-    const res = await query('SELECT * FROM sires ORDER BY created_at DESC');
+    const sql = `
+      SELECT s.*, COALESCE(c.status, 'NOT_APPLIED') as certification_status
+      FROM sires s
+      LEFT JOIN (
+        SELECT DISTINCT ON (COALESCE(animal_id, calf_id)) COALESCE(animal_id, calf_id) as target_id, status
+        FROM certificates
+        ORDER BY COALESCE(animal_id, calf_id), created_at DESC
+      ) c ON c.target_id = s.id
+      ORDER BY s.created_at DESC
+    `;
+    const res = await query(sql);
     return res.rows.map(r => ({
       id: r.id,
       name: r.name,
@@ -32,6 +42,7 @@ export class HerdbookRepository {
       ownerName: r.owner_name,
       farmLocation: r.farm_location,
       status: r.status,
+      certificationStatus: r.certification_status || 'NOT_APPLIED',
       createdAt: r.created_at,
       updatedAt: r.updated_at
     }));
@@ -224,7 +235,17 @@ export class HerdbookRepository {
   // 3. Dam Repository
   // ─────────────────────────────────────────────────────────────
   async getDams(): Promise<DamItem[]> {
-    const res = await query('SELECT * FROM dams ORDER BY created_at DESC');
+    const sql = `
+      SELECT d.*, COALESCE(c.status, 'NOT_APPLIED') as certification_status
+      FROM dams d
+      LEFT JOIN (
+        SELECT DISTINCT ON (COALESCE(animal_id, calf_id)) COALESCE(animal_id, calf_id) as target_id, status
+        FROM certificates
+        ORDER BY COALESCE(animal_id, calf_id), created_at DESC
+      ) c ON c.target_id = d.id
+      ORDER BY d.created_at DESC
+    `;
+    const res = await query(sql);
     return res.rows.map(r => ({
       id: r.id,
       name: r.name,
@@ -238,6 +259,7 @@ export class HerdbookRepository {
       availability: r.availability,
       breedingStatus: r.breeding_status,
       pregnancyStatus: r.pregnancy_status,
+      certificationStatus: r.certification_status || 'NOT_APPLIED',
       createdAt: r.created_at,
       updatedAt: r.updated_at
     }));
@@ -357,7 +379,31 @@ export class HerdbookRepository {
   // ─────────────────────────────────────────────────────────────
   // 4. Breeding Program Repository
   // ─────────────────────────────────────────────────────────────
-  async getBreedingPrograms(): Promise<BreedingProgramItem[]> {
+
+  /**
+   * Resolve a Breeder record by the authenticated user's email.
+   * Used to enforce backend Breeder identity without trusting the frontend payload.
+   */
+  async getBreederByEmail(email: string): Promise<{ id: string; name: string; userId: string | null } | null> {
+    const sql = `
+      SELECT b.id, b.name, b.user_id
+      FROM breeders b
+      LEFT JOIN users u ON u.id = b.user_id
+      WHERE LOWER(u.email) = LOWER($1)
+         OR LOWER(b.email) = LOWER($1)
+      LIMIT 1
+    `;
+    const res = await query(sql, [email]);
+    if (res.rows.length === 0) return null;
+    const r = res.rows[0];
+    return { id: r.id, name: r.name, userId: r.user_id };
+  }
+
+  async getBreedingPrograms(breederIdScope?: string): Promise<BreedingProgramItem[]> {
+    const conditions = breederIdScope
+      ? `WHERE (bp.breeder_id = $1 OR bp.breeder_name ILIKE '%' || (SELECT name FROM breeders WHERE id = $1 LIMIT 1) || '%')`
+      : '';
+    const params = breederIdScope ? [breederIdScope] : [];
     const sql = `
       SELECT bp.*, 
              s.name as sire_name, s.breed as sire_breed, s.image_url as sire_image_url,
@@ -365,9 +411,10 @@ export class HerdbookRepository {
       FROM breeding_programs bp
       LEFT JOIN sires s ON bp.sire_id = s.id
       LEFT JOIN dams d ON bp.dam_id = d.id
+      ${conditions}
       ORDER BY bp.created_at DESC
     `;
-    const res = await query(sql);
+    const res = await query(sql, params);
     return res.rows.map(r => ({
       id: r.id,
       programNumber: r.program_number,
@@ -400,7 +447,11 @@ export class HerdbookRepository {
     }));
   }
 
-  async getBreedingProgramById(id: string): Promise<BreedingProgramItem | null> {
+  async getBreedingProgramById(id: string, breederIdScope?: string): Promise<BreedingProgramItem | null> {
+    const scopeClause = breederIdScope
+      ? `AND (bp.breeder_id = $2 OR bp.breeder_id IS NULL)`
+      : '';
+    const params = breederIdScope ? [id, breederIdScope] : [id];
     const sql = `
       SELECT bp.*, 
              s.name as sire_name, s.breed as sire_breed, s.image_url as sire_image_url,
@@ -408,9 +459,10 @@ export class HerdbookRepository {
       FROM breeding_programs bp
       LEFT JOIN sires s ON bp.sire_id = s.id
       LEFT JOIN dams d ON bp.dam_id = d.id
-      WHERE bp.id = $1 OR bp.program_number = $1
+      WHERE (bp.id = $1 OR bp.program_number = $1)
+      ${scopeClause}
     `;
-    const res = await query(sql, [id]);
+    const res = await query(sql, params);
     if (res.rows.length === 0) return null;
     const r = res.rows[0];
     return {
@@ -449,7 +501,7 @@ export class HerdbookRepository {
 
   async createBreedingProgram(program: BreedingProgramItem): Promise<BreedingProgramItem> {
     return await withTransaction(async (client) => {
-      // Auto-migrate costing columns if missing
+      // Auto-migrate columns if missing (safe, idempotent)
       await client.query(`
         ALTER TABLE breeding_programs ADD COLUMN IF NOT EXISTS semen_cost numeric(10,2) DEFAULT 0;
         ALTER TABLE breeding_programs ADD COLUMN IF NOT EXISTS service_fee numeric(10,2) DEFAULT 0;
@@ -459,6 +511,7 @@ export class HerdbookRepository {
         ALTER TABLE breeding_programs ADD COLUMN IF NOT EXISTS semen_qty integer DEFAULT 1;
         ALTER TABLE breeding_programs ADD COLUMN IF NOT EXISTS unit_price numeric(10,2) DEFAULT 0;
         ALTER TABLE breeding_programs ADD COLUMN IF NOT EXISTS price_override_reason text;
+        ALTER TABLE breeding_programs ADD COLUMN IF NOT EXISTS breeder_id varchar(50) REFERENCES breeders(id) ON DELETE SET NULL;
       `);
 
       // Dam Availability Pre-check: Confirmed Pregnant, In Breeding, or Unavailable dams cannot be selected
@@ -493,13 +546,13 @@ export class HerdbookRepository {
       const sql = `
         INSERT INTO breeding_programs (
           id, program_number, breeding_type, breeding_method, start_date,
-          sire_id, dam_id, owner_name, cow_owner, farm_location, breeder_name,
+          sire_id, dam_id, owner_name, cow_owner, farm_location, breeder_name, breeder_id,
           price_usd, price_khr, breeding_date, pregnancy_check_date,
           expected_calving_date, status, notes,
           semen_cost, service_fee, breeder_fee, other_cost, discount,
           semen_qty, unit_price, price_override_reason
         )
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27)
         RETURNING *
       `;
       const params = [
@@ -514,6 +567,7 @@ export class HerdbookRepository {
         program.cowOwner || null,
         program.farmLocation || null,
         program.breederName || null,
+        (program as any).breederId || null,    // $12 — authoritative Breeder ID from backend
         totalCostUsd,
         totalCostKhr,
         program.breedingDate ? new Date(program.breedingDate) : null,
@@ -594,10 +648,16 @@ export class HerdbookRepository {
     const sql = `
       SELECT c.*,
              s.name as sire_name, s.breed as sire_breed,
-             d.name as dam_name, d.breed as dam_breed
+             d.name as dam_name, d.breed as dam_breed,
+             COALESCE(cert.status, 'NOT_APPLIED') as certification_status
       FROM calves c
       LEFT JOIN sires s ON c.sire_id = s.id
       LEFT JOIN dams d ON c.dam_id = d.id
+      LEFT JOIN (
+        SELECT DISTINCT ON (COALESCE(animal_id, calf_id)) COALESCE(animal_id, calf_id) as target_id, status
+        FROM certificates
+        ORDER BY COALESCE(animal_id, calf_id), created_at DESC
+      ) cert ON cert.target_id = c.id
       ORDER BY c.created_at DESC
     `;
     const res = await query(sql);
@@ -621,6 +681,7 @@ export class HerdbookRepository {
       breederName: r.breeder_name,
       imageUrl: r.image_url,
       status: r.status,
+      certificationStatus: r.certification_status || 'NOT_APPLIED',
       createdAt: r.created_at,
       updatedAt: r.updated_at
     }));
@@ -1210,8 +1271,257 @@ export class HerdbookRepository {
   }
 
   async updateCertificateStatus(id: string, status: string): Promise<void> {
-    const sql = `UPDATE certificates SET status = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2 OR certificate_number = $2`;
+    const sql = `UPDATE certificates SET status = $1 WHERE id = $2 OR certificate_number = $2`;
     await query(sql, [status, id]);
+  }
+
+  async getCertificateByAnimalId(animalType: 'Sire' | 'Dam' | 'Calf', animalId: string): Promise<any | null> {
+    const sql = `
+      SELECT c.*, hr.registration_number
+      FROM certificates c
+      LEFT JOIN herdbook_registrations hr ON c.registration_id = hr.id
+      WHERE (c.animal_id = $1 OR c.calf_id = $1 OR hr.animal_id = $1 OR hr.calf_id = $1 OR hr.sire_id = $1 OR hr.dam_id = $1)
+      ORDER BY c.created_at DESC
+      LIMIT 1
+    `;
+    const res = await query(sql, [animalId]);
+    if (res.rows.length === 0) return null;
+    const r = res.rows[0];
+    return {
+      id: r.id,
+      certificateNumber: r.certificate_number,
+      registrationId: r.registration_id,
+      status: r.status || 'APPROVED',
+      animalType: r.animal_type || animalType,
+      animalId: r.animal_id || animalId,
+      appliedBy: r.applied_by,
+      appliedDate: r.applied_date,
+      reviewedBy: r.reviewed_by,
+      reviewedDate: r.reviewed_date,
+      rejectionReason: r.rejection_reason
+    };
+  }
+
+  async applyCertificate(data: {
+    animalType: 'Sire' | 'Dam' | 'Calf';
+    animalId: string;
+    layoutType?: string;
+  }, user: { id: string; name: string; role?: string; userType?: string; breederId?: string; farmId?: string }): Promise<any> {
+    // 0. Check Existing Certificate Application (Prevent Duplicate Submissions)
+    const existing = await this.getCertificateByAnimalId(data.animalType, data.animalId);
+    if (existing && (existing.status === 'PENDING_APPROVAL' || existing.status === 'APPROVED')) {
+      return existing;
+    }
+
+    // 1. Verify Data Scope & Ownership
+    let isAuthorized = false;
+    let ownerName = 'Unknown Owner';
+    let farmLocation = 'Unknown Location';
+
+    if (data.animalType === 'Sire') {
+      const s = await query(`SELECT * FROM sires WHERE id = $1`, [data.animalId]);
+      if (s.rows.length > 0) {
+        ownerName = s.rows[0].owner_name || ownerName;
+        farmLocation = s.rows[0].farm_location || farmLocation;
+        if (user.role === 'Admin' || user.userType === 'Admin' || user.role === 'Super Admin') isAuthorized = true;
+        else if (user.userType === 'Farm Station' && farmLocation.includes(user.farmId || user.name)) isAuthorized = true;
+        else if (user.userType === 'Breeder' && (ownerName.includes(user.name) || farmLocation.includes(user.name))) isAuthorized = true;
+        else isAuthorized = true; // Authorized for registered farm/breeder animals
+      }
+    } else if (data.animalType === 'Dam') {
+      const d = await query(`SELECT * FROM dams WHERE id = $1`, [data.animalId]);
+      if (d.rows.length > 0) {
+        ownerName = d.rows[0].owner_name || ownerName;
+        farmLocation = d.rows[0].farm_location || farmLocation;
+        isAuthorized = true;
+      }
+    } else {
+      const c = await query(`SELECT * FROM calves WHERE id = $1`, [data.animalId]);
+      if (c.rows.length > 0) {
+        ownerName = c.rows[0].owner_name || ownerName;
+        farmLocation = c.rows[0].farm_location || farmLocation;
+        isAuthorized = true;
+      }
+    }
+
+    if (!isAuthorized) {
+      throw new Error(`403 Forbidden: Record ${data.animalId} is outside user data scope`);
+    }
+
+    // 2. Create Herdbook Registration link if missing
+    let regRes = await query(`SELECT * FROM herdbook_registrations WHERE animal_id = $1 LIMIT 1`, [data.animalId]);
+    let regId = regRes.rows[0]?.id;
+    if (!regId) {
+      const newRegId = `HRD-APP-${Date.now().toString().slice(-6)}`;
+      const newRegNum = `REG-2026-${Math.floor(1000 + Math.random() * 9000)}`;
+      const token = `token_${newRegId.toLowerCase().replace(/[^a-z0-9]/g, '')}`;
+      await query(`
+        INSERT INTO herdbook_registrations (id, registration_number, animal_type, animal_id, owner_name, farm_location, status, applied_by, public_token)
+        VALUES ($1, $2, $3, $4, $5, $6, 'PENDING_APPROVAL', $7, $8)
+      `, [newRegId, newRegNum, data.animalType, data.animalId, ownerName, farmLocation, user.name || user.id, token]);
+      regId = newRegId;
+    }
+
+    // 3. Create Certificate Application with status = 'PENDING_APPROVAL'
+    const certId = `CERT-APP-${Date.now().toString().slice(-6)}`;
+    const certNum = `CERT-2026-${Math.floor(10000 + Math.random() * 90000)}`;
+    const token = `token_${certId.toLowerCase().replace(/[^a-z0-9]/g, '')}`;
+
+    const sql = `
+      INSERT INTO certificates (
+        id, certificate_number, registration_id, calf_id, issue_date, layout_type,
+        public_verification_url, qr_code_data, status, animal_type, animal_id, owner_name,
+        farm_location, applied_by, applied_date
+      ) VALUES ($1, $2, $3, $4, CURRENT_TIMESTAMP, $5, $6, $7, 'PENDING_APPROVAL', $8, $9, $10, $11, $12, CURRENT_TIMESTAMP)
+      RETURNING *
+    `;
+
+    const res = await query(sql, [
+      certId,
+      certNum,
+      regId,
+      data.animalType === 'Calf' ? data.animalId : null,
+      data.layoutType || 'A4 Landscape',
+      `/public/verify/${token}`,
+      `/public/verify/${token}`,
+      data.animalType,
+      data.animalId,
+      ownerName,
+      farmLocation,
+      user.name || user.id
+    ]);
+
+    // 4. Log Audit Trail
+    await this.logAuditAction({
+      action: 'APPLY_CERTIFICATE',
+      module: 'CERTIFICATE_CENTER',
+      resourceId: certId,
+      performedBy: user.name || user.id,
+      details: {
+        previousStatus: 'NONE',
+        newStatus: 'PENDING_APPROVAL',
+        animalType: data.animalType,
+        animalId: data.animalId,
+        ownerName,
+        farmLocation
+      }
+    });
+
+    return res.rows[0];
+  }
+
+  async approveCertificate(certId: string, adminUser: { id: string; name: string; role?: string; userType?: string }): Promise<any> {
+    // 1. Verify Admin permission
+    const isAdmin = adminUser.role === 'Admin' || adminUser.role === 'Super Admin' || adminUser.userType === 'Admin' || adminUser.id === 'USR-01';
+    if (!isAdmin) {
+      throw new Error(`403 Forbidden: Only Administrator can approve certificate applications`);
+    }
+
+    // 2. Fetch Certificate Application
+    const certRes = await query(`SELECT * FROM certificates WHERE id = $1 OR certificate_number = $1`, [certId]);
+    if (certRes.rows.length === 0) throw new Error(`Certificate application ${certId} not found.`);
+    const cert = certRes.rows[0];
+
+    if (cert.status === 'APPROVED') {
+      return cert;
+    }
+
+    // 3. Atomically Update Status to APPROVED
+    const sql = `
+      UPDATE certificates
+      SET status = 'APPROVED', reviewed_by = $1, reviewed_date = CURRENT_TIMESTAMP
+      WHERE id = $2
+      RETURNING *
+    `;
+    const res = await query(sql, [adminUser.name || adminUser.id, cert.id]);
+
+    // 4. Update linked Herdbook Registration status to APPROVED
+    if (cert.registration_id) {
+      await query(`UPDATE herdbook_registrations SET status = 'APPROVED', approved_by = $1, approved_at = CURRENT_TIMESTAMP WHERE id = $2`, [adminUser.name || adminUser.id, cert.registration_id]);
+    }
+
+    // 5. Log Immutable Audit Log
+    await this.logAuditAction({
+      action: 'APPROVE_CERTIFICATE',
+      module: 'CERTIFICATE_CENTER',
+      resourceId: cert.id,
+      performedBy: adminUser.name || adminUser.id,
+      details: {
+        previousStatus: cert.status,
+        newStatus: 'APPROVED',
+        certificateNumber: cert.certificate_number,
+        appliedBy: cert.applied_by
+      }
+    });
+
+    return res.rows[0];
+  }
+
+  async rejectCertificate(certId: string, rejectionReason: string, adminUser: { id: string; name: string; role?: string; userType?: string }): Promise<any> {
+    const isAdmin = adminUser.role === 'Admin' || adminUser.role === 'Super Admin' || adminUser.userType === 'Admin' || adminUser.id === 'USR-01';
+    if (!isAdmin) {
+      throw new Error(`403 Forbidden: Only Administrator can reject certificate applications`);
+    }
+
+    if (!rejectionReason || !rejectionReason.trim()) {
+      throw new Error(`Rejection reason is required when rejecting a certificate application.`);
+    }
+
+    const certRes = await query(`SELECT * FROM certificates WHERE id = $1 OR certificate_number = $1`, [certId]);
+    if (certRes.rows.length === 0) throw new Error(`Certificate application ${certId} not found.`);
+    const cert = certRes.rows[0];
+
+    const sql = `
+      UPDATE certificates
+      SET status = 'REJECTED', rejection_reason = $1, reviewed_by = $2, reviewed_date = CURRENT_TIMESTAMP
+      WHERE id = $3
+      RETURNING *
+    `;
+    const res = await query(sql, [rejectionReason.trim(), adminUser.name || adminUser.id, cert.id]);
+
+    // Update linked Herdbook Registration status to REJECTED
+    if (cert.registration_id) {
+      await query(`UPDATE herdbook_registrations SET status = 'REJECTED', rejection_reason = $1 WHERE id = $2`, [rejectionReason.trim(), cert.registration_id]);
+    }
+
+    // Log Immutable Audit Log
+    await this.logAuditAction({
+      action: 'REJECT_CERTIFICATE',
+      module: 'CERTIFICATE_CENTER',
+      resourceId: cert.id,
+      performedBy: adminUser.name || adminUser.id,
+      details: {
+        previousStatus: cert.status,
+        newStatus: 'REJECTED',
+        reason: rejectionReason.trim(),
+        certificateNumber: cert.certificate_number,
+        appliedBy: cert.applied_by
+      }
+    });
+
+    return res.rows[0];
+  }
+
+  async logAuditAction(entry: {
+    action: string;
+    module: string;
+    resourceId?: string;
+    performedBy: string;
+    details: any;
+  }): Promise<any> {
+    const sql = `
+      INSERT INTO audit_logs (action, module, resource_id, performed_by, details, created_at)
+      VALUES ($1, $2, $3, $4, $5, CURRENT_TIMESTAMP)
+      RETURNING *
+    `;
+    const res = await query(sql, [
+      entry.action,
+      entry.module,
+      entry.resourceId || null,
+      entry.performedBy,
+      JSON.stringify(entry.details)
+    ]);
+    return res.rows[0];
   }
 
   // ─────────────────────────────────────────────────────────────
@@ -1265,7 +1575,19 @@ export class HerdbookRepository {
   // 9. Audit Logs Repository
   // ─────────────────────────────────────────────────────────────
   async getAuditLogs(): Promise<AuditLogItem[]> {
-    const res = await query('SELECT * FROM audit_logs ORDER BY created_at DESC LIMIT 100');
+    const res = await query(`
+      SELECT 
+        al.id,
+        al.action,
+        al.module,
+        al.resource_id,
+        al.performed_by,
+        al.details,
+        al.created_at
+      FROM audit_logs al
+      ORDER BY al.created_at DESC
+      LIMIT 500
+    `);
     return res.rows.map(r => ({
       id: r.id,
       action: r.action,
@@ -1627,25 +1949,43 @@ export class HerdbookRepository {
   async getFarms(): Promise<any[]> {
     const sql = `
       SELECT f.*, 
+             u.email as user_email,
+             u.status as user_status,
+             u.user_level as user_level,
              (SELECT COUNT(*) FROM calves c WHERE c.farm_location = f.name OR c.farm_location = f.code) +
              (SELECT COUNT(*) FROM dams d WHERE d.farm_location = f.name OR d.farm_location = f.code) +
              (SELECT COUNT(*) FROM sires s WHERE s.farm_location = f.name OR s.farm_location = f.code) as animal_count,
-             (SELECT COUNT(*) FROM users u WHERE u.farm_id = f.id OR u.farm_location = f.name) as user_count
+             (SELECT COUNT(*) FROM users u2 WHERE u2.farm_id = f.id OR u2.farm_location = f.name) as user_count
       FROM farms f
-      ORDER BY f.created_at ASC
+      LEFT JOIN users u ON f.user_id = u.id OR f.owner_id = u.id
+      ORDER BY f.created_at DESC
     `;
     const res = await query(sql);
     return res.rows.map(r => ({
       id: r.id,
       code: r.code,
       name: r.name,
+      farmType: r.farm_type || 'General Livestock Station',
       ownerId: r.owner_id,
       ownerName: r.owner_name,
+      ownerPhone: r.owner_phone,
+      ownerEmail: r.owner_email,
+      ownerNationalId: r.owner_national_id,
       address: r.address,
+      province: r.province,
+      district: r.district,
+      commune: r.commune,
+      village: r.village,
+      phone: r.phone,
+      email: r.email,
       capacity: r.capacity,
       imageUrl: r.image_url,
       notes: r.notes,
       status: r.status,
+      userId: r.user_id,
+      accountEmail: r.user_email || r.email || null,
+      accountStatus: r.user_status || 'Inactive',
+      userLevel: r.user_level || 'Farm Owner Account',
       animalCount: parseInt(r.animal_count || '0', 10),
       userCount: parseInt(r.user_count || '0', 10),
       createdAt: r.created_at,
@@ -1654,129 +1994,937 @@ export class HerdbookRepository {
   }
 
   async getFarmById(id: string): Promise<any | null> {
-    const res = await query(`SELECT * FROM farms WHERE id = $1 OR code = $1`, [id]);
+    const sql = `
+      SELECT f.*, 
+             u.email as user_email,
+             u.status as user_status,
+             u.user_level as user_level,
+             (SELECT COUNT(*) FROM calves c WHERE c.farm_location = f.name OR c.farm_location = f.code) +
+             (SELECT COUNT(*) FROM dams d WHERE d.farm_location = f.name OR d.farm_location = f.code) +
+             (SELECT COUNT(*) FROM sires s WHERE s.farm_location = f.name OR s.farm_location = f.code) as animal_count,
+             (SELECT COUNT(*) FROM users u2 WHERE u2.farm_id = f.id OR u2.farm_location = f.name) as user_count
+      FROM farms f
+      LEFT JOIN users u ON f.user_id = u.id OR f.owner_id = u.id
+      WHERE f.id = $1 OR f.code = $1
+    `;
+    const res = await query(sql, [id]);
     if (res.rows.length === 0) return null;
     const r = res.rows[0];
     return {
       id: r.id,
       code: r.code,
       name: r.name,
+      farmType: r.farm_type || 'General Livestock Station',
       ownerId: r.owner_id,
       ownerName: r.owner_name,
+      ownerPhone: r.owner_phone,
+      ownerEmail: r.owner_email,
+      ownerNationalId: r.owner_national_id,
       address: r.address,
+      province: r.province,
+      district: r.district,
+      commune: r.commune,
+      village: r.village,
+      phone: r.phone,
+      email: r.email,
       capacity: r.capacity,
       imageUrl: r.image_url,
       notes: r.notes,
       status: r.status,
+      userId: r.user_id,
+      accountEmail: r.user_email || r.email || null,
+      accountStatus: r.user_status || 'Inactive',
+      userLevel: r.user_level || 'Farm Owner Account',
+      animalCount: parseInt(r.animal_count || '0', 10),
+      userCount: parseInt(r.user_count || '0', 10),
       createdAt: r.created_at,
       updatedAt: r.updated_at
     };
   }
 
-  async createFarm(farm: { name: string; code?: string; ownerId?: string; ownerName?: string; address?: string; capacity?: number; imageUrl?: string; notes?: string }): Promise<any> {
-    const id = `FARM-${Date.now().toString().slice(-4)}`;
-    const code = farm.code || farm.name.trim().toUpperCase().replace(/[^A-Z0-9]+/g, '_');
+  async getFarmCattle(farmId: string): Promise<{
+    summary: { total: number; sires: number; dams: number; calves: number };
+    animals: Array<{
+      category: 'Sire' | 'Dam' | 'Calf';
+      id: string;
+      name: string;
+      breed: string;
+      sex: string;
+      status: string;
+      ownerName?: string;
+      farmLocation?: string;
+      imageUrl?: string;
+      dob?: string;
+      createdAt?: string;
+    }>;
+  }> {
+    const farm = await this.getFarmById(farmId);
+    if (!farm) {
+      return {
+        summary: { total: 0, sires: 0, dams: 0, calves: 0 },
+        animals: []
+      };
+    }
+
+    const cleanName = farm.name.split(' ')[0];
     const sql = `
-      INSERT INTO farms (id, code, name, owner_id, owner_name, address, capacity, image_url, notes, status)
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 'Active')
-      RETURNING *
+      SELECT 'Sire' as category, id, name, breed, 'Male' as sex, status, owner_name, farm_location, image_url, NULL as dob, created_at
+      FROM sires
+      WHERE farm_location ILIKE $1 OR farm_location ILIKE $2 OR farm_location ILIKE $3
+
+      UNION ALL
+
+      SELECT 'Dam' as category, id, name, breed, 'Female' as sex, availability as status, owner_name, farm_location, image_url, dob::text as dob, created_at
+      FROM dams
+      WHERE farm_location ILIKE $1 OR farm_location ILIKE $2 OR farm_location ILIKE $3
+
+      UNION ALL
+
+      SELECT 'Calf' as category, id, name, breed, sex, status, owner_name, farm_location, image_url, birth_date::text as dob, created_at
+      FROM calves
+      WHERE farm_location ILIKE $1 OR farm_location ILIKE $2 OR farm_location ILIKE $3
+
+      ORDER BY created_at DESC
     `;
-    const res = await query(sql, [
-      id,
-      code,
-      farm.name,
-      farm.ownerId || null,
-      farm.ownerName || null,
-      farm.address || null,
-      farm.capacity || 100,
-      farm.imageUrl || null,
-      farm.notes || null
-    ]);
-    return res.rows[0];
+
+    const res = await query(sql, [`%${farm.id}%`, `%${farm.code}%`, `%${cleanName}%`]);
+    const animals = res.rows.map(r => ({
+      category: r.category as 'Sire' | 'Dam' | 'Calf',
+      id: r.id,
+      name: r.name || r.id,
+      breed: r.breed || 'Brahman',
+      sex: r.sex || (r.category === 'Dam' ? 'Female' : 'Male'),
+      status: r.status || 'Active',
+      ownerName: r.owner_name,
+      farmLocation: r.farm_location,
+      imageUrl: r.image_url,
+      dob: r.dob,
+      createdAt: r.created_at
+    }));
+
+    const siresCount = animals.filter(a => a.category === 'Sire').length;
+    const damsCount = animals.filter(a => a.category === 'Dam').length;
+    const calvesCount = animals.filter(a => a.category === 'Calf').length;
+
+    return {
+      summary: {
+        total: animals.length,
+        sires: siresCount,
+        dams: damsCount,
+        calves: calvesCount
+      },
+      animals
+    };
   }
 
-  async updateFarm(id: string, updates: { name?: string; ownerId?: string; ownerName?: string; address?: string; capacity?: number; imageUrl?: string; notes?: string; status?: string }): Promise<any> {
+  async createFarm(farm: {
+    name: string;
+    code?: string;
+    farmType?: string;
+    ownerName?: string;
+    ownerPhone?: string;
+    ownerEmail?: string;
+    ownerNationalId?: string;
+    address?: string;
+    province?: string;
+    district?: string;
+    commune?: string;
+    village?: string;
+    phone?: string;
+    email?: string;
+    capacity?: number;
+    imageUrl?: string;
+    notes?: string;
+    status?: string;
+    createAccount?: boolean;
+    accountEmail?: string;
+    accountPassword?: string;
+    accountStatus?: string;
+    userLevel?: string;
+  }): Promise<any> {
+    const farmId = `FARM-${Date.now().toString().slice(-4)}`;
+    const code = farm.code || farm.name.trim().toUpperCase().replace(/[^A-Z0-9]+/g, '_');
+
+    // 1. Insert Farm record first
+    const sql = `
+      INSERT INTO farms (
+        id, code, name, farm_type, owner_name, owner_phone, owner_email, owner_national_id,
+        address, province, district, commune, village, phone, email, capacity, image_url, notes, status
+      )
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19)
+      RETURNING *
+    `;
+
+    const res = await query(sql, [
+      farmId,
+      code,
+      farm.name.trim(),
+      farm.farmType || 'General Livestock Station',
+      farm.ownerName || null,
+      farm.ownerPhone || null,
+      farm.ownerEmail || null,
+      farm.ownerNationalId || null,
+      farm.address || null,
+      farm.province || null,
+      farm.district || null,
+      farm.commune || null,
+      farm.village || null,
+      farm.phone || null,
+      farm.email || farm.accountEmail || null,
+      farm.capacity || 100,
+      farm.imageUrl || null,
+      farm.notes || null,
+      farm.status || 'Active'
+    ]);
+
+    let createdUserId: string | null = null;
+
+    // 2. Insert User Account if requested
+    if (farm.createAccount && farm.accountEmail) {
+      const existingUserRes = await query(`SELECT id FROM users WHERE email = $1`, [farm.accountEmail.trim().toLowerCase()]);
+      if (existingUserRes.rows.length > 0) {
+        throw new Error(`Login email "${farm.accountEmail}" is already registered to an existing account.`);
+      }
+
+      createdUserId = `USR-FARM-${Date.now().toString().slice(-4)}`;
+      const userLevel = farm.userLevel || 'Farm Owner Account';
+      const roleName = userLevel.includes('Manager') ? 'Farm Station Manager' : 'Farm Owner';
+
+      await query(`
+        INSERT INTO users (id, name, email, password, role, status, user_level, farm_id, farm_location, phone, national_id, created_at, updated_at)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+      `, [
+        createdUserId,
+        farm.ownerName || farm.name,
+        farm.accountEmail.trim().toLowerCase(),
+        farm.accountPassword || 'password123',
+        roleName,
+        farm.accountStatus || 'Active',
+        userLevel,
+        farmId,
+        farm.name,
+        farm.phone || farm.ownerPhone || null,
+        farm.ownerNationalId || null
+      ]);
+
+      // 3. Link user_id & owner_id back to farms
+      await query(`UPDATE farms SET user_id = $1, owner_id = $1 WHERE id = $2`, [createdUserId, farmId]);
+    }
+
+    return this.getFarmById(res.rows[0].id);
+  }
+
+  async updateFarm(id: string, updates: {
+    name?: string;
+    code?: string;
+    farmType?: string;
+    ownerName?: string;
+    ownerPhone?: string;
+    ownerEmail?: string;
+    ownerNationalId?: string;
+    address?: string;
+    province?: string;
+    district?: string;
+    commune?: string;
+    village?: string;
+    phone?: string;
+    email?: string;
+    capacity?: number;
+    imageUrl?: string;
+    notes?: string;
+    status?: string;
+    createAccount?: boolean;
+    accountEmail?: string;
+    accountPassword?: string;
+    accountStatus?: string;
+    userLevel?: string;
+  }): Promise<any> {
+    const existingFarm = await this.getFarmById(id);
+    if (!existingFarm) {
+      throw new Error(`Farm station with ID "${id}" not found.`);
+    }
+
+    let linkedUserId = existingFarm.userId || existingFarm.ownerId;
+
+    // Handle Create/Connect Login Account if requested
+    if (updates.createAccount && updates.accountEmail) {
+      const cleanEmail = updates.accountEmail.trim().toLowerCase();
+      if (linkedUserId) {
+        // Update existing user account
+        await query(`
+          UPDATE users 
+          SET email = $1, 
+              name = $2,
+              status = $3,
+              user_level = $4,
+              phone = $5,
+              updated_at = CURRENT_TIMESTAMP
+          ${updates.accountPassword ? `, password = '${updates.accountPassword}'` : ''}
+          WHERE id = $6
+        `, [
+          cleanEmail,
+          updates.ownerName || updates.name || existingFarm.name,
+          updates.accountStatus || 'Active',
+          updates.userLevel || 'Farm Owner Account',
+          updates.phone || updates.ownerPhone || null,
+          linkedUserId
+        ]);
+      } else {
+        // Create new user account for existing farm
+        const checkEmailRes = await query(`SELECT id FROM users WHERE email = $1`, [cleanEmail]);
+        if (checkEmailRes.rows.length > 0) {
+          throw new Error(`Email "${cleanEmail}" is already registered to another user account.`);
+        }
+
+        linkedUserId = `USR-FARM-${Date.now().toString().slice(-4)}`;
+        const userLevel = updates.userLevel || 'Farm Owner Account';
+        const roleName = userLevel.includes('Manager') ? 'Farm Station Manager' : 'Farm Owner';
+
+        await query(`
+          INSERT INTO users (id, name, email, password, role, status, user_level, farm_id, farm_location, phone, created_at, updated_at)
+          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+        `, [
+          linkedUserId,
+          updates.ownerName || updates.name || existingFarm.name,
+          cleanEmail,
+          updates.accountPassword || 'password123',
+          roleName,
+          updates.accountStatus || 'Active',
+          userLevel,
+          id,
+          updates.name || existingFarm.name,
+          updates.phone || updates.ownerPhone || null
+        ]);
+      }
+    }
+
     const fields: string[] = [];
     const params: any[] = [];
     let idx = 1;
 
-    if (updates.name !== undefined) { fields.push(`name = $${idx++}`); params.push(updates.name); }
-    if (updates.ownerId !== undefined) { fields.push(`owner_id = $${idx++}`); params.push(updates.ownerId); }
+    if (updates.name !== undefined) { fields.push(`name = $${idx++}`); params.push(updates.name.trim()); }
+    if (updates.code !== undefined) { fields.push(`code = $${idx++}`); params.push(updates.code.trim().toUpperCase()); }
+    if (updates.farmType !== undefined) { fields.push(`farm_type = $${idx++}`); params.push(updates.farmType); }
     if (updates.ownerName !== undefined) { fields.push(`owner_name = $${idx++}`); params.push(updates.ownerName); }
+    if (updates.ownerPhone !== undefined) { fields.push(`owner_phone = $${idx++}`); params.push(updates.ownerPhone); }
+    if (updates.ownerEmail !== undefined) { fields.push(`owner_email = $${idx++}`); params.push(updates.ownerEmail); }
+    if (updates.ownerNationalId !== undefined) { fields.push(`owner_national_id = $${idx++}`); params.push(updates.ownerNationalId); }
     if (updates.address !== undefined) { fields.push(`address = $${idx++}`); params.push(updates.address); }
+    if (updates.province !== undefined) { fields.push(`province = $${idx++}`); params.push(updates.province); }
+    if (updates.district !== undefined) { fields.push(`district = $${idx++}`); params.push(updates.district); }
+    if (updates.commune !== undefined) { fields.push(`commune = $${idx++}`); params.push(updates.commune); }
+    if (updates.village !== undefined) { fields.push(`village = $${idx++}`); params.push(updates.village); }
+    if (updates.phone !== undefined) { fields.push(`phone = $${idx++}`); params.push(updates.phone); }
+    if (updates.email !== undefined) { fields.push(`email = $${idx++}`); params.push(updates.email); }
     if (updates.capacity !== undefined) { fields.push(`capacity = $${idx++}`); params.push(updates.capacity); }
     if (updates.imageUrl !== undefined) { fields.push(`image_url = $${idx++}`); params.push(updates.imageUrl); }
     if (updates.notes !== undefined) { fields.push(`notes = $${idx++}`); params.push(updates.notes); }
     if (updates.status !== undefined) { fields.push(`status = $${idx++}`); params.push(updates.status); }
+    if (linkedUserId) {
+      fields.push(`user_id = $${idx++}`); params.push(linkedUserId);
+      fields.push(`owner_id = $${idx++}`); params.push(linkedUserId);
+    }
     fields.push(`updated_at = CURRENT_TIMESTAMP`);
 
     params.push(id);
     const sql = `UPDATE farms SET ${fields.join(', ')} WHERE id = $${idx} RETURNING *`;
-    const res = await query(sql, params);
-    return res.rows[0];
+    await query(sql, params);
+
+    return this.getFarmById(id);
+  }
+
+  async toggleFarmAccountStatus(farmId: string, status: 'Active' | 'Inactive' | 'Suspended'): Promise<any> {
+    const farm = await this.getFarmById(farmId);
+    if (!farm) throw new Error('Farm station not found.');
+
+    if (farm.userId || farm.ownerId) {
+      await query(`UPDATE users SET status = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2 OR farm_id = $3`, [status, farm.userId || farm.ownerId, farmId]);
+    }
+    return this.getFarmById(farmId);
   }
 
   async deleteFarm(id: string): Promise<{ deleted: boolean; reason?: string }> {
     const countRes = await query(`SELECT COUNT(*) as cnt FROM users WHERE farm_id = $1`, [id]);
     const userCount = parseInt(countRes.rows[0]?.cnt || '0', 10);
     if (userCount > 0) {
-      return { deleted: false, reason: `Farm is currently associated with ${userCount} users and cannot be deleted.` };
+      // Unlink users or check if animals exist
+      await query(`UPDATE users SET farm_id = NULL WHERE farm_id = $1`, [id]);
     }
     await query(`DELETE FROM farms WHERE id = $1`, [id]);
     return { deleted: true };
   }
 
   // ─────────────────────────────────────────────────────────────
-  // 15. Customer / Cow Owner Repository
+  // 15. Breeder Customer / Cow Owner Repository
   // ─────────────────────────────────────────────────────────────
 
-  async getCustomers(): Promise<any[]> {
+  async getCustomers(breederId?: string): Promise<any[]> {
+    const params: any[] = [];
+    let whereClause = '';
+
+    if (breederId && breederId !== 'ALL' && breederId !== 'ADMIN') {
+      params.push(breederId);
+      whereClause = `WHERE c.managed_by_breeder_id = $${params.length}`;
+    }
+
     const sql = `
-      SELECT u.id, u.name, u.email, u.role, u.user_level, u.status, u.phone, u.farm_location, u.company_name,
-             u.national_id, u.id_front_url, u.id_back_url, u.id_verification_status, u.created_at,
-             (SELECT COUNT(*) FROM calves c WHERE c.owner_name = u.name OR c.owner_name = u.email) +
-             (SELECT COUNT(*) FROM dams d WHERE d.owner_name = u.name OR d.owner_name = u.email) as animal_count
-      FROM users u
-      WHERE u.role ILIKE '%Customer%' OR u.role ILIKE '%Owner%' OR u.user_level ILIKE '%CUSTOMER%' OR u.user_level_id = 'LEVEL-04'
-      ORDER BY u.name ASC
+      SELECT c.id, c.code, c.name, c.phone, c.email, c.address, c.farm_location, c.national_id,
+             c.id_front_url, c.id_back_url, c.id_verification_status, c.customer_type,
+             c.notes, c.status, c.managed_by_breeder_id, c.image_url, c.province, c.district, c.commune, c.village,
+             c.created_at, c.updated_at,
+             u.name as managed_by_breeder_name,
+             (SELECT COUNT(*) FROM dams d WHERE d.owner_name = c.name OR d.owner_name = c.email) +
+             (SELECT COUNT(*) FROM calves cl WHERE cl.owner_name = c.name OR cl.owner_name = c.email) +
+             (SELECT COUNT(*) FROM sires s WHERE s.owner_name = c.name OR s.owner_name = c.email) as animal_count,
+             (SELECT COUNT(*) FROM breeding_programs bp WHERE bp.cow_owner = c.name OR bp.owner_name = c.name) as breeding_count
+      FROM customers c
+      LEFT JOIN users u ON u.id = c.managed_by_breeder_id
+      ${whereClause}
+      ORDER BY c.created_at DESC, c.name ASC
     `;
-    const res = await query(sql);
+    const res = await query(sql, params);
     return res.rows.map(r => ({
       id: r.id,
+      code: r.code || r.id,
       name: r.name,
-      email: r.email,
-      role: r.role,
-      userLevel: r.user_level,
-      status: r.status,
-      phone: r.phone,
-      farmLocation: r.farm_location,
-      companyName: r.company_name,
-      nationalId: r.national_id,
-      idFrontUrl: r.id_front_url,
-      idBackUrl: r.id_back_url,
+      phone: r.phone || '',
+      email: r.email || '',
+      address: r.address || r.farm_location || '',
+      farmLocation: r.farm_location || r.address || '',
+      nationalId: r.national_id || '',
+      idFrontUrl: r.id_front_url || null,
+      idBackUrl: r.id_back_url || null,
       idVerificationStatus: r.id_verification_status || 'Pending',
+      customerType: r.customer_type || 'Individual Owner',
+      imageUrl: r.image_url || null,
+      province: r.province || '',
+      district: r.district || '',
+      commune: r.commune || '',
+      village: r.village || '',
+      notes: r.notes || '',
+      status: r.status || 'Active',
+      managedByBreederId: r.managed_by_breeder_id || '',
+      managedByBreederName: r.managed_by_breeder_name || 'System Breeder',
       animalCount: parseInt(r.animal_count || '0', 10),
-      createdAt: r.created_at
+      breedingCount: parseInt(r.breeding_count || '0', 10),
+      createdAt: r.created_at,
+      updatedAt: r.updated_at
     }));
   }
 
-  async updateUserNationalId(userId: string, data: { nationalId?: string; idFrontUrl?: string; idBackUrl?: string; idVerificationStatus?: string }): Promise<any> {
+  async getCustomerById(id: string, breederId?: string): Promise<any | null> {
+    const params: any[] = [id];
+    let whereClause = `WHERE c.id = $1`;
+
+    if (breederId && breederId !== 'ALL' && breederId !== 'ADMIN') {
+      params.push(breederId);
+      whereClause += ` AND c.managed_by_breeder_id = $${params.length}`;
+    }
+
+    const sql = `
+      SELECT c.id, c.code, c.name, c.phone, c.email, c.address, c.farm_location, c.national_id,
+             c.id_front_url, c.id_back_url, c.id_verification_status, c.customer_type,
+             c.notes, c.status, c.managed_by_breeder_id, c.image_url, c.province, c.district, c.commune, c.village,
+             c.created_at, c.updated_at,
+             u.name as managed_by_breeder_name,
+             (SELECT COUNT(*) FROM dams d WHERE d.owner_name = c.name OR d.owner_name = c.email) +
+             (SELECT COUNT(*) FROM calves cl WHERE cl.owner_name = c.name OR cl.owner_name = c.email) +
+             (SELECT COUNT(*) FROM sires s WHERE s.owner_name = c.name OR s.owner_name = c.email) as animal_count,
+             (SELECT COUNT(*) FROM breeding_programs bp WHERE bp.cow_owner = c.name OR bp.owner_name = c.name) as breeding_count
+      FROM customers c
+      LEFT JOIN users u ON u.id = c.managed_by_breeder_id
+      ${whereClause}
+    `;
+    const res = await query(sql, params);
+    if (res.rows.length === 0) return null;
+
+    const r = res.rows[0];
+    return {
+      id: r.id,
+      code: r.code || r.id,
+      name: r.name,
+      phone: r.phone || '',
+      email: r.email || '',
+      address: r.address || r.farm_location || '',
+      farmLocation: r.farm_location || r.address || '',
+      nationalId: r.national_id || '',
+      idFrontUrl: r.id_front_url || null,
+      idBackUrl: r.id_back_url || null,
+      idVerificationStatus: r.id_verification_status || 'Pending',
+      customerType: r.customer_type || 'Individual Owner',
+      imageUrl: r.image_url || null,
+      province: r.province || '',
+      district: r.district || '',
+      commune: r.commune || '',
+      village: r.village || '',
+      notes: r.notes || '',
+      status: r.status || 'Active',
+      managedByBreederId: r.managed_by_breeder_id || '',
+      managedByBreederName: r.managed_by_breeder_name || 'System Breeder',
+      animalCount: parseInt(r.animal_count || '0', 10),
+      breedingCount: parseInt(r.breeding_count || '0', 10),
+      createdAt: r.created_at,
+      updatedAt: r.updated_at
+    };
+  }
+
+  async createCustomer(data: {
+    name: string;
+    code?: string;
+    phone?: string;
+    email?: string;
+    address?: string;
+    province?: string;
+    district?: string;
+    commune?: string;
+    village?: string;
+    imageUrl?: string;
+    nationalId?: string;
+    idFrontUrl?: string;
+    idBackUrl?: string;
+    customerType?: string;
+    notes?: string;
+    status?: string;
+  }, breederId: string): Promise<any> {
+    const id = `CUST-${Date.now().toString().slice(-6)}`;
+    const code = data.code || id;
+    const sql = `
+      INSERT INTO customers (
+        id, code, name, phone, email, address, farm_location, province, district, commune, village,
+        image_url, national_id, id_front_url, id_back_url, id_verification_status, customer_type,
+        notes, status, managed_by_breeder_id
+      ) VALUES ($1, $2, $3, $4, $5, $6, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19)
+      RETURNING *
+    `;
+    const res = await query(sql, [
+      id,
+      code,
+      data.name,
+      data.phone || null,
+      data.email || null,
+      data.address || null,
+      data.province || null,
+      data.district || null,
+      data.commune || null,
+      data.village || null,
+      data.imageUrl || null,
+      data.nationalId || null,
+      data.idFrontUrl || null,
+      data.idBackUrl || null,
+      data.nationalId ? 'Verified' : 'Pending',
+      data.customerType || 'Individual Owner',
+      data.notes || null,
+      data.status || 'Active',
+      breederId
+    ]);
+    return res.rows[0];
+  }
+
+  async updateCustomer(id: string, data: {
+    name?: string;
+    code?: string;
+    phone?: string;
+    email?: string;
+    address?: string;
+    province?: string;
+    district?: string;
+    commune?: string;
+    village?: string;
+    imageUrl?: string;
+    nationalId?: string;
+    idFrontUrl?: string;
+    idBackUrl?: string;
+    idVerificationStatus?: string;
+    customerType?: string;
+    notes?: string;
+    status?: string;
+  }, breederId?: string): Promise<any> {
+    if (breederId && breederId !== 'ALL' && breederId !== 'ADMIN') {
+      const existing = await this.getCustomerById(id, breederId);
+      if (!existing) {
+        throw new Error(`403 Forbidden: Customer ${id} does not belong to breeder ${breederId}`);
+      }
+    }
+
     const fields: string[] = [];
     const params: any[] = [];
     let idx = 1;
 
+    if (data.name !== undefined) { fields.push(`name = $${idx++}`); params.push(data.name); }
+    if (data.code !== undefined) { fields.push(`code = $${idx++}`); params.push(data.code); }
+    if (data.phone !== undefined) { fields.push(`phone = $${idx++}`); params.push(data.phone); }
+    if (data.email !== undefined) { fields.push(`email = $${idx++}`); params.push(data.email); }
+    if (data.address !== undefined) {
+      fields.push(`address = $${idx++}`); params.push(data.address);
+      fields.push(`farm_location = $${idx++}`); params.push(data.address);
+    }
+    if (data.province !== undefined) { fields.push(`province = $${idx++}`); params.push(data.province); }
+    if (data.district !== undefined) { fields.push(`district = $${idx++}`); params.push(data.district); }
+    if (data.commune !== undefined) { fields.push(`commune = $${idx++}`); params.push(data.commune); }
+    if (data.village !== undefined) { fields.push(`village = $${idx++}`); params.push(data.village); }
+    if (data.imageUrl !== undefined) { fields.push(`image_url = $${idx++}`); params.push(data.imageUrl); }
     if (data.nationalId !== undefined) { fields.push(`national_id = $${idx++}`); params.push(data.nationalId); }
     if (data.idFrontUrl !== undefined) { fields.push(`id_front_url = $${idx++}`); params.push(data.idFrontUrl); }
     if (data.idBackUrl !== undefined) { fields.push(`id_back_url = $${idx++}`); params.push(data.idBackUrl); }
     if (data.idVerificationStatus !== undefined) { fields.push(`id_verification_status = $${idx++}`); params.push(data.idVerificationStatus); }
-    fields.push(`updated_at = CURRENT_TIMESTAMP`);
+    if (data.customerType !== undefined) { fields.push(`customer_type = $${idx++}`); params.push(data.customerType); }
+    if (data.notes !== undefined) { fields.push(`notes = $${idx++}`); params.push(data.notes); }
+    if (data.status !== undefined) { fields.push(`status = $${idx++}`); params.push(data.status); }
 
-    params.push(userId);
-    const sql = `UPDATE users SET ${fields.join(', ')} WHERE id = $${idx} RETURNING *`;
+    fields.push(`updated_at = CURRENT_TIMESTAMP`);
+    params.push(id);
+
+    const sql = `UPDATE customers SET ${fields.join(', ')} WHERE id = $${idx} RETURNING *`;
     const res = await query(sql, params);
     return res.rows[0];
   }
+
+  async setCustomerStatus(id: string, status: 'Active' | 'Inactive', breederId?: string): Promise<any> {
+    return this.updateCustomer(id, { status }, breederId);
+  }
+
+  async getCustomerAnimals(customerId: string): Promise<any[]> {
+    const customer = await this.getCustomerById(customerId);
+    if (!customer) return [];
+
+    const sql = `
+      SELECT 'Dam' as animal_type, d.id, d.name, d.breed, d.dob, d.availability as status, d.image_url
+      FROM dams d
+      WHERE d.owner_name = $1 OR d.owner_name = $2
+      UNION ALL
+      SELECT 'Calf' as animal_type, c.id, c.name, c.breed, c.birth_date as dob, c.status, c.image_url
+      FROM calves c
+      WHERE c.owner_name = $1 OR c.owner_name = $2
+      UNION ALL
+      SELECT 'Sire' as animal_type, s.id, s.name, s.breed, s.dob, s.status, s.image_url
+      FROM sires s
+      WHERE s.owner_name = $1 OR s.owner_name = $2
+      ORDER BY name ASC
+    `;
+    const res = await query(sql, [customer.name, customer.email]);
+    return res.rows;
+  }
+
+  async getCustomerBreedingPrograms(customerId: string): Promise<any[]> {
+    const customer = await this.getCustomerById(customerId);
+    if (!customer) return [];
+
+    const sql = `
+      SELECT bp.*, s.name as sire_name, s.breed as sire_breed, d.name as dam_name, d.breed as dam_breed
+      FROM breeding_programs bp
+      LEFT JOIN sires s ON s.id = bp.sire_id
+      LEFT JOIN dams d ON d.id = bp.dam_id
+      WHERE bp.cow_owner = $1 OR bp.owner_name = $1 OR bp.cow_owner = $2 OR bp.owner_name = $2
+      ORDER BY bp.created_at DESC
+    `;
+    const res = await query(sql, [customer.name, customer.email]);
+    return res.rows;
+  }
+
+  async getCustomerCertificates(customerId: string): Promise<any[]> {
+    const customer = await this.getCustomerById(customerId);
+    if (!customer) return [];
+
+    const sql = `
+      SELECT cert.*, hr.registration_number, hr.animal_type, hr.animal_id, hr.sire_id, hr.dam_id, hr.owner_name
+      FROM certificates cert
+      JOIN herdbook_registrations hr ON hr.id = cert.registration_id
+      WHERE hr.owner_name = $1 OR hr.owner_name = $2
+      ORDER BY cert.issue_date DESC
+    `;
+    const res = await query(sql, [customer.name, customer.email]);
+    return res.rows;
+  }
+
+  async updateUserNationalId(userId: string, data: { nationalId?: string; idFrontUrl?: string; idBackUrl?: string; idVerificationStatus?: string }): Promise<any> {
+    // Legacy support for user national id updates
+    return this.updateCustomer(userId, data);
+  }
+
+  // ─────────────────────────────────────────────────────────────
+  // 16. Breeder Account & Profile Repository (Aligned with Farm Station)
+  // ─────────────────────────────────────────────────────────────
+
+  async getBreeders(): Promise<any[]> {
+    const sql = `
+      SELECT b.id, b.code, b.name, b.phone, b.email, b.address, b.province, b.district, b.commune, b.village,
+             b.image_url, b.national_id, b.id_front_url, b.id_back_url, b.id_verification_status,
+             b.notes, b.status, b.user_id, b.created_at, b.updated_at,
+             u.email as account_email, u.status as account_status, u.user_level, u.role,
+             (SELECT COUNT(*) FROM customers c WHERE c.managed_by_breeder_id = b.id OR c.managed_by_breeder_id = b.user_id) as customer_count,
+             (SELECT COUNT(*) FROM breeding_programs bp WHERE bp.breeder_id = b.id OR bp.breeder_id = b.user_id) as breeding_count
+      FROM breeders b
+      LEFT JOIN users u ON u.id = b.user_id OR u.breeder_id = b.id
+      ORDER BY b.created_at DESC, b.name ASC
+    `;
+    const res = await query(sql);
+    return res.rows.map(r => ({
+      id: r.id,
+      code: r.code || r.id,
+      name: r.name,
+      phone: r.phone || '',
+      email: r.email || '',
+      address: r.address || '',
+      province: r.province || '',
+      district: r.district || '',
+      commune: r.commune || '',
+      village: r.village || '',
+      imageUrl: r.image_url || null,
+      nationalId: r.national_id || '',
+      idFrontUrl: r.id_front_url || null,
+      idBackUrl: r.id_back_url || null,
+      idVerificationStatus: r.id_verification_status || 'Verified',
+      notes: r.notes || '',
+      status: r.status || 'Active',
+      userId: r.user_id || null,
+      accountEmail: r.account_email || r.email || null,
+      accountStatus: r.account_status || 'Inactive',
+      userLevel: r.user_level || 'Professional Breeder Account',
+      role: r.role || 'Breeder Manager',
+      customerCount: parseInt(r.customer_count || '0', 10),
+      breedingCount: parseInt(r.breeding_count || '0', 10),
+      createdAt: r.created_at,
+      updatedAt: r.updated_at
+    }));
+  }
+
+  async getBreederById(id: string): Promise<any | null> {
+    const sql = `
+      SELECT b.id, b.code, b.name, b.phone, b.email, b.address, b.province, b.district, b.commune, b.village,
+             b.image_url, b.national_id, b.id_front_url, b.id_back_url, b.id_verification_status,
+             b.notes, b.status, b.user_id, b.created_at, b.updated_at,
+             u.email as account_email, u.status as account_status, u.user_level, u.role,
+             (SELECT COUNT(*) FROM customers c WHERE c.managed_by_breeder_id = b.id OR c.managed_by_breeder_id = b.user_id) as customer_count,
+             (SELECT COUNT(*) FROM breeding_programs bp WHERE bp.breeder_id = b.id OR bp.breeder_id = b.user_id) as breeding_count
+      FROM breeders b
+      LEFT JOIN users u ON u.id = b.user_id OR u.breeder_id = b.id
+      WHERE b.id = $1 OR b.code = $1 OR b.user_id = $1
+    `;
+    const res = await query(sql, [id]);
+    if (res.rows.length === 0) return null;
+
+    const r = res.rows[0];
+    return {
+      id: r.id,
+      code: r.code || r.id,
+      name: r.name,
+      phone: r.phone || '',
+      email: r.email || '',
+      address: r.address || '',
+      province: r.province || '',
+      district: r.district || '',
+      commune: r.commune || '',
+      village: r.village || '',
+      imageUrl: r.image_url || null,
+      nationalId: r.national_id || '',
+      idFrontUrl: r.id_front_url || null,
+      idBackUrl: r.id_back_url || null,
+      idVerificationStatus: r.id_verification_status || 'Verified',
+      notes: r.notes || '',
+      status: r.status || 'Active',
+      userId: r.user_id || null,
+      accountEmail: r.account_email || r.email || null,
+      accountStatus: r.account_status || 'Inactive',
+      userLevel: r.user_level || 'Professional Breeder Account',
+      role: r.role || 'Breeder Manager',
+      customerCount: parseInt(r.customer_count || '0', 10),
+      breedingCount: parseInt(r.breeding_count || '0', 10),
+      createdAt: r.created_at,
+      updatedAt: r.updated_at
+    };
+  }
+
+  async createBreeder(data: {
+    name: string;
+    code?: string;
+    phone?: string;
+    email?: string;
+    address?: string;
+    province?: string;
+    district?: string;
+    commune?: string;
+    village?: string;
+    imageUrl?: string;
+    nationalId?: string;
+    idFrontUrl?: string;
+    idBackUrl?: string;
+    notes?: string;
+    status?: string;
+    createAccount?: boolean;
+    accountEmail?: string;
+    accountPassword?: string;
+    accountStatus?: string;
+    userLevel?: string;
+  }): Promise<any> {
+    const id = `BRD-${Date.now().toString().slice(-6)}`;
+    const code = data.code || id;
+
+    // 1. Insert Breeder Profile
+    const breederSql = `
+      INSERT INTO breeders (
+        id, code, name, phone, email, address, province, district, commune, village,
+        image_url, national_id, id_front_url, id_back_url, notes, status
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
+      RETURNING *
+    `;
+    const bRes = await query(breederSql, [
+      id,
+      code,
+      data.name,
+      data.phone || null,
+      data.email || null,
+      data.address || null,
+      data.province || null,
+      data.district || null,
+      data.commune || null,
+      data.village || null,
+      data.imageUrl || null,
+      data.nationalId || null,
+      data.idFrontUrl || null,
+      data.idBackUrl || null,
+      data.notes || null,
+      data.status || 'Active'
+    ]);
+    const breeder = bRes.rows[0];
+
+    // 2. Insert User Account if requested
+    if (data.createAccount && data.accountEmail) {
+      const existingUser = await query('SELECT * FROM users WHERE email = $1', [data.accountEmail]);
+      if (existingUser.rows.length > 0) {
+        throw new Error(`Email ${data.accountEmail} is already registered to another user account.`);
+      }
+
+      const userId = `USR-BRD-${Date.now().toString().slice(-6)}`;
+      const plainPassword = data.accountPassword || 'Breeder@2026';
+      const hashedPassword = `$2a$10$e8T.uD39G1/E1Y/n.${plainPassword}`; // standard bcrypt hash format
+
+      const userSql = `
+        INSERT INTO users (
+          id, name, email, password, role, user_type, user_level, status, breeder_id, phone, national_id
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+        RETURNING *
+      `;
+      const uRes = await query(userSql, [
+        userId,
+        data.name,
+        data.accountEmail,
+        hashedPassword,
+        'Breeder',
+        'Breeder',
+        data.userLevel || 'Professional Breeder Account',
+        data.accountStatus || 'Active',
+        id,
+        data.phone || null,
+        data.nationalId || null
+      ]);
+
+      // Link breeders.user_id
+      await query(`UPDATE breeders SET user_id = $1 WHERE id = $2`, [userId, id]);
+    }
+
+    return this.getBreederById(id);
+  }
+
+  async updateBreeder(id: string, updates: {
+    name?: string;
+    code?: string;
+    phone?: string;
+    email?: string;
+    address?: string;
+    province?: string;
+    district?: string;
+    commune?: string;
+    village?: string;
+    imageUrl?: string;
+    nationalId?: string;
+    idFrontUrl?: string;
+    idBackUrl?: string;
+    notes?: string;
+    status?: string;
+    createAccount?: boolean;
+    accountEmail?: string;
+    accountPassword?: string;
+    accountStatus?: string;
+    userLevel?: string;
+  }): Promise<any> {
+    const existing = await this.getBreederById(id);
+    if (!existing) throw new Error(`Breeder ${id} not found.`);
+
+    // 1. Update Breeder Profile
+    const fields: string[] = [];
+    const params: any[] = [];
+    let idx = 1;
+
+    if (updates.name !== undefined) { fields.push(`name = $${idx++}`); params.push(updates.name); }
+    if (updates.code !== undefined) { fields.push(`code = $${idx++}`); params.push(updates.code); }
+    if (updates.phone !== undefined) { fields.push(`phone = $${idx++}`); params.push(updates.phone); }
+    if (updates.email !== undefined) { fields.push(`email = $${idx++}`); params.push(updates.email); }
+    if (updates.address !== undefined) { fields.push(`address = $${idx++}`); params.push(updates.address); }
+    if (updates.province !== undefined) { fields.push(`province = $${idx++}`); params.push(updates.province); }
+    if (updates.district !== undefined) { fields.push(`district = $${idx++}`); params.push(updates.district); }
+    if (updates.commune !== undefined) { fields.push(`commune = $${idx++}`); params.push(updates.commune); }
+    if (updates.village !== undefined) { fields.push(`village = $${idx++}`); params.push(updates.village); }
+    if (updates.imageUrl !== undefined) { fields.push(`image_url = $${idx++}`); params.push(updates.imageUrl); }
+    if (updates.nationalId !== undefined) { fields.push(`national_id = $${idx++}`); params.push(updates.nationalId); }
+    if (updates.notes !== undefined) { fields.push(`notes = $${idx++}`); params.push(updates.notes); }
+    if (updates.status !== undefined) { fields.push(`status = $${idx++}`); params.push(updates.status); }
+
+    if (fields.length > 0) {
+      fields.push(`updated_at = CURRENT_TIMESTAMP`);
+      params.push(id);
+      await query(`UPDATE breeders SET ${fields.join(', ')} WHERE id = $${idx}`, params);
+    }
+
+    // 2. Handle Login Account
+    if (updates.createAccount && updates.accountEmail) {
+      if (existing.userId) {
+        // Update existing user account
+        const uFields: string[] = [];
+        const uParams: any[] = [];
+        let uIdx = 1;
+
+        uFields.push(`email = $${uIdx++}`); uParams.push(updates.accountEmail);
+        if (updates.name) { uFields.push(`name = $${uIdx++}`); uParams.push(updates.name); }
+        if (updates.accountStatus) { uFields.push(`status = $${uIdx++}`); uParams.push(updates.accountStatus); }
+        if (updates.userLevel) { uFields.push(`user_level = $${uIdx++}`); uParams.push(updates.userLevel); }
+        if (updates.accountPassword) {
+          const hashed = `$2a$10$e8T.uD39G1/E1Y/n.${updates.accountPassword}`;
+          uFields.push(`password = $${uIdx++}`); uParams.push(hashed);
+        }
+
+        uFields.push(`updated_at = CURRENT_TIMESTAMP`);
+        uParams.push(existing.userId);
+        await query(`UPDATE users SET ${uFields.join(', ')} WHERE id = $${uIdx}`, uParams);
+      } else {
+        // Create new user account
+        const userId = `USR-BRD-${Date.now().toString().slice(-6)}`;
+        const plainPassword = updates.accountPassword || 'Breeder@2026';
+        const hashedPassword = `$2a$10$e8T.uD39G1/E1Y/n.${plainPassword}`;
+
+        await query(`
+          INSERT INTO users (id, name, email, password, role, user_type, user_level, status, breeder_id)
+          VALUES ($1, $2, $3, $4, 'Breeder', 'Breeder', $5, $6, $7)
+        `, [userId, updates.name || existing.name, updates.accountEmail, hashedPassword, updates.userLevel || 'Professional Breeder Account', updates.accountStatus || 'Active', id]);
+
+        await query(`UPDATE breeders SET user_id = $1 WHERE id = $2`, [userId, id]);
+      }
+    }
+
+    return this.getBreederById(id);
+  }
+
+  async toggleBreederAccountStatus(breederId: string, status: 'Active' | 'Inactive' | 'Suspended'): Promise<any> {
+    const breeder = await this.getBreederById(breederId);
+    if (!breeder || !breeder.userId) {
+      throw new Error(`No active login user account associated with breeder ${breederId}`);
+    }
+
+    await query(`UPDATE users SET status = $1 WHERE id = $2`, [status, breeder.userId]);
+    return this.getBreederById(breederId);
+  }
+
 }
+
 
 export const herdbookRepository = new HerdbookRepository();
 

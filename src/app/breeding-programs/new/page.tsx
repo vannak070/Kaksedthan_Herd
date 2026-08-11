@@ -5,7 +5,13 @@ import { useRouter } from 'next/navigation';
 import PageHeader from '@/components/common/PageHeader';
 import GuidedBreedingWizard from '@/components/breeding/GuidedBreedingWizard';
 import { SireItem, DamItem, StockInseminationItem, BreedingProgramItem } from '@/types/breeding.types';
-import { fetchSiresAction, fetchDamsAction, fetchStockInseminationAction, createBreedingProgramAction } from '@/app/actions';
+import {
+  fetchSiresAction,
+  fetchDamsAction,
+  fetchStockInseminationAction,
+  createBreedingProgramAction,
+  resolveCurrentBreederAction,
+} from '@/app/actions';
 
 export default function NewBreedingProgramPage() {
   const router = useRouter();
@@ -14,20 +20,52 @@ export default function NewBreedingProgramPage() {
   const [semenStock, setSemenStock] = useState<StockInseminationItem[]>([]);
   const [loading, setLoading] = useState(true);
 
+  // Active role from the sidebar role-switcher (stored in localStorage)
+  const [activeRole, setActiveRole] = useState<string>('Super Admin');
+  // Locked Breeder identity resolved from the backend (only for Breeder accounts)
+  const [lockedBreeder, setLockedBreeder] = useState<{ id: string; name: string } | null>(null);
+  // Caller email passed to the backend for identity enforcement
+  const [callerEmail, setCallerEmail] = useState<string>('');
+
   useEffect(() => {
-    Promise.all([fetchSiresAction(), fetchDamsAction(), fetchStockInseminationAction()])
-      .then(([sData, dData, stData]) => {
-        setSires(sData || []);
-        setDams(dData || []);
-        setSemenStock(stData || []);
-        setLoading(false);
-      })
-      .catch(() => setLoading(false));
+    // Read the persisted active role from localStorage (set by SidebarLayout)
+    const savedRole = localStorage.getItem('kaksedthan_active_role') || 'Super Admin';
+    setActiveRole(savedRole);
+
+    const isBreederRole = savedRole === 'Breeder' || savedRole === 'Breeder Account';
+    // Demo: map role to a known email. In production this comes from the auth session.
+    const email = isBreederRole ? 'breeder@snrfarm.com' : 'vannak@snrfarm.com';
+    setCallerEmail(email);
+
+    // Load animal data + optionally resolve Breeder identity in parallel
+    const dataLoad = Promise.all([
+      fetchSiresAction(),
+      fetchDamsAction(),
+      fetchStockInseminationAction(),
+    ]).then(([sData, dData, stData]) => {
+      setSires(sData || []);
+      setDams(dData || []);
+      setSemenStock(stData || []);
+    });
+
+    // For Breeder accounts: resolve the Breeder profile from the backend
+    const breederLoad = isBreederRole
+      ? resolveCurrentBreederAction(email).then(res => {
+          if (res.success && res.data) {
+            setLockedBreeder(res.data);
+          }
+        })
+      : Promise.resolve();
+
+    Promise.all([dataLoad, breederLoad])
+      .catch(console.error)
+      .finally(() => setLoading(false));
   }, []);
 
   const handleSubmit = async (program: BreedingProgramItem) => {
-    const res = await createBreedingProgramAction(program);
-    router.push(`/breeding-programs/${res.id}`);
+    // Pass callerRole + callerEmail so backend can enforce Breeder identity
+    const res = await createBreedingProgramAction(program, activeRole, callerEmail);
+    router.push(`/breeding-programs/${(res as any).id || ''}`);
   };
 
   if (loading) {
@@ -55,6 +93,8 @@ export default function NewBreedingProgramPage() {
         sires={sires}
         dams={dams}
         semenStock={semenStock}
+        currentUserRole={activeRole}
+        lockedBreeder={lockedBreeder}
         onCancel={() => router.push('/breeding-programs')}
         onSubmit={handleSubmit}
       />

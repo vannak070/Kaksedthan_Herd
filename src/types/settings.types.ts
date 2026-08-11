@@ -169,10 +169,10 @@ export interface UserLevelItem {
 }
 
 export const APPROVED_USER_LEVELS: UserLevelItem[] = [
-  { id: 'LEVEL-01', name: 'Breeder', description: 'Breeding specialist & AI operations professional managing services and programs.', status: 'Active' },
-  { id: 'LEVEL-02', name: 'Farm Owner', description: 'Owner/manager of farm stations controlling farm animals, breeding, and costs.', status: 'Active' },
-  { id: 'LEVEL-03', name: 'Customer / Cow Owner', description: 'Restricted account for customers owning cows with read-only access to their animals.', status: 'Active' },
-  { id: 'LEVEL-04', name: 'Sire Sourcing Company', description: 'Supplier supplying Sires or Sire/Semen stock to the herdbook system.', status: 'Active' }
+  { id: 'LEVEL-01', name: 'Breeder Account', description: 'Breeding specialist & AI operations professional managing services and programs.', status: 'Active' },
+  { id: 'LEVEL-02', name: 'Farm Owner Account', description: 'Owner/manager of farm stations controlling farm animals, breeding, and costs.', status: 'Active' },
+  { id: 'LEVEL-03', name: 'Farmer / Farm Manager Account', description: 'Day-to-day operational manager of an authorized farm under a Farm Owner.', status: 'Active' },
+  { id: 'LEVEL-04', name: 'Sire Sourcing Company Account', description: 'Supplier supplying Sires or Sire/Semen stock to the herdbook system.', status: 'Active' }
 ];
 
 // 2. Role Interface (Responsibility)

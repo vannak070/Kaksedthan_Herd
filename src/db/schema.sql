@@ -22,6 +22,7 @@ DROP TABLE IF EXISTS health_logs CASCADE;
 DROP TABLE IF EXISTS batches CASCADE;
 DROP TABLE IF EXISTS stock CASCADE;
 DROP TABLE IF EXISTS expenses CASCADE;
+DROP TABLE IF EXISTS customers CASCADE;
 DROP TABLE IF EXISTS users CASCADE;
 DROP TABLE IF EXISTS master_settings CASCADE;
 
@@ -44,6 +45,26 @@ CREATE TABLE users (
     farm_location VARCHAR(100),
     phone VARCHAR(50),
     permissions JSONB DEFAULT '[]'::jsonb,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+-- 2b. Customers / Cow Owners Table (Managed by Breeders)
+CREATE TABLE customers (
+    id VARCHAR(50) PRIMARY KEY,
+    name VARCHAR(100) NOT NULL,
+    phone VARCHAR(50),
+    email VARCHAR(100),
+    address VARCHAR(255),
+    farm_location VARCHAR(100),
+    national_id VARCHAR(50),
+    id_front_url TEXT,
+    id_back_url TEXT,
+    id_verification_status VARCHAR(30) DEFAULT 'Pending',
+    customer_type VARCHAR(50) DEFAULT 'Individual Owner',
+    notes TEXT,
+    status VARCHAR(20) DEFAULT 'Active',
+    managed_by_breeder_id VARCHAR(50) REFERENCES users(id) ON DELETE SET NULL,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
@@ -117,7 +138,9 @@ CREATE TABLE breeding_programs (
     cow_owner VARCHAR(100),
     farm_location VARCHAR(100),
     breeder_name VARCHAR(100),
+    breeder_id VARCHAR(50) REFERENCES breeders(id) ON DELETE SET NULL, -- FK to the Breeder account
     price_usd NUMERIC(10, 2) DEFAULT 0,
+
     price_khr NUMERIC(14, 2) DEFAULT 0,
     breeding_date DATE,
     pregnancy_check_date DATE,
@@ -359,6 +382,33 @@ CREATE TABLE feed_transactions (
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
+-- 23. Farms & Station Operations Table
+CREATE TABLE farms (
+    id VARCHAR(50) PRIMARY KEY,
+    code VARCHAR(50) NOT NULL UNIQUE,
+    name VARCHAR(100) NOT NULL,
+    farm_type VARCHAR(50) DEFAULT 'General Livestock Station',
+    owner_id VARCHAR(50) REFERENCES users(id) ON DELETE SET NULL,
+    owner_name VARCHAR(100),
+    owner_phone VARCHAR(50),
+    owner_email VARCHAR(100),
+    owner_national_id VARCHAR(50),
+    address TEXT,
+    province VARCHAR(100),
+    district VARCHAR(100),
+    commune VARCHAR(100),
+    village VARCHAR(100),
+    phone VARCHAR(50),
+    email VARCHAR(100),
+    capacity INTEGER DEFAULT 100,
+    image_url TEXT,
+    notes TEXT,
+    status VARCHAR(30) DEFAULT 'Active',
+    user_id VARCHAR(50) REFERENCES users(id) ON DELETE SET NULL,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
 -- Performance Indexes
 CREATE INDEX IF NOT EXISTS idx_sires_breed ON sires(breed);
 CREATE INDEX IF NOT EXISTS idx_sires_status ON sires(status);
@@ -372,3 +422,6 @@ CREATE INDEX IF NOT EXISTS idx_calves_dam ON calves(dam_id);
 CREATE INDEX IF NOT EXISTS idx_herdbook_reg_number ON herdbook_registrations(registration_number);
 CREATE INDEX IF NOT EXISTS idx_herdbook_token ON herdbook_registrations(public_token);
 CREATE INDEX IF NOT EXISTS idx_certificates_reg ON certificates(registration_id);
+CREATE INDEX IF NOT EXISTS idx_farms_user_id ON farms(user_id);
+CREATE INDEX IF NOT EXISTS idx_farms_code ON farms(code);
+

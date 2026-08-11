@@ -79,13 +79,63 @@ export default function SidebarLayout({
   onLogout,
 }: SidebarLayoutProps) {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [selectedRole, setSelectedRole] = useState<string>('Super Admin');
   const pathname = usePathname();
+  const router = useRouter();
   const { t } = useLanguage();
+
+  // Load persisted operational role from localStorage on client mount & check logout session
+  React.useEffect(() => {
+    const isLoggedOut = localStorage.getItem('kaksedthan_logged_out') === 'true';
+    if (isLoggedOut && pathname !== '/login' && !pathname.startsWith('/public/')) {
+      router.push('/login');
+      return;
+    }
+
+    const savedRole = localStorage.getItem('kaksedthan_active_role');
+    if (savedRole) {
+      setSelectedRole(savedRole);
+    } else if (currentUser?.role) {
+      setSelectedRole(currentUser.role);
+    }
+  }, [currentUser, pathname, router]);
 
   // If viewing unauthenticated public verify routes or login page, render clean page without sidebar
   if (pathname.startsWith('/public/') || pathname === '/login') {
     return <div className="min-h-screen bg-slate-50">{children}</div>;
   }
+
+  const handlePerformLogout = () => {
+    localStorage.removeItem('kaksedthan_active_role');
+    localStorage.removeItem('kaksedthan_user');
+    localStorage.removeItem('kaksedthan_token');
+    localStorage.removeItem('kaksedthan_session');
+    localStorage.setItem('kaksedthan_logged_out', 'true');
+    sessionStorage.clear();
+
+    document.cookie = 'kaksedthan_token=; path=/; expires=Thu, 01 Jan 1970 00:00:01 GMT;';
+    document.cookie = 'kaksedthan_role=; path=/; expires=Thu, 01 Jan 1970 00:00:01 GMT;';
+
+    if (onLogout) {
+      onLogout();
+    }
+
+    router.push('/login');
+    window.location.href = '/login';
+  };
+
+  const handleRoleChange = (newRole: string) => {
+    localStorage.removeItem('kaksedthan_logged_out');
+    setSelectedRole(newRole);
+    localStorage.setItem('kaksedthan_active_role', newRole);
+  };
+
+  const userRole = selectedRole;
+  const isAdmin = userRole === 'Super Admin' || userRole === 'Admin';
+  const isSourcingCompany = userRole === 'Sire Sourcing Company' || userRole === 'Company';
+  const isFarmOwner = userRole === 'Farm Owner';
+  const isBreeder = userRole === 'Breeder' || userRole === 'Breeder Account';
+  const isFarmManager = userRole === 'Farmer / Farm Manager Account' || userRole === 'Farm Manager';
 
   const userInitials = currentUser?.name
     ? currentUser.name
@@ -95,30 +145,6 @@ export default function SidebarLayout({
         .join('')
         .toUpperCase()
     : 'U';
-
-  const [selectedRole, setSelectedRole] = useState<string>('Super Admin');
-
-  // Load persisted operational role from localStorage on client mount
-  React.useEffect(() => {
-    const savedRole = localStorage.getItem('kaksedthan_active_role');
-    if (savedRole) {
-      setSelectedRole(savedRole);
-    } else if (currentUser?.role) {
-      setSelectedRole(currentUser.role);
-    }
-  }, [currentUser]);
-
-  const handleRoleChange = (newRole: string) => {
-    setSelectedRole(newRole);
-    localStorage.setItem('kaksedthan_active_role', newRole);
-  };
-
-  const userRole = selectedRole;
-  const isAdmin = userRole === 'Super Admin' || userRole === 'Admin';
-  const isSourcingCompany = userRole === 'Sire Sourcing Company' || userRole === 'Company';
-  const isFarmOwner = userRole === 'Farm Owner';
-  const isBreeder = userRole === 'Breeder';
-  const isCustomer = userRole === 'Customer / Cow Owner' || userRole === 'Customer';
 
   const navContent = (
     <div className="flex flex-col h-full bg-white border-r border-slate-200/80 text-slate-800 shadow-xs">
@@ -232,10 +258,10 @@ export default function SidebarLayout({
           </>
         )}
 
-        {/* 4. Customer / Cow Owner Specific Navigation */}
-        {isCustomer && (
+        {/* 4. Farm Manager Operational Navigation */}
+        {isFarmManager && (
           <>
-            <NavSection label="My Cattle">
+            <NavSection label="Daily Operations">
               <NavItem
                 icon={<Beef className="h-4 w-4 text-purple-600" />}
                 label="Dam Register"
@@ -252,13 +278,13 @@ export default function SidebarLayout({
             <NavSection label="Breeding & Certificates">
               <NavItem
                 icon={<Heart className="h-4 w-4 text-[#dc5c15]" />}
-                label="Request Breeding"
+                label="Breeding Program"
                 href="/breeding-programs"
                 isActive={pathname.startsWith('/breeding-programs')}
               />
               <NavItem
                 icon={<FileText className="h-4 w-4 text-emerald-600" />}
-                label="My Certificates"
+                label="Certificate Center"
                 href="/certificates"
                 isActive={pathname.startsWith('/certificates')}
               />
@@ -371,6 +397,12 @@ export default function SidebarLayout({
             </NavSection>
             <NavSection label="Farm & Ownership">
               <NavItem
+                icon={<Users className="h-4 w-4 text-indigo-600" />}
+                label="Breeder Accounts"
+                href="/breeders"
+                isActive={pathname.startsWith('/breeders')}
+              />
+              <NavItem
                 icon={<Building className="h-4 w-4 text-amber-600" />}
                 label="Farm Stations"
                 href="/farms"
@@ -429,9 +461,9 @@ export default function SidebarLayout({
               className="w-full bg-slate-50 border border-slate-200 rounded-xl px-2.5 py-1.5 text-xs font-bold text-slate-800 focus:ring-2 focus:ring-[#dc5c15] focus:outline-none cursor-pointer"
             >
               <option value="Super Admin">🛡️ Super Admin</option>
-              <option value="Breeder">🧬 Breeder Specialist</option>
-              <option value="Farm Owner">🏡 Farm Owner</option>
-              <option value="Customer / Cow Owner">🐮 Customer (Cow Owner)</option>
+              <option value="Breeder">🧬 Breeder Account</option>
+              <option value="Farm Owner">🏡 Farm Owner Account</option>
+              <option value="Farmer / Farm Manager Account">🚜 Farm Manager Account</option>
               <option value="Sire Sourcing Company">🏢 Sire Sourcing Co.</option>
             </select>
           </div>
@@ -449,15 +481,13 @@ export default function SidebarLayout({
                 {selectedRole}
               </span>
             </div>
-            {onLogout && (
-              <button
-                onClick={onLogout}
-                className="text-slate-400 hover:text-rose-600 transition-colors cursor-pointer p-2 rounded-xl hover:bg-rose-50"
-                title="Logout"
-              >
-                <LogOut className="h-4 w-4" />
-              </button>
-            )}
+            <button
+              onClick={handlePerformLogout}
+              className="text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition-colors cursor-pointer p-2 rounded-xl"
+              title="Logout"
+            >
+              <LogOut className="h-4 w-4 text-rose-600" />
+            </button>
           </div>
         </div>
       )}
@@ -470,14 +500,11 @@ export default function SidebarLayout({
     if (pathname.startsWith('/admin/') || pathname.startsWith('/settings/users') || pathname.startsWith('/settings/roles') || pathname.startsWith('/settings/permissions')) {
       return true;
     }
-    if (isCustomer && (pathname.startsWith('/stock-insemination') || pathname.startsWith('/farms') || pathname.startsWith('/customers'))) {
-      return true;
-    }
     if (isSourcingCompany && (pathname.startsWith('/farms') || pathname.startsWith('/customers'))) {
       return true;
     }
     return false;
-  }, [pathname, isAdmin, isCustomer, isSourcingCompany]);
+  }, [pathname, isAdmin, isSourcingCompany]);
 
   return (
     <div className="flex min-h-screen bg-slate-50 text-slate-800 font-sans">
@@ -498,7 +525,7 @@ export default function SidebarLayout({
       )}
 
       <main className="flex-1 flex flex-col bg-slate-50/90 min-w-0 overflow-y-auto">
-        {/* Top Header Bar displaying Active User Level & Account Mode */}
+        {/* Top Header Bar displaying Active User Level & Logout */}
         <header className="border-b border-slate-200/80 bg-white/90 backdrop-blur-md px-4 sm:px-6 py-3 sticky top-0 z-20 shadow-2xs flex items-center justify-between">
           <div className="flex items-center gap-3">
             <button
@@ -519,6 +546,14 @@ export default function SidebarLayout({
 
           <div className="flex items-center gap-3">
             <LanguageSwitcher />
+            <button
+              onClick={handlePerformLogout}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-rose-50 border border-rose-200 text-rose-700 hover:bg-rose-100 text-xs font-bold transition-all cursor-pointer shadow-2xs"
+              title="Logout of system"
+            >
+              <LogOut className="h-3.5 w-3.5 text-rose-600" />
+              <span>Logout</span>
+            </button>
           </div>
         </header>
 

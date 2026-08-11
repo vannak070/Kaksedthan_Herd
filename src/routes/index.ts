@@ -6,6 +6,7 @@ import breedingProgramRoutes from './breeding_program.routes';
 import calfRoutes from './calf.routes';
 import herdbookRoutes from './herdbook.routes';
 import certificateRoutes from './certificate.routes';
+import customerRoutes from './customer.routes';
 import publicRoutes from './public.routes';
 
 import stockRoutes from './stock.routes';
@@ -29,6 +30,7 @@ router.use('/breeding-programs', breedingProgramRoutes);
 router.use('/calves', calfRoutes);
 router.use('/herdbook', herdbookRoutes);
 router.use('/certificates', certificateRoutes);
+router.use('/customers', customerRoutes);
 router.use('/public', publicRoutes);
 
 // Legacy & Enterprise Module Routes

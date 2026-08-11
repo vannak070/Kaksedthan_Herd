@@ -26,14 +26,21 @@ import {
   Search,
   RefreshCw,
   Edit3,
-  Calculator
+  Calculator,
+  Lock
 } from 'lucide-react';
+
+import { fetchCustomersAction, fetchBreedersAction } from '@/app/actions';
 
 interface GuidedBreedingWizardProps {
   sires: SireItem[];
   dams: DamItem[];
   semenStock?: StockInseminationItem[];
   farms?: string[];
+  /** The active role from localStorage (e.g. 'Breeder', 'Super Admin') */
+  currentUserRole?: string;
+  /** For Breeder accounts: the resolved Breeder profile from the backend */
+  lockedBreeder?: { id: string; name: string } | null;
   onCancel: () => void;
   onSubmit: (program: BreedingProgramItem) => Promise<void>;
 }
@@ -43,12 +50,41 @@ export default function GuidedBreedingWizard({
   dams,
   semenStock = [],
   farms = ['រទាំង', 'ព្រៃវែង', 'បន្ទាយមានជ័យ'],
+  currentUserRole = 'Super Admin',
+  lockedBreeder = null,
   onCancel,
   onSubmit
 }: GuidedBreedingWizardProps) {
   const [currentStep, setCurrentStep] = useState<number>(1);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [validationError, setValidationError] = useState<string | null>(null);
+
+  // Role detection
+  const isBreederAccount = currentUserRole === 'Breeder' || currentUserRole === 'Breeder Account';
+  const isAdminAccount = currentUserRole === 'Super Admin' || currentUserRole === 'Admin';
+
+  // CUSTOMER LIST STATE — scoped to Breeder if applicable
+  const [customerList, setCustomerList] = useState<any[]>([]);
+  // BREEDER LIST STATE — for Admin dropdown
+  const [breederList, setBreederList] = useState<any[]>([]);
+
+  React.useEffect(() => {
+    // Scope customers: pass Breeder ID for Breeder accounts, undefined for Admin (all customers)
+    fetchCustomersAction(isBreederAccount && lockedBreeder ? lockedBreeder.id : undefined).then(res => {
+      if (res.success && Array.isArray(res.data)) {
+        setCustomerList(res.data);
+      }
+    });
+    // Load Breeder list for Admin dropdown
+    if (!isBreederAccount) {
+      fetchBreedersAction().then(res => {
+        if (res.success && Array.isArray(res.data)) {
+          setBreederList(res.data.filter((b: any) => b.status === 'Active' || !b.status));
+        }
+      });
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isBreederAccount, lockedBreeder?.id]);
 
   // SEARCH STATES
   const [sireSearch, setSireSearch] = useState('');
@@ -69,19 +105,25 @@ export default function GuidedBreedingWizard({
   const [step1Notes, setStep1Notes] = useState('');
 
   // STEP 2 — Owner Information
-  const [ownerType, setOwnerType] = useState<'Farm' | 'Cow Owner'>('Farm');
-  const [ownerName, setOwnerName] = useState('Kaksedthan Station Farm');
-  const [cowOwner, setCowOwner] = useState('SNR Livestock Owner');
+  const [ownerType, setOwnerType] = useState<'Farm' | 'Cow Owner'>('Cow Owner');
+  const [ownerName, setOwnerName] = useState('Sophea Nhek');
+  const [cowOwner, setCowOwner] = useState('Sophea Nhek');
   const [farmLocation, setFarmLocation] = useState(farms[0] || 'រទាំង');
   const [ownerContact] = useState('+855 12 888 999');
   const [isOwnerSelected, setIsOwnerSelected] = useState(true);
 
   // STEP 3 — Breeder Information
-  const [breederId, setBreederId] = useState('BRD-001');
-  const [breederName, setBreederName] = useState('Dr. Vannak (Senior Insemination Specialist)');
+  // For Breeder accounts: always use the locked Breeder from the backend (never trust frontend)
+  // For Admin: allow selection from real DB breeders list
+  const [breederId, setBreederId] = useState(
+    lockedBreeder ? lockedBreeder.id : ''
+  );
+  const [breederName, setBreederName] = useState(
+    lockedBreeder ? lockedBreeder.name : ''
+  );
   const [breederContact] = useState('+855 99 777 555');
   const [breederStatus] = useState('Active & Available');
-  const [isBreederSelected, setIsBreederSelected] = useState(true);
+  const [isBreederSelected, setIsBreederSelected] = useState(!!lockedBreeder);
 
   // STEP 4 — Sire & Dam Selection
   const [selectedSireId, setSelectedSireId] = useState('');
@@ -252,6 +294,16 @@ export default function GuidedBreedingWizard({
     
     setIsSubmitting(true);
     try {
+      // Determine the authoritative breeder ID:
+      // - Breeder account: always use lockedBreeder.id (backend will also enforce this)
+      // - Admin account: use the selected breederId from the dropdown
+      const effectiveBreederId = isBreederAccount && lockedBreeder
+        ? lockedBreeder.id
+        : breederId || null;
+      const effectiveBreederName = isBreederAccount && lockedBreeder
+        ? lockedBreeder.name
+        : breederName || null;
+
       const program: BreedingProgramItem = {
         id: `BP-${Date.now()}`,
         programNumber: recordId,
@@ -265,7 +317,7 @@ export default function GuidedBreedingWizard({
         ownerName,
         cowOwner: cowOwner || ownerName,
         farmLocation,
-        breederName,
+        breederName: effectiveBreederName,
         semenQty,
         unitPrice,
         semenCost,
@@ -285,6 +337,8 @@ export default function GuidedBreedingWizard({
         status: status as any,
         notes: detailNotes || step1Notes || '6-Step Guided Workflow Registered Program with Costing'
       };
+      // Attach breederId for backend enforcement
+      (program as any).breederId = effectiveBreederId;
       await onSubmit(program);
     } catch (err: any) {
       setValidationError(err.message || 'Failed to create breeding record');
@@ -561,24 +615,34 @@ export default function GuidedBreedingWizard({
                   </div>
 
                   <div>
-                    <label className="block font-bold text-slate-700 mb-1">Farm Owner Name <span className="text-rose-500">*</span></label>
-                    <input
-                      type="text"
-                      value={ownerName}
-                      onChange={e => setOwnerName(e.target.value)}
-                      className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2.5 font-bold text-slate-900 focus:ring-2 focus:ring-[#dc5c15] focus:outline-none"
-                      required
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block font-bold text-slate-700 mb-1">Dam Cow Owner</label>
-                    <input
-                      type="text"
-                      value={cowOwner}
-                      onChange={e => setCowOwner(e.target.value)}
-                      className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2.5 font-bold text-slate-900 focus:ring-2 focus:ring-[#dc5c15] focus:outline-none"
-                    />
+                    <label className="block font-bold text-slate-700 mb-1">Select Customer / Cow Owner <span className="text-rose-500">*</span></label>
+                    {customerList.length > 0 ? (
+                      <select
+                        value={cowOwner}
+                        onChange={e => {
+                          setCowOwner(e.target.value);
+                          setOwnerName(e.target.value);
+                        }}
+                        className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2.5 font-bold text-slate-900 focus:ring-2 focus:ring-[#dc5c15] focus:outline-none"
+                      >
+                        {customerList.map((c: any) => (
+                          <option key={c.id} value={c.name}>
+                            {c.name} ({c.id} • {c.phone || c.email || 'No contact'})
+                          </option>
+                        ))}
+                      </select>
+                    ) : (
+                      <input
+                        type="text"
+                        value={cowOwner}
+                        onChange={e => {
+                          setCowOwner(e.target.value);
+                          setOwnerName(e.target.value);
+                        }}
+                        placeholder="e.g. Sophea Nhek"
+                        className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2.5 font-bold text-slate-900 focus:ring-2 focus:ring-[#dc5c15] focus:outline-none"
+                      />
+                    )}
                   </div>
                 </div>
 
@@ -603,9 +667,10 @@ export default function GuidedBreedingWizard({
             <div className="flex items-center justify-between border-b border-slate-100 pb-3">
               <div className="flex items-center gap-2">
                 <UserCheck className="h-4 w-4 text-[#dc5c15]" />
-                <h4 className="text-xs font-black text-slate-900 uppercase tracking-wider">Step 3 — Select Breeder</h4>
+                <h4 className="text-xs font-black text-slate-900 uppercase tracking-wider">Step 3 — Breeder Assignment</h4>
               </div>
-              {isBreederSelected && !isChangingBreeder && (
+              {/* Only Admin can change breeder — Breeder account sees lock icon only */}
+              {!isBreederAccount && isBreederSelected && !isChangingBreeder && (
                 <button
                   type="button"
                   onClick={() => setIsChangingBreeder(true)}
@@ -617,57 +682,92 @@ export default function GuidedBreedingWizard({
               )}
             </div>
 
-            {/* Selected Breeder Summary Card */}
-            {isBreederSelected && !isChangingBreeder ? (
+            {/* ────────────────────────────────────────────────
+                BREEDER ACCOUNT: Always show locked card
+            ──────────────────────────────────────────────── */}
+            {isBreederAccount && (
+              <div>
+                <div className="p-4 bg-indigo-50/80 border border-indigo-200 rounded-2xl flex items-center justify-between gap-3">
+                  <div className="flex items-center gap-3">
+                    <div className="h-10 w-10 rounded-xl bg-indigo-600 flex items-center justify-center flex-shrink-0">
+                      <UserCheck className="h-5 w-5 text-white" />
+                    </div>
+                    <div>
+                      <span className="text-[9.5px] font-black uppercase tracking-wider text-indigo-700 block">Assigned Breeder (Auto)</span>
+                      <h5 className="text-sm font-black text-slate-900 mt-0.5">
+                        {lockedBreeder?.name || breederName || 'Current Account'}
+                      </h5>
+                      <p className="text-[10px] text-indigo-700 font-bold mt-0.5">
+                        ID: {lockedBreeder?.id || breederId} • Current Account
+                      </p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-1.5 bg-indigo-100 text-indigo-800 border border-indigo-200 text-xs font-black px-3 py-1.5 rounded-xl">
+                    <Lock className="h-3.5 w-3.5" />
+                    <span>Auto-Assigned</span>
+                  </div>
+                </div>
+                <p className="text-[10px] text-slate-500 font-medium mt-2 px-1">
+                  As a Breeder account, you are automatically assigned as the responsible Breeder. This cannot be changed.
+                </p>
+              </div>
+            )}
+
+            {/* ────────────────────────────────────────────────
+                ADMIN ACCOUNT: Show selected Breeder card or dropdown
+            ──────────────────────────────────────────────── */}
+            {!isBreederAccount && isBreederSelected && !isChangingBreeder && (
               <div className="p-4 bg-slate-50 border border-slate-200 rounded-2xl flex items-center justify-between">
                 <div>
                   <span className="text-[9.5px] font-black uppercase tracking-wider text-purple-700">Selected Breeder</span>
-                  <h5 className="text-sm font-black text-slate-900 mt-0.5">{breederName}</h5>
-                  <p className="text-xs text-slate-600 font-bold">Breeder ID: {breederId} • Status: {breederStatus} • Phone: {breederContact}</p>
+                  <h5 className="text-sm font-black text-slate-900 mt-0.5">{breederName || '— Not Selected —'}</h5>
+                  <p className="text-xs text-slate-600 font-bold">Breeder ID: {breederId || 'N/A'}</p>
                 </div>
                 <div className="flex items-center gap-1.5 bg-[#dc5c15] text-white text-xs font-black px-3 py-1.5 rounded-xl shadow-xs">
                   <Check className="h-4 w-4 stroke-[3]" />
                   <span>Selected</span>
                 </div>
               </div>
-            ) : (
+            )}
+
+            {!isBreederAccount && (!isBreederSelected || isChangingBreeder) && (
               <div className="space-y-4 text-xs">
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <div>
-                    <label className="block font-bold text-slate-700 mb-1">Select Licensed Specialist <span className="text-rose-500">*</span></label>
+                <div>
+                  <label className="block font-bold text-slate-700 mb-1">Select Licensed Breeder Specialist <span className="text-rose-500">*</span></label>
+                  {breederList.length > 0 ? (
                     <select
                       value={breederId}
                       onChange={e => {
+                        const selected = breederList.find((b: any) => b.id === e.target.value);
                         setBreederId(e.target.value);
-                        if (e.target.value === 'BRD-001') setBreederName('Dr. Vannak (Senior Insemination Specialist)');
-                        else if (e.target.value === 'BRD-002') setBreederName('Sokha Livestock Tech (AI Specialist)');
-                        else setBreederName('SNR Senior Inseminator');
+                        setBreederName(selected ? selected.name : '');
                       }}
                       className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2.5 font-bold text-slate-900 focus:ring-2 focus:ring-[#dc5c15] focus:outline-none"
                     >
-                      <option value="BRD-001">Dr. Vannak (BRD-001) • Senior AI Specialist</option>
-                      <option value="BRD-002">Sokha Livestock Tech (BRD-002) • AI Inseminator</option>
-                      <option value="BRD-003">SNR Senior Inseminator (BRD-003) • Breeding Tech</option>
+                      <option value="">— Select Breeder —</option>
+                      {breederList.map((b: any) => (
+                        <option key={b.id} value={b.id}>
+                          {b.name} ({b.id}) • {b.province || b.address || 'N/A'}
+                        </option>
+                      ))}
                     </select>
-                  </div>
-
-                  <div>
-                    <label className="block font-bold text-slate-700 mb-1">Breeder Name / Title</label>
-                    <input
-                      type="text"
-                      value={breederName}
-                      onChange={e => setBreederName(e.target.value)}
-                      className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2.5 font-bold text-slate-900 focus:ring-2 focus:ring-[#dc5c15] focus:outline-none"
-                      required
-                    />
-                  </div>
+                  ) : (
+                    <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl text-xs text-amber-800 font-medium">
+                      Loading Breeder list… or no active Breeders found in the system.
+                    </div>
+                  )}
                 </div>
 
                 <button
                   type="button"
                   onClick={() => {
+                    if (!breederId) {
+                      setValidationError('Please select a Breeder Specialist.');
+                      return;
+                    }
                     setIsBreederSelected(true);
                     setIsChangingBreeder(false);
+                    setValidationError(null);
                   }}
                   className="w-full py-2.5 rounded-xl bg-emerald-600 text-white font-black text-xs shadow-md hover:bg-emerald-700 transition-all cursor-pointer"
                 >
