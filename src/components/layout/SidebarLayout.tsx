@@ -20,12 +20,14 @@ import {
   FileText,
   QrCode,
   Users,
+  UserCheck,
   ClipboardList,
   Layers
 } from 'lucide-react';
 import { UserRoleItem } from '@/lib/types';
 import { useLanguage } from '@/context/LanguageContext';
 import LanguageSwitcher from '../LanguageSwitcher';
+import { useAccessControl } from '@/hooks/useAccessControl';
 
 interface SidebarLayoutProps {
   children: React.ReactNode;
@@ -83,6 +85,26 @@ export default function SidebarLayout({
   const pathname = usePathname();
   const router = useRouter();
   const { t } = useLanguage();
+  const { can } = useAccessControl();
+
+  const userRole = selectedRole;
+  const isAdmin = userRole === 'Super Admin' || userRole === 'Admin';
+  const isSourcingCompany = userRole === 'Sire Sourcing Company' || userRole === 'Company';
+  const isFarmOwner = userRole === 'Farm Owner';
+  const isBreeder = userRole === 'Breeder' || userRole === 'Breeder Account';
+  const isFarmManager = userRole === 'Farmer / Farm Manager Account' || userRole === 'Farm Manager';
+
+  // Route Access Security Guard based on active user level (Hook called unconditionally at top level)
+  const isUnauthorizedRoute = React.useMemo(() => {
+    if (isAdmin) return false;
+    if (pathname.startsWith('/admin/') || pathname.startsWith('/settings/users') || pathname.startsWith('/settings/roles') || pathname.startsWith('/settings/permissions')) {
+      return true;
+    }
+    if (isSourcingCompany && (pathname.startsWith('/farms') || pathname.startsWith('/customers'))) {
+      return true;
+    }
+    return false;
+  }, [pathname, isAdmin, isSourcingCompany]);
 
   // Load persisted operational role from localStorage on client mount & check logout session
   React.useEffect(() => {
@@ -129,13 +151,6 @@ export default function SidebarLayout({
     setSelectedRole(newRole);
     localStorage.setItem('kaksedthan_active_role', newRole);
   };
-
-  const userRole = selectedRole;
-  const isAdmin = userRole === 'Super Admin' || userRole === 'Admin';
-  const isSourcingCompany = userRole === 'Sire Sourcing Company' || userRole === 'Company';
-  const isFarmOwner = userRole === 'Farm Owner';
-  const isBreeder = userRole === 'Breeder' || userRole === 'Breeder Account';
-  const isFarmManager = userRole === 'Farmer / Farm Manager Account' || userRole === 'Farm Manager';
 
   const userInitials = currentUser?.name
     ? currentUser.name
@@ -370,71 +385,87 @@ export default function SidebarLayout({
               />
             </NavSection>
             <NavSection label="Herdbook System">
-              <NavItem
-                icon={<Beef className="h-4 w-4 text-[#dc5c15]" />}
-                label="Sire Register"
-                href="/sires"
-                isActive={pathname.startsWith('/sires')}
-              />
-              <NavItem
-                icon={<Beef className="h-4 w-4 text-purple-600" />}
-                label="Dam Register"
-                href="/dams"
-                isActive={pathname.startsWith('/dams')}
-              />
-              <NavItem
-                icon={<Baby className="h-4 w-4 text-emerald-600" />}
-                label="Calf Birth Register"
-                href="/calves"
-                isActive={pathname.startsWith('/calves')}
-              />
-              <NavItem
-                icon={<FileText className="h-4 w-4 text-emerald-600" />}
-                label="Certificate Center"
-                href="/certificates"
-                isActive={pathname.startsWith('/certificates')}
-              />
+              {can('sire.view') && (
+                <NavItem
+                  icon={<Beef className="h-4 w-4 text-[#dc5c15]" />}
+                  label="Sire Register"
+                  href="/sires"
+                  isActive={pathname.startsWith('/sires')}
+                />
+              )}
+              {can('dam.view') && (
+                <NavItem
+                  icon={<Beef className="h-4 w-4 text-purple-600" />}
+                  label="Dam Register"
+                  href="/dams"
+                  isActive={pathname.startsWith('/dams')}
+                />
+              )}
+              {can('calf.view') && (
+                <NavItem
+                  icon={<Baby className="h-4 w-4 text-emerald-600" />}
+                  label="Calf Birth Register"
+                  href="/calves"
+                  isActive={pathname.startsWith('/calves')}
+                />
+              )}
+              {can('certification.view') && (
+                <NavItem
+                  icon={<FileText className="h-4 w-4 text-emerald-600" />}
+                  label="Certificate Center"
+                  href="/certificates"
+                  isActive={pathname.startsWith('/certificates')}
+                />
+              )}
             </NavSection>
-            <NavSection label="Farm & Ownership">
-              <NavItem
-                icon={<Users className="h-4 w-4 text-indigo-600" />}
-                label="Breeder Accounts"
-                href="/breeders"
-                isActive={pathname.startsWith('/breeders')}
-              />
-              <NavItem
-                icon={<Building className="h-4 w-4 text-amber-600" />}
-                label="Farm Stations"
-                href="/farms"
-                isActive={pathname.startsWith('/farms')}
-              />
-              <NavItem
-                icon={<Users className="h-4 w-4 text-purple-600" />}
-                label="Customers / Cow Owners"
-                href="/customers"
-                isActive={pathname.startsWith('/customers')}
-              />
+            <NavSection label="Account Management">
+              {!isSourcingCompany && (
+                <NavItem
+                  icon={<UserCheck className="h-4 w-4 text-emerald-600" />}
+                  label="Breeder Management"
+                  href="/breeders"
+                  isActive={pathname.startsWith('/breeders')}
+                />
+              )}
+              {!isSourcingCompany && (
+                <NavItem
+                  icon={<Building className="h-4 w-4 text-amber-600" />}
+                  label="Farm Stations"
+                  href="/farms"
+                  isActive={pathname.startsWith('/farms')}
+                />
+              )}
+              {!isSourcingCompany && (
+                <NavItem
+                  icon={<Users className="h-4 w-4 text-purple-600" />}
+                  label="Customers / Cow Owners"
+                  href="/customers"
+                  isActive={pathname.startsWith('/customers')}
+                />
+              )}
             </NavSection>
-            <NavSection label="Administration">
-              <NavItem
-                icon={<Layers className="h-4 w-4 text-[#047857]" />}
-                label="User Level Management"
-                href="/admin/user-levels"
-                isActive={pathname.startsWith('/admin/user-levels')}
-              />
-              <NavItem
-                icon={<Users className="h-4 w-4 text-indigo-600" />}
-                label="Users & Access Control"
-                href="/settings/users"
-                isActive={pathname.startsWith('/settings/users')}
-              />
-              <NavItem
-                icon={<ClipboardList className="h-4 w-4 text-slate-500" />}
-                label="Audit Logs"
-                href="/settings/audit-logs"
-                isActive={pathname.startsWith('/settings/audit-logs')}
-              />
-            </NavSection>
+            {isAdmin && (
+              <NavSection label="Administration">
+                <NavItem
+                  icon={<Layers className="h-4 w-4 text-[#047857]" />}
+                  label="User Level Management"
+                  href="/admin/user-levels"
+                  isActive={pathname.startsWith('/admin/user-levels')}
+                />
+                <NavItem
+                  icon={<Users className="h-4 w-4 text-indigo-600" />}
+                  label="Users & Access Control"
+                  href="/settings/users"
+                  isActive={pathname.startsWith('/settings/users')}
+                />
+                <NavItem
+                  icon={<ClipboardList className="h-4 w-4 text-slate-500" />}
+                  label="Audit Logs"
+                  href="/settings/audit-logs"
+                  isActive={pathname.startsWith('/settings/audit-logs')}
+                />
+              </NavSection>
+            )}
             <NavSection label="System">
               <NavItem
                 icon={<Settings className="h-4 w-4 text-slate-600" />}
@@ -493,18 +524,6 @@ export default function SidebarLayout({
       )}
     </div>
   );
-
-  // Route Access Security Guard based on active user level
-  const isUnauthorizedRoute = React.useMemo(() => {
-    if (isAdmin) return false;
-    if (pathname.startsWith('/admin/') || pathname.startsWith('/settings/users') || pathname.startsWith('/settings/roles') || pathname.startsWith('/settings/permissions')) {
-      return true;
-    }
-    if (isSourcingCompany && (pathname.startsWith('/farms') || pathname.startsWith('/customers'))) {
-      return true;
-    }
-    return false;
-  }, [pathname, isAdmin, isSourcingCompany]);
 
   return (
     <div className="flex min-h-screen bg-slate-50 text-slate-800 font-sans">

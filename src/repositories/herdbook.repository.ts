@@ -1602,6 +1602,35 @@ export class HerdbookRepository {
   // ─────────────────────────────────────────────────────────────
   // 10. User Levels Repository (Database Driven)
   // ─────────────────────────────────────────────────────────────
+  async ensureUserLevelTablesSchema(): Promise<void> {
+    const sql = `
+      CREATE TABLE IF NOT EXISTS user_level_permissions (
+        user_level_id VARCHAR(50) REFERENCES user_levels(id) ON DELETE CASCADE,
+        permission_key VARCHAR(100) NOT NULL,
+        PRIMARY KEY (user_level_id, permission_key)
+      );
+    `;
+    await query(sql);
+  }
+
+  async seedUserLevelPermissions(): Promise<void> {
+    const defaultPermissions: Record<string, string[]> = {
+      'LEVEL-01': ['sire.view', 'dam.view', 'dam.create', 'dam.update', 'calf.view', 'calf.create', 'calf.update', 'breeding_program.view', 'breeding_program.create', 'breeding_program.update', 'breeding_program.confirm', 'breeding_cost.view', 'breeding_cost.create', 'breeding_cost.update', 'stock.view', 'stock.create', 'stock.update', 'herdbook.view', 'herdbook.verify', 'certificate.view', 'certificate.generate', 'certificate.download', 'certification.view', 'certification.apply'],
+      'LEVEL-02': ['sire.view', 'dam.view', 'dam.create', 'dam.update', 'calf.view', 'calf.create', 'calf.update', 'breeding_program.view', 'breeding_program.create', 'breeding_cost.view', 'herdbook.view', 'certificate.view', 'certificate.download', 'farm.view', 'customer.view'],
+      'LEVEL-03': ['sire.view', 'dam.view', 'dam.create', 'dam.update', 'calf.view', 'calf.create', 'calf.update', 'breeding_program.view', 'breeding_program.create', 'farm.view'],
+      'LEVEL-04': ['sire.view', 'sire.create', 'sire.update', 'sire.download', 'stock.view', 'stock.create', 'stock.update', 'stock.transfer', 'herdbook.view', 'certificate.view', 'certificate.download']
+    };
+    
+    for (const [levelId, perms] of Object.entries(defaultPermissions)) {
+      const checkRes = await query('SELECT COUNT(*) FROM user_level_permissions WHERE user_level_id = $1', [levelId]);
+      if (parseInt(checkRes.rows[0].count, 10) === 0) {
+        for (const p of perms) {
+          await query('INSERT INTO user_level_permissions (user_level_id, permission_key) VALUES ($1, $2) ON CONFLICT DO NOTHING', [levelId, p]);
+        }
+      }
+    }
+  }
+
   async getUserLevels(): Promise<any[]> {
     const sql = `
       SELECT ul.*, 
@@ -1610,18 +1639,24 @@ export class HerdbookRepository {
       ORDER BY ul.sort_order ASC, ul.created_at ASC
     `;
     const res = await query(sql);
-    return res.rows.map(r => ({
+    const levels = res.rows.map(r => ({
       id: r.id,
       code: r.code,
       name: r.name,
       description: r.description,
       purpose: r.purpose,
-      status: r.status,
+      status: r.status as 'Draft' | 'Active' | 'Inactive',
       sortOrder: r.sort_order,
       userCount: parseInt(r.user_count || '0', 10),
       createdAt: r.created_at,
-      updatedAt: r.updated_at
+      updatedAt: r.updated_at,
+      permissions: [] as string[]
     }));
+
+    for (const level of levels) {
+      level.permissions = await this.getUserLevelPermissions(level.id);
+    }
+    return levels;
   }
 
   async getUserLevelById(id: string): Promise<any | null> {
@@ -1634,18 +1669,40 @@ export class HerdbookRepository {
     const res = await query(sql, [id]);
     if (res.rows.length === 0) return null;
     const r = res.rows[0];
+    const permissions = await this.getUserLevelPermissions(r.id);
     return {
       id: r.id,
       code: r.code,
       name: r.name,
       description: r.description,
       purpose: r.purpose,
-      status: r.status,
+      status: r.status as 'Draft' | 'Active' | 'Inactive',
       sortOrder: r.sort_order,
       userCount: parseInt(r.user_count || '0', 10),
       createdAt: r.created_at,
-      updatedAt: r.updated_at
+      updatedAt: r.updated_at,
+      permissions
     };
+  }
+
+  async getUserLevelPermissions(userLevelId: string): Promise<string[]> {
+    const res = await query('SELECT permission_key FROM user_level_permissions WHERE user_level_id = $1', [userLevelId]);
+    return res.rows.map(r => r.permission_key);
+  }
+
+  async updateUserLevelPermissions(userLevelId: string, permissions: string[], performedBy?: string): Promise<void> {
+    await query('DELETE FROM user_level_permissions WHERE user_level_id = $1', [userLevelId]);
+    for (const p of permissions) {
+      await query('INSERT INTO user_level_permissions (user_level_id, permission_key) VALUES ($1, $2)', [userLevelId, p]);
+    }
+    if (performedBy) {
+      await this.recordUserLevelAudit({
+        action: 'UPDATE_PERMISSIONS',
+        resourceId: userLevelId,
+        performedBy,
+        details: { permissionsCount: permissions.length }
+      });
+    }
   }
 
 
@@ -1656,11 +1713,12 @@ export class HerdbookRepository {
     purpose?: string;
     sortOrder?: number;
     defaultModules?: string[];
+    permissions?: string[];
   }): Promise<any> {
     const id = `LEVEL-${Date.now().toString().slice(-6)}`;
     const sql = `
       INSERT INTO user_levels (id, code, name, description, purpose, sort_order, status)
-      VALUES ($1, $2, $3, $4, $5, $6, 'Active')
+      VALUES ($1, $2, $3, $4, $5, $6, 'Draft')
       RETURNING *
     `;
     const res = await query(sql, [
@@ -1701,6 +1759,10 @@ export class HerdbookRepository {
       `, [id, mod.key, mod.name, enabledSet.has(mod.key)]);
     }
 
+    if (level.permissions) {
+      await this.updateUserLevelPermissions(id, level.permissions, 'admin');
+    }
+
     // Record audit
     await this.recordUserLevelAudit({
       action: 'CREATE_USER_LEVEL',
@@ -1723,7 +1785,7 @@ export class HerdbookRepository {
     };
   }
 
-  async updateUserLevel(id: string, updates: { name?: string; description?: string; purpose?: string; sortOrder?: number; status?: 'Active' | 'Inactive' }, performedBy?: string): Promise<any> {
+  async updateUserLevel(id: string, updates: { name?: string; description?: string; purpose?: string; sortOrder?: number; status?: 'Draft' | 'Active' | 'Inactive' }, performedBy?: string): Promise<any> {
     const fields: string[] = [];
     const params: any[] = [];
     let idx = 1;
@@ -1751,16 +1813,16 @@ export class HerdbookRepository {
     return res.rows[0];
   }
 
-  async setUserLevelStatus(id: string, status: 'Active' | 'Inactive'): Promise<{ level: any; warning?: string }> {
+  async setUserLevelStatus(id: string, status: 'Draft' | 'Active' | 'Inactive'): Promise<{ level: any; warning?: string }> {
     // Safety guard: check if users assigned
     const countRes = await query(`SELECT COUNT(*) as cnt FROM users WHERE user_level_id = $1 OR user_level = (SELECT name FROM user_levels WHERE id = $1)`, [id]);
     const userCount = parseInt(countRes.rows[0]?.cnt || '0', 10);
 
-    if (status === 'Inactive' && userCount > 0) {
+    if ((status === 'Inactive' || status === 'Draft') && userCount > 0) {
       const res = await query(`UPDATE user_levels SET status = 'Inactive', updated_at = CURRENT_TIMESTAMP WHERE id = $1 RETURNING *`, [id]);
       return {
         level: res.rows[0],
-        warning: `This user level is currently assigned to ${userCount} active users and cannot be permanently deleted. It has been set to Inactive instead.`
+        warning: `This User Level is currently assigned to ${userCount} active users.`
       };
     }
 

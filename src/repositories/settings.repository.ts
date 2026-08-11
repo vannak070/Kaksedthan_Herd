@@ -1,5 +1,6 @@
 import { query } from '../config/database';
-import { MasterSetup, UserRoleItem, CustomRoleDefinition, DEFAULT_ROLE_PERMISSIONS, FarmItem } from '../lib/types';
+import { MasterSetup, UserRoleItem, DEFAULT_ROLE_PERMISSIONS, FarmItem } from '../lib/types';
+import { CustomRoleDefinition } from '../types/settings.types';
 import { PoolClient } from 'pg';
 
 const DEFAULT_FARMS: FarmItem[] = [
@@ -136,6 +137,11 @@ export class SettingsRepository {
 
       for (const u of settings.users) {
         const permsToSave = u.permissions || DEFAULT_ROLE_PERMISSIONS[u.role] || [];
+        const isBreeder = (u as any).userLevel === 'Breeder' || (u as any).userLevel === 'Breeder Account' || u.role === 'Breeder';
+        const userLevelId = isBreeder ? 'LEVEL-01' : ((u as any).userLevelId || null);
+        const userLevel = isBreeder ? 'Breeder Account' : ((u as any).userLevel || null);
+        const dataScope = isBreeder ? 'OWN_BREEDER_ONLY' : ((u as any).dataScope || 'ASSIGNED_RECORD');
+
         await this.executeQuery(
           `INSERT INTO users (id, name, email, role, user_level, user_level_id, data_scope, status, password, permissions, farm_location, national_id, id_front_url, id_back_url, id_verification_status, farm_id)
            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
@@ -152,13 +158,50 @@ export class SettingsRepository {
              farm_id=COALESCE($16, users.farm_id)`,
           [
             u.id, u.name, u.email, u.role,
-            (u as any).userLevel || null, (u as any).userLevelId || null, (u as any).dataScope || 'ASSIGNED_RECORD',
+            userLevel, userLevelId, dataScope,
             u.status || 'Active', u.password || 'password123', JSON.stringify(permsToSave), u.farmLocation || null,
             (u as any).nationalId || null, (u as any).idFrontUrl || null, (u as any).idBackUrl || null,
             (u as any).idVerificationStatus || 'Pending', (u as any).farmId || null
           ],
           client
         );
+
+        // Synchronize Breeder Profile for Breeder User Accounts
+        if (isBreeder && u.email) {
+          const checkBreeder = await this.executeQuery(
+            `SELECT id FROM breeders WHERE LOWER(email) = LOWER($1) OR user_id = $2 LIMIT 1`,
+            [u.email.trim(), u.id],
+            client
+          );
+
+          if (checkBreeder.rows.length === 0) {
+            const bId = `BREEDER-${Date.now()}-${Math.floor(100 + Math.random() * 900)}`;
+            const bCode = `BRD-2026-${Math.floor(100 + Math.random() * 900)}`;
+            await this.executeQuery(
+              `INSERT INTO breeders (id, code, name, email, user_id, status, created_at, updated_at)
+               VALUES ($1, $2, $3, $4, $5, $6, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)`,
+              [bId, bCode, u.name, u.email.trim(), u.id, u.status || 'Active'],
+              client
+            );
+            await this.executeQuery(
+              `UPDATE users SET breeder_id = $1 WHERE id = $2`,
+              [bId, u.id],
+              client
+            );
+          } else {
+            const bId = checkBreeder.rows[0].id;
+            await this.executeQuery(
+              `UPDATE breeders SET user_id = $1, name = $2, email = $3, status = $4, updated_at = CURRENT_TIMESTAMP WHERE id = $5`,
+              [u.id, u.name, u.email.trim(), u.status || 'Active', bId],
+              client
+            );
+            await this.executeQuery(
+              `UPDATE users SET breeder_id = $1 WHERE id = $2`,
+              [bId, u.id],
+              client
+            );
+          }
+        }
       }
     }
 

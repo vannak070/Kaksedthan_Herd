@@ -7,8 +7,8 @@ import { Lock, Mail, ArrowRight, ShieldCheck, CheckCircle2 } from 'lucide-react'
 
 export default function LoginPage() {
   const router = useRouter();
-  const [email, setEmail] = useState('vannak@snrfarm.com');
-  const [password, setPassword] = useState('password123');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [success, setSuccess] = useState(false);
 
@@ -75,7 +75,7 @@ export default function LoginPage() {
               type="email"
               value={email}
               onChange={e => setEmail(e.target.value)}
-              placeholder="e.g. vannak@snrfarm.com"
+              placeholder="e.g. email@kaksedthan.com"
               className="w-full px-4 py-2.5 text-xs font-medium border border-slate-300 rounded-xl focus:ring-2 focus:ring-[#dc5c15] focus:outline-none transition-all"
               required
             />
@@ -119,27 +119,6 @@ export default function LoginPage() {
             )}
           </button>
         </form>
-
-        {/* Demo Accounts List */}
-        <div className="border-t border-slate-100 pt-4 space-y-2">
-          <p className="text-[10px] font-black uppercase tracking-wider text-slate-400 text-center">Quick Demo Login Accounts</p>
-          <div className="grid grid-cols-2 gap-2 text-[11px]">
-            <button
-              onClick={() => { setEmail('vannak@snrfarm.com'); setPassword('password123'); }}
-              className="p-2 bg-slate-50 border border-slate-200 rounded-xl text-left hover:border-orange-300 transition-colors"
-            >
-              <p className="font-bold text-slate-900">Vannak Admin</p>
-              <p className="text-slate-500 text-[10px]">Super Admin</p>
-            </button>
-            <button
-              onClick={() => { setEmail('bona.v@snrfarm.com'); setPassword('password123'); }}
-              className="p-2 bg-slate-50 border border-slate-200 rounded-xl text-left hover:border-orange-300 transition-colors"
-            >
-              <p className="font-bold text-slate-900">Bona Owner</p>
-              <p className="text-slate-500 text-[10px]">Farm Owner</p>
-            </button>
-          </div>
-        </div>
 
         {/* Footer */}
         <div className="text-center pt-2 text-[10px] font-semibold text-slate-400">

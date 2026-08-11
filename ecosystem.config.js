@@ -1,3 +1,6 @@
+const path = require('path');
+require('dotenv').config({ path: path.resolve(__dirname, '.env') });
+
 module.exports = {
   apps: [
     {
@@ -7,7 +10,13 @@ module.exports = {
       cwd: '/var/www/kaksedthan',
       env: {
         NODE_ENV: 'production',
-        PORT: 3000
+        PORT: 3000,
+        DB_HOST: process.env.DB_HOST || 'localhost',
+        DB_PORT: process.env.DB_PORT || '5432',
+        DB_USER: process.env.DB_USER || 'herdbook_user',
+        DB_PASSWORD: process.env.DB_PASSWORD || 'HerdbookSecure2025',
+        DB_NAME: process.env.DB_NAME || 'kaksedthan_herdbook',
+        DB_SSL: process.env.DB_SSL || 'false'
       },
       instances: 1,
       exec_mode: 'fork',
@@ -24,7 +33,13 @@ module.exports = {
       cwd: '/var/www/kaksedthan',
       env: {
         NODE_ENV: 'production',
-        API_PORT: 5001
+        API_PORT: 5001,
+        DB_HOST: process.env.DB_HOST || 'localhost',
+        DB_PORT: process.env.DB_PORT || '5432',
+        DB_USER: process.env.DB_USER || 'herdbook_user',
+        DB_PASSWORD: process.env.DB_PASSWORD || 'HerdbookSecure2025',
+        DB_NAME: process.env.DB_NAME || 'kaksedthan_herdbook',
+        DB_SSL: process.env.DB_SSL || 'false'
       },
       instances: 1,
       exec_mode: 'fork',

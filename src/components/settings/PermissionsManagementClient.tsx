@@ -1,122 +1,224 @@
 'use client';
 
-import React, { useState } from 'react';
-import { Lock, ShieldCheck, Check, Search, AlertTriangle } from 'lucide-react';
-
-const PERMISSION_GROUPS = [
-  {
-    category: 'Livestock & Registers',
-    permissions: [
-      { code: 'view:sires', label: 'View Sire Register', description: 'Access sire profiles and semen inventory.' },
-      { code: 'create:sires', label: 'Create Sire', description: 'Register new sire records in system.' },
-      { code: 'view:dams', label: 'View Dam Register', description: 'Access dam profiles and breeding status.' },
-      { code: 'create:dams', label: 'Create Dam', description: 'Register new dam records in system.' },
-      { code: 'view:calves', label: 'View Calf Register', description: 'Access calf birth registry records.' },
-      { code: 'create:calves', label: 'Create Calf', description: 'Register newborn calves.' }
-    ]
-  },
-  {
-    category: 'Breeding Operations',
-    permissions: [
-      { code: 'view:breeding', label: 'View Breeding Programs', description: 'View active and past breeding programs.' },
-      { code: 'create:breeding', label: 'Create Breeding Program', description: 'Schedule new artificial insemination / breeding programs.' },
-      { code: 'update:breeding_status', label: 'Update Breeding Status', description: 'Update pregnancy check results and calving dates.' },
-      { code: 'manage:semen_stock', label: 'Manage Semen Stock', description: 'Update stock quantities and USD pricing.' }
-    ]
-  },
-  {
-    category: 'Herdbook & Certificates',
-    permissions: [
-      { code: 'view:herdbook', label: 'View Herdbook Registry', description: 'View official cattle pedigree registrations.' },
-      { code: 'approve:herdbook', label: 'Approve Registrations', description: 'Approve pending herdbook applications.' },
-      { code: 'issue:certificate', label: 'Issue Certificate', description: 'Generate and issue official A4 certificates.' },
-      { code: 'export:certificate', label: 'Export Certificate PNG', description: 'Download high-resolution certificate images.' }
-    ]
-  },
-  {
-    category: 'Administration & System',
-    permissions: [
-      { code: 'manage:users', label: 'User Management', description: 'Create, edit, and deactivate user accounts.' },
-      { code: 'verify:national_id', label: 'Verify National ID', description: 'Review and verify customer National ID documents.' },
-      { code: 'manage:user_levels', label: 'User Level Management', description: 'Configure business account levels and module access.' },
-      { code: 'manage:farms', label: 'Farm Management', description: 'Create and configure farm locations and barn capacities.' }
-    ]
-  }
-];
+import React, { useEffect, useState, useMemo } from 'react';
+import { CRUD_MODULES, SPECIAL_PERMISSION_GROUPS, PermissionCatalogItem, CrudModule } from '@/types/settings.types';
+import { getPermissionsAction } from '@/app/actions';
+import { Search, Check, Layers, Shield, Crown, Star, ChevronRight, Lock } from 'lucide-react';
 
 export default function PermissionsManagementClient() {
+  const [permissions, setPermissions] = useState<PermissionCatalogItem[]>([]);
   const [search, setSearch] = useState('');
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const fetchPermissions = async () => {
+      try {
+        setLoading(true);
+        const data = await getPermissionsAction();
+        if (data) {
+          setPermissions(data);
+        }
+      } catch (error) {
+        console.error('Failed to fetch permissions:', error);
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchPermissions();
+  }, []);
+
+  const filteredPermissions = useMemo(() => {
+    const s = search.toLowerCase();
+    if (!s) return permissions;
+    return permissions.filter(p => 
+      p.key.toLowerCase().includes(s) ||
+      p.label.toLowerCase().includes(s) ||
+      p.description.toLowerCase().includes(s) ||
+      p.module.toLowerCase().includes(s)
+    );
+  }, [permissions, search]);
+
+  const crudCount = permissions.filter(p => !p.isSpecial).length;
+  const specialCount = permissions.filter(p => p.isSpecial).length;
+  
+  const hasPermission = (key?: string) => {
+    if (!key) return false;
+    return filteredPermissions.some(p => p.key === key);
+  };
 
   return (
-    <div className="max-w-7xl mx-auto p-4 sm:p-6 space-y-6">
-      {/* Header */}
-      <div className="bg-white rounded-3xl border border-slate-200 shadow-sm overflow-hidden">
-        <div className="bg-gradient-to-r from-slate-800 to-slate-900 p-6 text-white">
-          <div className="flex items-center gap-3">
-            <div className="h-12 w-12 bg-white/20 rounded-2xl flex items-center justify-center backdrop-blur-sm border border-white/30">
-              <Lock className="h-6 w-6 text-white" />
-            </div>
-            <div>
-              <p className="text-white/70 text-[11px] font-bold uppercase tracking-wider">Administration</p>
-              <h1 className="text-xl font-black text-white">Permission Management</h1>
-              <p className="text-white/70 text-xs font-medium mt-0.5">
-                Granular action permissions enforced via 403 Forbidden REST authorization.
-              </p>
+    <div className="w-full min-h-screen bg-slate-50 flex flex-col md:flex-row">
+      {/* Left Sidebar Navigation */}
+      <div className="w-full md:w-64 bg-white border-r border-slate-200 p-6 flex flex-col gap-6 sticky top-0 md:h-screen overflow-y-auto">
+        <h2 className="font-black text-2xl text-slate-900 tracking-tight flex items-center gap-2">
+          <Shield className="w-6 h-6 text-indigo-600" />
+          Catalog
+        </h2>
+        
+        <nav className="flex flex-col gap-2">
+          <div className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">Sections</div>
+          <a href="#crud-modules" className="flex items-center justify-between p-2 rounded-xl hover:bg-slate-50 text-slate-700 font-medium transition-colors">
+            <span className="flex items-center gap-2"><Layers className="w-4 h-4" /> CRUD Modules</span>
+            <ChevronRight className="w-4 h-4 text-slate-400" />
+          </a>
+          <a href="#special-permissions" className="flex items-center justify-between p-2 rounded-xl hover:bg-slate-50 text-slate-700 font-medium transition-colors">
+            <span className="flex items-center gap-2"><Star className="w-4 h-4" /> Special Actions</span>
+            <ChevronRight className="w-4 h-4 text-slate-400" />
+          </a>
+        </nav>
+
+        <div className="mt-auto">
+          <div className="bg-slate-50 rounded-2xl p-4 border border-slate-100">
+            <div className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-3">Stats</div>
+            <div className="flex flex-col gap-2">
+              <div className="flex justify-between items-center">
+                <span className="text-sm text-slate-600">Total</span>
+                <span className="font-bold text-slate-900">{permissions.length}</span>
+              </div>
+              <div className="flex justify-between items-center">
+                <span className="text-sm text-slate-600">CRUD</span>
+                <span className="font-bold text-slate-900">{crudCount}</span>
+              </div>
+              <div className="flex justify-between items-center">
+                <span className="text-sm text-slate-600">Special</span>
+                <span className="font-bold text-slate-900">{specialCount}</span>
+              </div>
             </div>
           </div>
         </div>
-        <div className="px-6 py-3 bg-amber-50 border-b border-amber-100 flex items-center gap-2 text-xs text-amber-900 font-medium">
-          <AlertTriangle className="h-4 w-4 text-amber-600 shrink-0" />
-          <span><strong>Backend Authorization Enforced:</strong> Action permissions are checked by backend REST APIs. Unauthorized requests automatically return <code>403 Forbidden</code>.</span>
-        </div>
       </div>
 
-      {/* Search */}
-      <div className="bg-white rounded-2xl border border-slate-200 p-4 shadow-xs">
-        <div className="relative">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
-          <input
-            type="text"
-            placeholder="Search permission code or description..."
-            value={search}
-            onChange={e => setSearch(e.target.value)}
-            className="w-full pl-9 pr-4 py-2 rounded-xl border border-slate-200 text-xs font-medium focus:outline-none focus:border-slate-700"
-          />
+      {/* Main Content */}
+      <div className="flex-1 p-6 md:p-10 max-w-7xl mx-auto w-full">
+        <div className="mb-8 bg-gradient-to-r from-slate-800 to-slate-900 rounded-3xl p-8 text-white shadow-lg flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
+          <div>
+            <h1 className="text-3xl font-black mb-2 flex items-center gap-3">
+              <Crown className="w-8 h-8 text-yellow-400" />
+              Permission Catalog
+            </h1>
+            <p className="text-slate-300 font-medium max-w-xl">
+              Master registry of all available permissions in the system. Use this reference when designing roles.
+            </p>
+          </div>
+          <div className="relative w-full md:w-80">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 w-5 h-5" />
+            <input 
+              type="text" 
+              placeholder="Search by key, module, or label..." 
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              className="w-full bg-slate-800/50 border border-slate-700 text-white rounded-2xl pl-10 pr-4 py-3 focus:outline-none focus:ring-2 focus:ring-indigo-500 placeholder-slate-400 font-medium transition-shadow"
+            />
+          </div>
         </div>
-      </div>
 
-      {/* Permission Groups */}
-      <div className="space-y-6">
-        {PERMISSION_GROUPS.map(group => {
-          const groupFiltered = group.permissions.filter(p =>
-            !search ||
-            p.code.toLowerCase().includes(search.toLowerCase()) ||
-            p.label.toLowerCase().includes(search.toLowerCase()) ||
-            p.description.toLowerCase().includes(search.toLowerCase())
-          );
-          if (groupFiltered.length === 0) return null;
-
-          return (
-            <div key={group.category} className="bg-white rounded-3xl border border-slate-200 p-6 shadow-xs space-y-4">
-              <h3 className="font-black text-slate-900 text-xs uppercase tracking-wider border-b border-slate-100 pb-2">
-                {group.category}
+        {loading ? (
+          <div className="flex items-center justify-center p-20">
+            <div className="w-10 h-10 border-4 border-indigo-200 border-t-indigo-600 rounded-full animate-spin"></div>
+          </div>
+        ) : (
+          <div className="space-y-12">
+            {/* CRUD Modules Section */}
+            <section id="crud-modules">
+              <h3 className="text-2xl font-black text-slate-900 mb-6 flex items-center gap-2">
+                <Layers className="w-6 h-6 text-indigo-600" />
+                CRUD Modules
               </h3>
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-                {groupFiltered.map(perm => (
-                  <div key={perm.code} className="p-3.5 rounded-2xl border border-slate-200 bg-slate-50/60 space-y-1 text-xs">
-                    <div className="flex items-center justify-between">
-                      <span className="font-bold text-slate-900">{perm.label}</span>
-                      <span className="font-mono text-[9.5px] font-bold bg-slate-200 text-slate-700 px-2 py-0.5 rounded border border-slate-300">
-                        {perm.code}
-                      </span>
-                    </div>
-                    <p className="text-[11px] text-slate-500 font-medium">{perm.description}</p>
-                  </div>
-                ))}
+              <div className="bg-white rounded-3xl shadow-sm border border-slate-200 overflow-hidden">
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left border-collapse">
+                    <thead>
+                      <tr className="bg-slate-50 border-b border-slate-200">
+                        <th className="p-4 font-bold text-slate-700">Module</th>
+                        <th className="p-4 font-bold text-slate-700 text-center">View</th>
+                        <th className="p-4 font-bold text-slate-700 text-center">Create</th>
+                        <th className="p-4 font-bold text-slate-700 text-center">Update</th>
+                        <th className="p-4 font-bold text-slate-700 text-center">Delete</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100">
+                      {CRUD_MODULES.filter(mod => {
+                        if (!search) return true;
+                        const s = search.toLowerCase();
+                        return mod.label.toLowerCase().includes(s) || 
+                               mod.id.toLowerCase().includes(s) ||
+                               Object.values(mod.permissions).some(k => k?.toLowerCase().includes(s));
+                      }).map((mod) => (
+                        <tr key={mod.id} className="hover:bg-slate-50/50 transition-colors">
+                          <td className="p-4 font-medium text-slate-900 flex items-center gap-2">
+                            <span className="text-xl">{mod.icon}</span> {mod.label}
+                          </td>
+                          <td className="p-4 text-center">
+                            {hasPermission(mod.permissions.view) ? <Check className="w-5 h-5 text-emerald-500 mx-auto" /> : <span className="text-slate-300">-</span>}
+                          </td>
+                          <td className="p-4 text-center">
+                            {hasPermission(mod.permissions.create) ? <Check className="w-5 h-5 text-emerald-500 mx-auto" /> : <span className="text-slate-300">-</span>}
+                          </td>
+                          <td className="p-4 text-center">
+                            {hasPermission(mod.permissions.update) ? <Check className="w-5 h-5 text-emerald-500 mx-auto" /> : <span className="text-slate-300">-</span>}
+                          </td>
+                          <td className="p-4 text-center">
+                            {hasPermission(mod.permissions.delete) ? <Check className="w-5 h-5 text-emerald-500 mx-auto" /> : <span className="text-slate-300">-</span>}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
               </div>
-            </div>
-          );
-        })}
+            </section>
+
+            {/* Special Permissions Section */}
+            <section id="special-permissions">
+              <h3 className="text-2xl font-black text-slate-900 mb-6 flex items-center gap-2">
+                <Star className="w-6 h-6 text-amber-500" />
+                Special Permissions
+              </h3>
+              
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                {SPECIAL_PERMISSION_GROUPS.map((group) => {
+                  const items = group.items.filter(item => {
+                    if (!search) return true;
+                    const s = search.toLowerCase();
+                    return item.key.toLowerCase().includes(s) ||
+                           item.label.toLowerCase().includes(s) ||
+                           item.description.toLowerCase().includes(s);
+                  });
+                  
+                  if (items.length === 0) return null;
+
+                  return (
+                    <div key={group.category} className="bg-white rounded-3xl shadow-sm border border-slate-200 p-6 flex flex-col gap-4">
+                      <div className="flex items-center gap-2 text-lg font-black text-slate-800 border-b border-slate-100 pb-3">
+                        <span>{group.icon}</span>
+                        {group.category}
+                      </div>
+                      <div className="flex flex-col gap-4">
+                        {items.map(item => {
+                          const permData = permissions.find(p => p.key === item.key);
+                          return (
+                            <div key={item.key} className="flex flex-col gap-2">
+                              <div className="flex items-start justify-between">
+                                <span className="font-bold text-slate-900">{item.label}</span>
+                                {permData?.isSpecial && (
+                                  <span className="bg-amber-100 text-amber-700 text-[10px] font-black uppercase px-2 py-0.5 rounded-full">Special</span>
+                                )}
+                              </div>
+                              <code className="text-xs font-mono bg-slate-100 text-slate-600 px-2 py-1 rounded-lg w-fit">
+                                {item.key}
+                              </code>
+                              <p className="text-sm text-slate-500">{item.description}</p>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </section>
+          </div>
+        )}
       </div>
     </div>
   );

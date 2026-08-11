@@ -586,10 +586,46 @@ export async function applyCertificateAction(
 // ─────────────────────────────────────────────────────────────
 export async function getUserLevelsAction() {
   try {
-    const levels = await herdbookRepository.getUserLevels();
+    await herdbookRepository.ensureUserLevelTablesSchema();
+    let levels = await herdbookRepository.getUserLevels();
+    if (levels.length === 0) {
+      await herdbookRepository.seedUserLevelPermissions();
+      levels = await herdbookRepository.getUserLevels();
+    }
     return { success: true, data: levels };
   } catch (error: any) {
     return { success: false, error: error.message || 'Failed to fetch user levels' };
+  }
+}
+
+export async function getActiveUserLevelsAction() {
+  try {
+    const levels = await herdbookRepository.getUserLevels();
+    const activeLevels = levels.filter(l => l.status === 'Active');
+    return { success: true, data: activeLevels };
+  } catch (error: any) {
+    return { success: false, error: error.message || 'Failed to fetch active user levels' };
+  }
+}
+
+export async function getUserLevelPermissionsAction(userLevelId: string) {
+  try {
+    const perms = await herdbookRepository.getUserLevelPermissions(userLevelId);
+    return { success: true, data: perms };
+  } catch (error: any) {
+    return { success: false, error: error.message || 'Failed to fetch user level permissions' };
+  }
+}
+
+export async function updateUserLevelPermissionsAction(userLevelId: string, permissions: string[], callerUserId?: string) {
+  try {
+    if (!callerUserId) throw new Error('Unauthorized');
+    await herdbookRepository.updateUserLevelPermissions(userLevelId, permissions, callerUserId);
+    revalidatePath('/admin/user-levels');
+    revalidatePath(`/admin/user-levels/${userLevelId}`);
+    return { success: true };
+  } catch (error: any) {
+    return { success: false, error: error.message || 'Failed to update user level permissions' };
   }
 }
 
@@ -609,6 +645,7 @@ export async function createUserLevelAction(data: {
   purpose?: string;
   sortOrder?: number;
   defaultModules?: string[];
+  permissions?: string[];
 }) {
   try {
     const level = await herdbookRepository.createUserLevel(data);
@@ -620,7 +657,7 @@ export async function createUserLevelAction(data: {
   }
 }
 
-export async function updateUserLevelAction(id: string, updates: { name?: string; description?: string; purpose?: string; sortOrder?: number; status?: 'Active' | 'Inactive' }) {
+export async function updateUserLevelAction(id: string, updates: { name?: string; description?: string; purpose?: string; sortOrder?: number; status?: 'Draft' | 'Active' | 'Inactive' }) {
   try {
     const level = await herdbookRepository.updateUserLevel(id, updates, 'admin');
     revalidatePath('/admin/user-levels');
@@ -633,7 +670,7 @@ export async function updateUserLevelAction(id: string, updates: { name?: string
   }
 }
 
-export async function setUserLevelStatusAction(id: string, status: 'Active' | 'Inactive') {
+export async function setUserLevelStatusAction(id: string, status: 'Draft' | 'Active' | 'Inactive') {
   try {
     const res = await herdbookRepository.setUserLevelStatus(id, status);
     revalidatePath('/admin/user-levels');
@@ -1123,3 +1160,315 @@ export async function fetchAuditLogsAction(): Promise<{
 
 
 
+// ─── ROLE MANAGEMENT ACTIONS ─────────────────────────────────────────────────
+
+/**
+ * Get all roles from DB (with permissions).
+ */
+export async function getRolesAction() {
+  try {
+    const roles = await settingsRepository.getRolesFromDb();
+    return { success: true, data: roles };
+  } catch (error: any) {
+    return { success: false, error: error.message || 'Failed to fetch roles' };
+  }
+}
+
+/**
+ * Get full permissions catalog from DB.
+ */
+export async function getPermissionsAction() {
+  try {
+    // Also return PERMISSION_CATALOG from types as fallback
+    const { PERMISSION_CATALOG } = await import('@/types/settings.types');
+    let dbPerms: any[] = [];
+    try {
+      dbPerms = await settingsRepository.getPermissionsCatalog();
+    } catch {
+      dbPerms = [];
+    }
+    // Merge: prefer DB data, supplement with catalog
+    const merged = PERMISSION_CATALOG.map(cat => {
+      const db = dbPerms.find(d => d.key === cat.key);
+      return db ? { ...cat, ...db } : cat;
+    });
+    return { success: true, data: merged };
+  } catch (error: any) {
+    return { success: false, error: error.message || 'Failed to fetch permissions' };
+  }
+}
+
+/**
+ * Helper: resolve caller's effective permissions from DB.
+ * Super Admin gets ALL permissions. Others get DB role-derived permissions.
+ */
+async function resolveCallerPermissions(callerUserId: string | undefined): Promise<{ isSuperAdmin: boolean; permissions: string[] }> {
+  if (!callerUserId) return { isSuperAdmin: false, permissions: [] };
+
+  const { query } = await import('@/config/database');
+  const userRes = await query(
+    `SELECT id, role, user_level, permissions FROM users WHERE id = $1 LIMIT 1`,
+    [callerUserId]
+  );
+  if (userRes.rows.length === 0) return { isSuperAdmin: false, permissions: [] };
+
+  const user = userRes.rows[0];
+  const isSuperAdmin = user.role === 'Super Admin' || user.role === 'Super Administrator'
+    || user.user_level === 'Super Admin';
+
+  if (isSuperAdmin) {
+    // Super Admin has all permissions — fetch from permissions table
+    const allPermsRes = await query(`SELECT key FROM permissions`);
+    const allKeys = allPermsRes.rows.map((r: any) => r.key);
+    return { isSuperAdmin: true, permissions: allKeys };
+  }
+
+  // Regular user: get permissions from user_roles → role_permissions
+  const rolePermsRes = await query(`
+    SELECT DISTINCT rp.permission_key
+    FROM user_roles ur
+    JOIN roles r ON r.id = ur.role_id AND r.status = 'Active'
+    JOIN role_permissions rp ON rp.role_id = r.id
+    WHERE ur.user_id = $1
+  `, [callerUserId]);
+
+  let permissions = rolePermsRes.rows.map((r: any) => r.permission_key);
+
+  // Fallback: also check user.permissions JSON column
+  if (permissions.length === 0 && user.permissions) {
+    const jsonPerms = typeof user.permissions === 'string'
+      ? JSON.parse(user.permissions)
+      : user.permissions;
+    permissions = Array.isArray(jsonPerms) ? jsonPerms : [];
+  }
+
+  return { isSuperAdmin: false, permissions };
+}
+
+/**
+ * Create a new role.
+ * - Super Admin: can assign any permissions.
+ * - Admin with role.create: can only assign permissions they themselves hold.
+ */
+export async function createRoleAction(payload: {
+  name: string;
+  category?: string;
+  description?: string;
+  permissions: string[];
+}, callerUserId?: string) {
+  try {
+    const caller = await resolveCallerPermissions(callerUserId);
+
+    if (!caller.isSuperAdmin) {
+      // Check caller has role.create permission
+      if (!caller.permissions.includes('role.create')) {
+        return { success: false, error: 'Forbidden: You do not have role.create permission.', statusCode: 403 };
+      }
+      // Authority boundary: caller cannot grant permissions they don't have
+      const callerPermSet = new Set(caller.permissions.map(p => p.toLowerCase()));
+      const forbidden = payload.permissions.filter(p => !callerPermSet.has(p.toLowerCase()));
+      if (forbidden.length > 0) {
+        return {
+          success: false,
+          error: `Forbidden: You cannot assign permissions you don't have: ${forbidden.join(', ')}`,
+          statusCode: 403
+        };
+      }
+    }
+
+    const newId = `ROLE-${Date.now()}-${Math.floor(100 + Math.random() * 900)}`;
+    const role = await settingsRepository.createRole({
+      id: newId,
+      name: payload.name,
+      category: payload.category,
+      description: payload.description,
+      permissions: payload.permissions,
+      isSystem: false,
+      createdBy: callerUserId,
+    });
+
+    revalidatePath('/settings/roles');
+    return { success: true, data: role };
+  } catch (error: any) {
+    return { success: false, error: error.message || 'Failed to create role' };
+  }
+}
+
+/**
+ * Update an existing role.
+ * - Super Admin: can update any role.
+ * - Admin with role.update: can only set permissions within their own scope.
+ */
+export async function updateRoleAction(roleId: string, payload: {
+  name?: string;
+  category?: string;
+  description?: string;
+  permissions?: string[];
+}, callerUserId?: string) {
+  try {
+    const caller = await resolveCallerPermissions(callerUserId);
+
+    if (!caller.isSuperAdmin) {
+      if (!caller.permissions.includes('role.update')) {
+        return { success: false, error: 'Forbidden: You do not have role.update permission.', statusCode: 403 };
+      }
+      if (payload.permissions) {
+        const callerPermSet = new Set(caller.permissions.map(p => p.toLowerCase()));
+        const forbidden = payload.permissions.filter(p => !callerPermSet.has(p.toLowerCase()));
+        if (forbidden.length > 0) {
+          return {
+            success: false,
+            error: `Forbidden: You cannot assign permissions you don't have: ${forbidden.join(', ')}`,
+            statusCode: 403
+          };
+        }
+      }
+    }
+
+    const role = await settingsRepository.updateRole(roleId, payload);
+    revalidatePath('/settings/roles');
+    return { success: true, data: role };
+  } catch (error: any) {
+    return { success: false, error: error.message || 'Failed to update role' };
+  }
+}
+
+/**
+ * Toggle role status (Active <-> Inactive).
+ */
+export async function toggleRoleStatusAction(roleId: string, status: 'Active' | 'Inactive', callerUserId?: string) {
+  try {
+    const caller = await resolveCallerPermissions(callerUserId);
+    if (!caller.isSuperAdmin && !caller.permissions.includes('role.delete')) {
+      return { success: false, error: 'Forbidden: You do not have role.delete permission.', statusCode: 403 };
+    }
+    await settingsRepository.setRoleStatus(roleId, status);
+    revalidatePath('/settings/roles');
+    return { success: true };
+  } catch (error: any) {
+    return { success: false, error: error.message || 'Failed to update role status' };
+  }
+}
+
+/**
+ * Delete (soft-delete) a role by setting status = 'Deleted'.
+ * System roles cannot be deleted.
+ */
+export async function deleteRoleAction(roleId: string, callerUserId?: string) {
+  try {
+    const caller = await resolveCallerPermissions(callerUserId);
+    if (!caller.isSuperAdmin && !caller.permissions.includes('role.delete')) {
+      return { success: false, error: 'Forbidden: You do not have role.delete permission.', statusCode: 403 };
+    }
+    // Check if system role
+    const { query } = await import('@/config/database');
+    const roleRes = await query(`SELECT is_system FROM roles WHERE id = $1`, [roleId]);
+    if (roleRes.rows.length > 0 && roleRes.rows[0].is_system && !caller.isSuperAdmin) {
+      return { success: false, error: 'Cannot delete a system role.', statusCode: 403 };
+    }
+    await settingsRepository.setRoleStatus(roleId, 'Deleted');
+    revalidatePath('/settings/roles');
+    return { success: true };
+  } catch (error: any) {
+    return { success: false, error: error.message || 'Failed to delete role' };
+  }
+}
+
+/**
+ * Clone an existing role into a new role.
+ */
+export async function cloneRoleAction(sourceRoleId: string, newName: string, callerUserId?: string) {
+  try {
+    const caller = await resolveCallerPermissions(callerUserId);
+    if (!caller.isSuperAdmin && !caller.permissions.includes('role.create')) {
+      return { success: false, error: 'Forbidden: You do not have role.create permission.', statusCode: 403 };
+    }
+    const newRole = await settingsRepository.cloneRole(sourceRoleId, newName, callerUserId);
+    revalidatePath('/settings/roles');
+    return { success: true, data: newRole };
+  } catch (error: any) {
+    return { success: false, error: error.message || 'Failed to clone role' };
+  }
+}
+
+/**
+ * Assign a role to a user.
+ */
+export async function assignRoleToUserAction(userId: string, roleId: string, callerUserId?: string) {
+  try {
+    const caller = await resolveCallerPermissions(callerUserId);
+    if (!caller.isSuperAdmin && !caller.permissions.includes('user.update')) {
+      return { success: false, error: 'Forbidden: You do not have user.update permission.', statusCode: 403 };
+    }
+    await settingsRepository.assignRoleToUser(userId, roleId);
+    revalidatePath('/settings/users');
+    return { success: true };
+  } catch (error: any) {
+    return { success: false, error: error.message || 'Failed to assign role' };
+  }
+}
+
+/**
+ * Remove a role from a user.
+ */
+export async function removeRoleFromUserAction(userId: string, roleId: string, callerUserId?: string) {
+  try {
+    const caller = await resolveCallerPermissions(callerUserId);
+    if (!caller.isSuperAdmin && !caller.permissions.includes('user.update')) {
+      return { success: false, error: 'Forbidden: You do not have user.update permission.', statusCode: 403 };
+    }
+    await settingsRepository.removeRoleFromUser(userId, roleId);
+    revalidatePath('/settings/users');
+    return { success: true };
+  } catch (error: any) {
+    return { success: false, error: error.message || 'Failed to remove role' };
+  }
+}
+
+/**
+ * Get effective permissions for a specific user (union of all active role permissions).
+ */
+export async function getUserEffectivePermissionsAction(userId: string, callerUserId?: string) {
+  try {
+    const caller = await resolveCallerPermissions(callerUserId);
+    if (!caller.isSuperAdmin && !caller.permissions.includes('user.view')) {
+      return { success: false, error: 'Forbidden: You do not have user.view permission.', statusCode: 403 };
+    }
+    const permissions = await settingsRepository.getUserEffectivePermissions(userId);
+    // Also fetch user role info
+    const { query } = await import('@/config/database');
+    const userRolesRes = await query(`
+      SELECT r.id, r.name, r.category, r.status
+      FROM user_roles ur
+      JOIN roles r ON r.id = ur.role_id
+      WHERE ur.user_id = $1
+    `, [userId]);
+    return { success: true, data: { permissions, roles: userRolesRes.rows } };
+  } catch (error: any) {
+    return { success: false, error: error.message || 'Failed to get effective permissions' };
+  }
+}
+
+/**
+ * Seed system roles and permissions catalog (run during setup).
+ */
+export async function seedRbacAction() {
+  try {
+    await settingsRepository.seedSystemRoles();
+    return { success: true, message: 'RBAC seeded successfully.' };
+  } catch (error: any) {
+    return { success: false, error: error.message || 'Failed to seed RBAC' };
+  }
+}
+
+/**
+ * Get caller's own effective permissions (used for authority boundary UI).
+ */
+export async function getCallerPermissionsAction(callerUserId: string) {
+  try {
+    const caller = await resolveCallerPermissions(callerUserId);
+    return { success: true, data: { permissions: caller.permissions, isSuperAdmin: caller.isSuperAdmin } };
+  } catch (error: any) {
+    return { success: false, error: error.message || 'Failed to get caller permissions' };
+  }
+}

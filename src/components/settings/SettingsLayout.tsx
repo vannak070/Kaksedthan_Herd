@@ -36,7 +36,7 @@ export default function SettingsLayout({ children }: SettingsLayoutProps) {
           <nav className="space-y-1">
             {SETTINGS_MENU_ITEMS.map((item) => {
               const Icon = item.icon;
-              const isActive = pathname === item.href || (item.href !== '/settings' && pathname.startsWith(item.href));
+              const isActive = item.href === '/settings' ? pathname === '/settings' : pathname.startsWith(item.href);
 
               return (
                 <Link
