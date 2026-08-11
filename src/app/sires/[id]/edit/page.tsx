@@ -4,7 +4,8 @@ import React, { useState, useEffect, use } from 'react';
 import { useRouter } from 'next/navigation';
 import PageHeader from '@/components/common/PageHeader';
 import ImageUploadContainer from '@/components/common/ImageUploadContainer';
-import { fetchSiresAction, saveSireAction } from '@/app/actions';
+import { fetchSiresAction, saveSireAction, fetchBreedConfigurationsAction } from '@/app/actions';
+import { SireItem } from '@/types/breeding.types';
 import { Save, ArrowLeft, Beef, Dna, MapPin, Building2, ShieldCheck, Sparkles, UserCheck } from 'lucide-react';
 
 interface PageProps {
@@ -16,10 +17,13 @@ export default function EditSirePage({ params }: PageProps) {
   const router = useRouter();
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
-  const [formData, setFormData] = useState({
+  const [activeBreeds, setActiveBreeds] = useState<Array<{ id: string; name: string; code: string }>>([]);
+
+  const [formData, setFormData] = useState<any>({
     id: id,
     name: '',
-    breed: 'Wagyu',
+    breed: '',
+    breedId: '',
     dob: '',
     bloodline: '',
     sourcingCompany: 'ABS Global Inc.',
@@ -32,6 +36,12 @@ export default function EditSirePage({ params }: PageProps) {
   });
 
   useEffect(() => {
+    fetchBreedConfigurationsAction(true).then((res) => {
+      if (res.success && Array.isArray(res.data)) {
+        setActiveBreeds(res.data);
+      }
+    });
+
     fetchSiresAction()
       .then((sires) => {
         const found = sires.find((s) => s.id === id);
@@ -40,6 +50,7 @@ export default function EditSirePage({ params }: PageProps) {
             id: found.id,
             name: found.name,
             breed: found.breed,
+            breedId: (found as any).breedId || (found as any).breed_id || '',
             dob: found.dob || '',
             bloodline: found.bloodline || '',
             sourcingCompany: found.sourcingCompany || 'ABS Global Inc.',
@@ -48,7 +59,7 @@ export default function EditSirePage({ params }: PageProps) {
             imageUrl: found.imageUrl || '',
             ownerName: found.ownerName || '',
             farmLocation: found.farmLocation || '',
-            status: found.status,
+            status: found.status as SireItem['status'],
           });
         }
         setLoading(false);
@@ -171,20 +182,32 @@ export default function EditSirePage({ params }: PageProps) {
                 </div>
 
                 <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1.5">Breed Lineage</label>
+                  <label className="block text-xs font-bold text-slate-700 mb-1.5">Breed Lineage (Master Catalog)</label>
                   <select
-                    value={formData.breed}
-                    onChange={(e) => setFormData({ ...formData, breed: e.target.value })}
+                    value={formData.breedId || formData.breed}
+                    onChange={(e) => {
+                      const selectedVal = e.target.value;
+                      const found = activeBreeds.find(b => b.id === selectedVal || b.name === selectedVal);
+                      setFormData({
+                        ...formData,
+                        breedId: found ? found.id : selectedVal,
+                        breed: found ? found.name : selectedVal,
+                      });
+                    }}
                     className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2.5 text-xs font-bold text-slate-900 focus:ring-2 focus:ring-[#dc5c15] focus:outline-none"
+                    required
                   >
-                    <option value="Wagyu">Wagyu (和牛)</option>
-                    <option value="Red Angus">Red Angus</option>
-                    <option value="Black Angus">Black Angus</option>
-                    <option value="Red Brahman">Red Brahman</option>
-                    <option value="Grey Brahman">Grey Brahman</option>
-                    <option value="Charolais">Charolais</option>
-                    <option value="Limousin">Limousin</option>
-                    <option value="Local Cross">Local Cross</option>
+                    {/* Include current breed if historical / inactive */}
+                    {formData.breed && !activeBreeds.some(b => b.name === formData.breed || b.id === formData.breedId) && (
+                      <option value={formData.breedId || formData.breed}>
+                        {formData.breed} (Historical / Inactive)
+                      </option>
+                    )}
+                    {activeBreeds.map((b) => (
+                      <option key={b.id} value={b.id}>
+                        {b.name} ({b.code})
+                      </option>
+                    ))}
                   </select>
                 </div>
 

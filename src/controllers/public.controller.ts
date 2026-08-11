@@ -4,7 +4,7 @@ import { herdbookRepository } from '../repositories/herdbook.repository';
 export class PublicController {
   async verifyPublicToken(req: Request, res: Response) {
     try {
-      const { token } = req.params;
+      const token = req.params.token as string;
       const data = await herdbookRepository.getPublicVerificationByToken(token);
       if (!data) {
         return res.status(404).json({

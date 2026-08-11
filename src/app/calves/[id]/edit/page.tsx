@@ -54,7 +54,7 @@ export default function EditCalfPage({ params }: PageProps) {
     e.preventDefault();
     setSubmitting(true);
     try {
-      await updateCalfAction(id, formData);
+      await updateCalfAction(id, formData as any);
       router.push(`/calves/${id}`);
     } catch (err: any) {
       alert(`Error updating Calf: ${err.message}`);

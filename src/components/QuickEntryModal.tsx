@@ -206,7 +206,7 @@ export default function QuickEntryModal({
     resolver: zodResolver(newCowSchema) as any,
     defaultValues: {
       id: 'CC-',
-      breed: common.breeds[0] || 'គោទន្លេ',
+      breed: (common.breeds ?? [])[0] || 'គោទន្លេ',
       sex: 'F',
       age: 'N/A',
       weight: '' as any,
@@ -610,7 +610,7 @@ export default function QuickEntryModal({
                       {...regAdd('breed')}
                       className="flex h-9 w-full rounded-xl border border-slate-200 bg-white px-3 py-1 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-emerald-500/10 focus:border-emerald-500 shadow-sm font-semibold cursor-pointer"
                     >
-                      {common.breeds.map(b => <option key={b} value={b}>{b}</option>)}
+                      {(common.breeds ?? []).map(b => <option key={b} value={b}>{b}</option>)}
                     </select>
                   </div>
 
@@ -621,7 +621,7 @@ export default function QuickEntryModal({
                       {...regAdd('sex')}
                       className="flex h-9 w-full rounded-xl border border-slate-200 bg-white px-3 py-1 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-emerald-500/10 focus:border-emerald-500 shadow-sm font-semibold cursor-pointer"
                     >
-                      {common.sexes.map(s => (
+                      {(common.sexes ?? []).map(s => (
                         <option key={s} value={s}>{s}</option>
                       ))}
                     </select>
@@ -762,7 +762,7 @@ export default function QuickEntryModal({
                           {...regAdd('buyType')}
                           className="flex h-9 w-full rounded-xl border border-slate-200 bg-white px-3 py-1 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-emerald-500/10 focus:border-emerald-500 shadow-sm font-semibold cursor-pointer"
                         >
-                          {common.buyTypes.map(t => <option key={t} value={t}>{t}</option>)}
+                          {(common.buyTypes ?? []).map(t => <option key={t} value={t}>{t}</option>)}
                         </select>
                       </div>
                       <div className="space-y-1.5 col-span-2">
@@ -864,7 +864,7 @@ export default function QuickEntryModal({
                     {...regAdd('healthStatus')}
                     className="flex h-9 w-full rounded-xl border border-slate-200 bg-white px-3 py-1 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-emerald-500/10 focus:border-emerald-500 shadow-sm font-semibold cursor-pointer"
                   >
-                    {common.healthStatuses.map(h => <option key={h} value={h}>{h}</option>)}
+                    {(common.healthStatuses ?? []).map(h => <option key={h} value={h}>{h}</option>)}
                   </select>
                 </div>
 
@@ -926,7 +926,7 @@ export default function QuickEntryModal({
                   {...regW('healthStatus')}
                   className="flex h-9 w-full rounded-md border border-slate-200 bg-white px-3 py-1 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-emerald-500/10 focus:border-emerald-500 shadow-sm font-medium cursor-pointer"
                 >
-                  {common.healthStatuses.map(h => <option key={h} value={h}>{h}</option>)}
+                  {(common.healthStatuses ?? []).map(h => <option key={h} value={h}>{h}</option>)}
                 </select>
               </div>
             </div>

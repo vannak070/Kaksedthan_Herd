@@ -388,8 +388,8 @@ export async function addFeedTransactionAction(tx: FeedStockTransaction) {
 
 // ── HERDBOOK & BREEDING ACTIONS ─────────────────────────────────────────────
 
-export async function fetchSiresAction() {
-  return herdbookRepository.getSires();
+export async function fetchSiresAction(breederIdScope?: string) {
+  return herdbookRepository.getSires(breederIdScope);
 }
 
 export async function saveSireAction(sire: SireItem) {
@@ -412,8 +412,8 @@ export async function createSireAction(sire: SireItem) {
   return saveSireAction(sire);
 }
 
-export async function fetchDamsAction() {
-  return herdbookRepository.getDams();
+export async function fetchDamsAction(breederIdScope?: string) {
+  return herdbookRepository.getDams(breederIdScope);
 }
 
 export async function saveDamAction(dam: DamItem) {
@@ -440,15 +440,15 @@ export async function fetchStockInseminationAction() {
   return herdbookRepository.getStockInsemination();
 }
 
-export async function saveStockInseminationAction(item: StockInseminationItem) {
+export async function createStockInseminationAction(item: StockInseminationItem & { breederId?: string; sourcingCompanyId?: string }) {
   const id = item.id || `SEM-${Math.floor(100 + Math.random() * 900)}`;
-  const res = await herdbookRepository.createStockInsemination({ ...item, id, currency: 'USD' });
+  const res = await herdbookRepository.createStockInsemination({ ...item, id, currency: item.currency || 'USD' });
   revalidatePath('/stock-insemination');
   return res;
 }
 
-export async function createStockInseminationAction(item: StockInseminationItem) {
-  return saveStockInseminationAction(item);
+export async function saveStockInseminationAction(item: StockInseminationItem & { breederId?: string; sourcingCompanyId?: string }) {
+  return createStockInseminationAction(item);
 }
 
 export async function updateStockInseminationAction(id: string, updates: Partial<StockInseminationItem>) {
@@ -559,8 +559,8 @@ export async function updateBreedingProgramStatusAction(id: string, status: Bree
   return { success: true };
 }
 
-export async function fetchCalvesAction() {
-  return herdbookRepository.getCalves();
+export async function fetchCalvesAction(breederIdScope?: string) {
+  return herdbookRepository.getCalves(breederIdScope);
 }
 
 export async function updateCalfAction(id: string, updates: Partial<CalfItem>) {
@@ -1550,5 +1550,176 @@ export async function getCallerPermissionsAction(callerUserId: string) {
     return { success: true, data: { permissions: caller.permissions, isSuperAdmin: caller.isSuperAdmin } };
   } catch (error: any) {
     return { success: false, error: error.message || 'Failed to get caller permissions' };
+  }
+}
+
+// =============================================================================
+// SOURCING COMPANIES — Server Actions
+// =============================================================================
+
+/** List all sourcing companies (used in dropdowns for sire registration etc.). */
+export async function fetchSourcingCompaniesAction() {
+  try {
+    const data = await herdbookRepository.getSourcingCompanies();
+    return { success: true, data };
+  } catch (error: any) {
+    return { success: false, error: error.message || 'Failed to fetch sourcing companies' };
+  }
+}
+
+/** Get a single sourcing company by ID or code. */
+export async function fetchSourcingCompanyByIdAction(id: string) {
+  try {
+    const data = await herdbookRepository.getSourcingCompanyById(id);
+    if (!data) return { success: false, error: 'Sourcing company not found' };
+    return { success: true, data };
+  } catch (error: any) {
+    return { success: false, error: error.message || 'Failed to fetch sourcing company' };
+  }
+}
+
+/** Get all sires registered under a specific sourcing company. */
+export async function fetchSourcingCompanySiresAction(companyId: string) {
+  try {
+    const data = await herdbookRepository.getSourcingCompanySires(companyId);
+    return { success: true, data };
+  } catch (error: any) {
+    return { success: false, error: error.message || 'Failed to fetch company sires' };
+  }
+}
+
+/** Create a new sourcing company (Super Admin only). */
+export async function createSourcingCompanyAction(data: {
+  name: string;
+  country?: string;
+  contactName?: string;
+  phone?: string;
+  email?: string;
+  address?: string;
+  website?: string;
+  imageUrl?: string;
+  notes?: string;
+  callerUserId?: string;
+}) {
+  try {
+    const caller = await resolveCallerPermissions(data.callerUserId);
+    if (!caller.isSuperAdmin) {
+      return { success: false, error: 'Forbidden: Only Super Admin can create sourcing companies.', statusCode: 403 };
+    }
+    const { callerUserId: _c, ...companyData } = data;
+    const created = await herdbookRepository.createSourcingCompany(companyData);
+    revalidatePath('/sourcing-companies');
+    revalidatePath('/sires');
+    return { success: true, data: created };
+  } catch (error: any) {
+    return { success: false, error: error.message || 'Failed to create sourcing company' };
+  }
+}
+
+/** Update a sourcing company (Super Admin only). */
+export async function updateSourcingCompanyAction(id: string, data: {
+  name?: string;
+  country?: string;
+  contactName?: string;
+  phone?: string;
+  email?: string;
+  address?: string;
+  website?: string;
+  imageUrl?: string;
+  notes?: string;
+  status?: string;
+  callerUserId?: string;
+}) {
+  try {
+    const caller = await resolveCallerPermissions(data.callerUserId);
+    if (!caller.isSuperAdmin) {
+      return { success: false, error: 'Forbidden: Only Super Admin can update sourcing companies.', statusCode: 403 };
+    }
+    const { callerUserId: _c, ...updateData } = data;
+    const updated = await herdbookRepository.updateSourcingCompany(id, updateData);
+    revalidatePath('/sourcing-companies');
+    revalidatePath('/sires');
+    return { success: true, data: updated };
+  } catch (error: any) {
+    return { success: false, error: error.message || 'Failed to update sourcing company' };
+  }
+}
+
+// =============================================================================
+// BREED CONFIGURATIONS — Server Actions
+// =============================================================================
+
+/** List breed configurations — used by all registration forms. */
+export async function fetchBreedConfigurationsAction(activeOnly = true) {
+  try {
+    const data = await herdbookRepository.getBreedConfigurations(activeOnly);
+    return { success: true, data };
+  } catch (error: any) {
+    return { success: false, error: error.message || 'Failed to fetch breed configurations' };
+  }
+}
+
+/** Create a new breed type (Super Admin only). */
+export async function createBreedConfigurationAction(data: {
+  name: string;
+  code?: string;
+  category?: string;
+  origin?: string;
+  description?: string;
+  sortOrder?: number;
+  callerUserId?: string;
+}) {
+  try {
+    const caller = await resolveCallerPermissions(data.callerUserId);
+    if (!caller.isSuperAdmin) {
+      return { success: false, error: 'Forbidden: Only Super Admin can create breed configurations.', statusCode: 403 };
+    }
+    const { callerUserId: _c, ...breedData } = data;
+    const created = await herdbookRepository.createBreedConfiguration(breedData);
+    revalidatePath('/sires');
+    revalidatePath('/dams');
+    return { success: true, data: created };
+  } catch (error: any) {
+    return { success: false, error: error.message || 'Failed to create breed configuration' };
+  }
+}
+
+/** Toggle a breed config active/inactive (Super Admin only). */
+export async function toggleBreedConfigStatusAction(id: string, isActive: boolean, callerUserId?: string) {
+  try {
+    const caller = await resolveCallerPermissions(callerUserId);
+    if (!caller.isSuperAdmin) {
+      return { success: false, error: 'Forbidden: Only Super Admin can update breed configurations.', statusCode: 403 };
+    }
+    const updated = await herdbookRepository.toggleBreedConfigStatus(id, isActive);
+    revalidatePath('/sires');
+    revalidatePath('/dams');
+    return { success: true, data: updated };
+  } catch (error: any) {
+    return { success: false, error: error.message || 'Failed to toggle breed config status' };
+  }
+}
+
+/** Update an existing breed configuration (Super Admin only). */
+export async function updateBreedConfigurationAction(id: string, data: {
+  name?: string;
+  code?: string;
+  category?: string;
+  origin?: string;
+  description?: string;
+  sortOrder?: number;
+  isActive?: boolean;
+}, callerUserId?: string) {
+  try {
+    const caller = await resolveCallerPermissions(callerUserId);
+    if (!caller.isSuperAdmin) {
+      return { success: false, error: 'Forbidden: Only Super Admin can edit breed configurations.', statusCode: 403 };
+    }
+    const updated = await herdbookRepository.updateBreedConfiguration(id, data);
+    revalidatePath('/sires');
+    revalidatePath('/dams');
+    return { success: true, data: updated };
+  } catch (error: any) {
+    return { success: false, error: error.message || 'Failed to update breed configuration' };
   }
 }

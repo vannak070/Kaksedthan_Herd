@@ -1,22 +1,27 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import PageHeader from '@/components/common/PageHeader';
 import ImageUploadContainer from '@/components/common/ImageUploadContainer';
-import { saveSireAction } from '@/app/actions';
+import { saveSireAction, fetchBreedConfigurationsAction, fetchSourcingCompaniesAction } from '@/app/actions';
 import { Save, ArrowLeft, Beef, Dna, MapPin, Building2, ShieldCheck, Sparkles, UserCheck } from 'lucide-react';
 
 export default function NewSirePage() {
   const router = useRouter();
   const [submitting, setSubmitting] = useState(false);
-  const [formData, setFormData] = useState({
+  const [activeBreeds, setActiveBreeds] = useState<Array<{ id: string; name: string; code: string }>>([]);
+  const [sourcingCompanies, setSourcingCompanies] = useState<Array<{ id: string; name: string; code: string }>>([]);
+  
+  const [formData, setFormData] = useState<any>({
     id: `SIR-${Math.floor(100 + Math.random() * 900)}`,
     name: '',
-    breed: 'Wagyu',
+    breed: '',
+    breedId: '',
     dob: '',
     bloodline: '100% Fullblood Tajima',
     sourcingCompany: 'ABS Global Inc.',
+    sourcingCompanyId: '',
     fatherId: '',
     motherId: '',
     imageUrl: '',
@@ -24,6 +29,28 @@ export default function NewSirePage() {
     farmLocation: 'រទាំង',
     status: 'Active' as const,
   });
+
+  useEffect(() => {
+    // Load active breeds from PostgreSQL Master Catalog
+    fetchBreedConfigurationsAction(true).then((res) => {
+      if (res.success && Array.isArray(res.data) && res.data.length > 0) {
+        const breedList = res.data;
+        setActiveBreeds(breedList);
+        setFormData((prev: any) => ({
+          ...prev,
+          breed: breedList[0].name,
+          breedId: breedList[0].id,
+        }));
+      }
+    });
+
+    // Load sourcing companies
+    fetchSourcingCompaniesAction().then((res) => {
+      if (res.success && Array.isArray(res.data) && res.data.length > 0) {
+        setSourcingCompanies(res.data);
+      }
+    });
+  }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -137,20 +164,30 @@ export default function NewSirePage() {
                 </div>
 
                 <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1.5">Breed Lineage</label>
+                  <label className="block text-xs font-bold text-slate-700 mb-1.5">Breed Lineage (Master Catalog)</label>
                   <select
-                    value={formData.breed}
-                    onChange={(e) => setFormData({ ...formData, breed: e.target.value })}
+                    value={formData.breedId || formData.breed}
+                    onChange={(e) => {
+                      const selectedId = e.target.value;
+                      const found = activeBreeds.find(b => b.id === selectedId || b.name === selectedId);
+                      setFormData({
+                        ...formData,
+                        breedId: found ? found.id : selectedId,
+                        breed: found ? found.name : selectedId,
+                      });
+                    }}
                     className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2.5 text-xs font-bold text-slate-900 focus:ring-2 focus:ring-[#dc5c15] focus:outline-none"
+                    required
                   >
-                    <option value="Wagyu">Wagyu (和牛)</option>
-                    <option value="Red Angus">Red Angus</option>
-                    <option value="Black Angus">Black Angus</option>
-                    <option value="Red Brahman">Red Brahman</option>
-                    <option value="Grey Brahman">Grey Brahman</option>
-                    <option value="Charolais">Charolais</option>
-                    <option value="Limousin">Limousin</option>
-                    <option value="Local Cross">Local Cross</option>
+                    {activeBreeds.length === 0 ? (
+                      <option value="">Loading Breeds from PostgreSQL...</option>
+                    ) : (
+                      activeBreeds.map((b) => (
+                        <option key={b.id} value={b.id}>
+                          {b.name} ({b.code})
+                        </option>
+                      ))
+                    )}
                   </select>
                 </div>
 

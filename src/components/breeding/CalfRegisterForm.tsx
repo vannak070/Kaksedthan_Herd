@@ -156,7 +156,7 @@ export default function CalfRegisterForm({
       });
 
       setSuccessResult({
-        calfId: res.calfId,
+        calfId: (res as any).calfId || res.calf?.id || calfId,
         regNumber: registrationNumber,
         certNumber: `KC-${Math.floor(100000 + Math.random() * 900000)}`
       });

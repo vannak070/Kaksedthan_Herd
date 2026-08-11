@@ -416,7 +416,7 @@ export default function BreedingLogsSubTab({
     setSireIdInput(rec.sireId || '');
     setBullNameInput(rec.bullName || rec.sireName || '');
 
-    setOwnerTypeInput(rec.ownerType || 'Farm');
+    setOwnerTypeInput((rec.ownerType as any) || 'Farm');
     setSelectedFarmName(rec.farmLocation || '0001 - SNR Farm Facility');
     setSelectedOwnerName(rec.cowOwner || '0001 - SNR Farm');
 

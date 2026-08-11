@@ -4,16 +4,19 @@ import React, { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import PageHeader from '@/components/common/PageHeader';
 import ImageUploadContainer from '@/components/common/ImageUploadContainer';
-import { saveDamAction } from '@/app/actions';
+import { saveDamAction, fetchBreedConfigurationsAction } from '@/app/actions';
 import { Save, ArrowLeft, Heart, Sparkles, UserCheck, MapPin, ShieldCheck, Activity, Dna } from 'lucide-react';
 
 export default function NewDamPage() {
   const router = useRouter();
   const [submitting, setSubmitting] = useState(false);
-  const [formData, setFormData] = useState({
+  const [activeBreeds, setActiveBreeds] = useState<Array<{ id: string; name: string; code: string }>>([]);
+
+  const [formData, setFormData] = useState<any>({
     id: `DAM-${Math.floor(100 + Math.random() * 900)}`,
     name: '',
-    breed: 'Angus Cross',
+    breed: '',
+    breedId: '',
     dob: '',
     fatherId: '',
     motherId: '',
@@ -21,9 +24,23 @@ export default function NewDamPage() {
     farmLocation: 'រទាំង',
     imageUrl: '',
     availability: 'Available' as const,
-    breedingStatus: 'Open',
-    pregnancyStatus: 'Open',
+    breedingStatus: 'Open' as const,
+    pregnancyStatus: 'Open' as const,
   });
+
+  React.useEffect(() => {
+    fetchBreedConfigurationsAction(true).then((res) => {
+      if (res.success && Array.isArray(res.data) && res.data.length > 0) {
+        const breedList = res.data;
+        setActiveBreeds(breedList);
+        setFormData((prev: any) => ({
+          ...prev,
+          breed: breedList[0].name,
+          breedId: breedList[0].id,
+        }));
+      }
+    });
+  }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -137,17 +154,30 @@ export default function NewDamPage() {
                 </div>
 
                 <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1.5">Breed Lineage</label>
+                  <label className="block text-xs font-bold text-slate-700 mb-1.5">Breed Lineage (Master Catalog)</label>
                   <select
-                    value={formData.breed}
-                    onChange={(e) => setFormData({ ...formData, breed: e.target.value })}
+                    value={formData.breedId || formData.breed}
+                    onChange={(e) => {
+                      const selectedVal = e.target.value;
+                      const found = activeBreeds.find(b => b.id === selectedVal || b.name === selectedVal);
+                      setFormData({
+                        ...formData,
+                        breedId: found ? found.id : selectedVal,
+                        breed: found ? found.name : selectedVal,
+                      });
+                    }}
                     className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2.5 text-xs font-bold text-slate-900 focus:ring-2 focus:ring-purple-600 focus:outline-none"
+                    required
                   >
-                    <option value="Angus Cross">Angus Cross</option>
-                    <option value="Red Brahman">Red Brahman</option>
-                    <option value="Wagyu Cross">Wagyu Cross</option>
-                    <option value="Local Cow">Local Cow</option>
-                    <option value="Charolais Cross">Charolais Cross</option>
+                    {activeBreeds.length === 0 ? (
+                      <option value="">Loading Breeds from PostgreSQL...</option>
+                    ) : (
+                      activeBreeds.map((b) => (
+                        <option key={b.id} value={b.id}>
+                          {b.name} ({b.code})
+                        </option>
+                      ))
+                    )}
                   </select>
                 </div>
 
@@ -230,7 +260,7 @@ export default function NewDamPage() {
                   <label className="block text-xs font-bold text-slate-700 mb-1.5">Breeding Cycle Stage</label>
                   <select
                     value={formData.breedingStatus}
-                    onChange={(e) => setFormData({ ...formData, breedingStatus: e.target.value })}
+                    onChange={(e) => setFormData({ ...formData, breedingStatus: e.target.value as any })}
                     className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2.5 text-xs font-bold text-slate-900 focus:ring-2 focus:ring-purple-600 focus:outline-none"
                   >
                     <option value="Open">Open (Ready to Mate)</option>

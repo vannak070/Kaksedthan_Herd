@@ -13,7 +13,7 @@ export class HerdbookController {
 
   async getPedigreeByAnimalId(req: Request, res: Response) {
     try {
-      const { animalId } = req.params;
+      const animalId = req.params.animalId as string;
       const pedigree = await herdbookRepository.getPedigreeByAnimalId(animalId);
       res.status(200).json({ success: true, data: pedigree });
     } catch (err: any) {

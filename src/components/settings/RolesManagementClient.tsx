@@ -31,8 +31,8 @@ export default function RolesManagementClient({ initialRoles, callerPermissions 
 
   const refreshRoles = async () => {
     try {
-      const data = await getRolesAction();
-      if (data) setRoles(data);
+      const res = await getRolesAction();
+      if (res && res.success && Array.isArray(res.data)) setRoles(res.data);
     } catch (e) {
       console.error(e);
     }
@@ -68,7 +68,7 @@ export default function RolesManagementClient({ initialRoles, callerPermissions 
   const handleToggleStatus = async (r: CustomRoleDefinition) => {
     if (confirm(`Are you sure you want to ${r.status === 'Active' ? 'deactivate' : 'activate'} ${r.name}?`)) {
       try {
-        await toggleRoleStatusAction(r.id);
+        await toggleRoleStatusAction(r.id, r.status === 'Active' ? 'Inactive' : 'Active');
         showToast(`Role ${r.name} status updated.`);
         refreshRoles();
       } catch (e) {
@@ -113,7 +113,7 @@ export default function RolesManagementClient({ initialRoles, callerPermissions 
     }
     try {
       if (editingRole.id) {
-        await updateRoleAction(editingRole as CustomRoleDefinition);
+        await updateRoleAction(editingRole.id, editingRole as any);
         showToast('Role updated successfully');
       } else {
         await createRoleAction(editingRole as CustomRoleDefinition);

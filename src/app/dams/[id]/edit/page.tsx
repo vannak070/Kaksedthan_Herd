@@ -4,7 +4,8 @@ import React, { useState, useEffect, use } from 'react';
 import { useRouter } from 'next/navigation';
 import PageHeader from '@/components/common/PageHeader';
 import ImageUploadContainer from '@/components/common/ImageUploadContainer';
-import { fetchDamsAction, saveDamAction } from '@/app/actions';
+import { fetchDamsAction, saveDamAction, fetchBreedConfigurationsAction } from '@/app/actions';
+import { DamItem } from '@/types/breeding.types';
 import { Save, ArrowLeft, Heart, Sparkles, UserCheck, MapPin, ShieldCheck, Activity, Dna } from 'lucide-react';
 
 interface PageProps {
@@ -16,10 +17,13 @@ export default function EditDamPage({ params }: PageProps) {
   const router = useRouter();
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
-  const [formData, setFormData] = useState({
+  const [activeBreeds, setActiveBreeds] = useState<Array<{ id: string; name: string; code: string }>>([]);
+
+  const [formData, setFormData] = useState<any>({
     id: id,
     name: '',
-    breed: 'Angus Cross',
+    breed: '',
+    breedId: '',
     dob: '',
     fatherId: '',
     motherId: '',
@@ -32,6 +36,12 @@ export default function EditDamPage({ params }: PageProps) {
   });
 
   useEffect(() => {
+    fetchBreedConfigurationsAction(true).then((res) => {
+      if (res.success && Array.isArray(res.data)) {
+        setActiveBreeds(res.data);
+      }
+    });
+
     fetchDamsAction()
       .then((dams) => {
         const found = dams.find((d) => d.id === id);
@@ -40,15 +50,16 @@ export default function EditDamPage({ params }: PageProps) {
             id: found.id,
             name: found.name || '',
             breed: found.breed,
+            breedId: (found as any).breedId || (found as any).breed_id || '',
             dob: found.dob || '',
             fatherId: found.fatherId || '',
             motherId: found.motherId || '',
             ownerName: found.ownerName || '',
             farmLocation: found.farmLocation || '',
             imageUrl: found.imageUrl || '',
-            availability: found.availability || 'Available',
-            breedingStatus: found.breedingStatus || 'Open',
-            pregnancyStatus: found.pregnancyStatus || 'Open',
+            availability: (found.availability || 'Available') as DamItem['availability'],
+            breedingStatus: (found.breedingStatus || 'Open') as DamItem['breedingStatus'],
+            pregnancyStatus: (found.pregnancyStatus || 'Open') as DamItem['pregnancyStatus'],
           });
         }
         setLoading(false);
@@ -171,17 +182,32 @@ export default function EditDamPage({ params }: PageProps) {
                 </div>
 
                 <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1.5">Breed Lineage</label>
+                  <label className="block text-xs font-bold text-slate-700 mb-1.5">Breed Lineage (Master Catalog)</label>
                   <select
-                    value={formData.breed}
-                    onChange={(e) => setFormData({ ...formData, breed: e.target.value })}
+                    value={formData.breedId || formData.breed}
+                    onChange={(e) => {
+                      const selectedVal = e.target.value;
+                      const found = activeBreeds.find(b => b.id === selectedVal || b.name === selectedVal);
+                      setFormData({
+                        ...formData,
+                        breedId: found ? found.id : selectedVal,
+                        breed: found ? found.name : selectedVal,
+                      });
+                    }}
                     className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2.5 text-xs font-bold text-slate-900 focus:ring-2 focus:ring-purple-600 focus:outline-none"
+                    required
                   >
-                    <option value="Angus Cross">Angus Cross</option>
-                    <option value="Red Brahman">Red Brahman</option>
-                    <option value="Wagyu Cross">Wagyu Cross</option>
-                    <option value="Local Cow">Local Cow</option>
-                    <option value="Charolais Cross">Charolais Cross</option>
+                    {/* Include current breed if historical / inactive */}
+                    {formData.breed && !activeBreeds.some(b => b.name === formData.breed || b.id === formData.breedId) && (
+                      <option value={formData.breedId || formData.breed}>
+                        {formData.breed} (Historical / Inactive)
+                      </option>
+                    )}
+                    {activeBreeds.map((b) => (
+                      <option key={b.id} value={b.id}>
+                        {b.name} ({b.code})
+                      </option>
+                    ))}
                   </select>
                 </div>
 

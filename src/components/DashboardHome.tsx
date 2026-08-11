@@ -100,7 +100,7 @@ export default function DashboardHome({ data }: DashboardHomeProps) {
     if (activeRole === 'Breeder') {
       return {
         sires,
-        dams: dams.filter(d => d.availability === 'Open' || d.availability === 'In Breeding'),
+        dams: dams.filter(d => (d.availability as string) === 'Open' || d.availability === 'In Breeding'),
         calves,
         programs: programs.filter(p => p.status === 'Breeding' || p.status === 'Scheduled'),
         stock,
@@ -123,8 +123,8 @@ export default function DashboardHome({ data }: DashboardHomeProps) {
 
   // Aggregation Metrics
   const activeProgramsCount = filteredData.programs.filter(p => p.status === 'Breeding' || p.status === 'Scheduled').length;
-  const openDamsCount = filteredData.dams.filter(d => d.availability === 'Open' || !d.availability).length;
-  const lowStockStraws = filteredData.stock.filter(s => s.availableStraws < 10);
+  const openDamsCount = filteredData.dams.filter(d => (d.availability as string) === 'Open' || !d.availability).length;
+  const lowStockStraws = filteredData.stock.filter(s => (s.availableStraws ?? s.stockAvailable ?? 0) < 10);
   const totalCostingUsd = filteredData.programs.reduce((sum, p) => sum + (p.priceUsd || 0), 0);
 
   // Attention alerts

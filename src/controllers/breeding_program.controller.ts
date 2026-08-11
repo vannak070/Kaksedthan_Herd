@@ -44,7 +44,7 @@ export class BreedingProgramController {
 
   async updateProgramStatus(req: Request, res: Response) {
     try {
-      const { id } = req.params;
+      const id = req.params.id as string;
       const { status, actualCalvingDate, result } = req.body;
       if (!status) {
         return res.status(400).json({ success: false, message: 'Status is required' });

@@ -73,7 +73,7 @@ export default function SettingsTab({ settings: rawSettings, data, currentUser, 
   const { t } = useLanguage();
   const queryClient = useQueryClient();
   const [subTab, setSubTab] = useState<'livestock' | 'breeding' | 'users'>('users');
-  const [rbacTab, setRbacTab] = useState<'users' | 'roles' | 'permissions'>('users');
+  const [rbacTab, setRbacTab] = useState<'users' | 'roles' | 'permissions' | 'levels' | 'access'>('users');
 
   const [userPage, setUserPage] = useState(1);
   const [userPageSize, setUserPageSize] = useState(10);

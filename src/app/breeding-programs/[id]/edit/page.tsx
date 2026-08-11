@@ -37,7 +37,7 @@ export default function EditBreedingProgramPage({ params }: PageProps) {
     e.preventDefault();
     setSubmitting(true);
     try {
-      await updateBreedingStatusAction(id, status, notes);
+      await updateBreedingStatusAction(id, status as any, notes);
       router.push(`/breeding-programs/${id}`);
     } catch (err: any) {
       alert(`Error updating program: ${err.message}`);

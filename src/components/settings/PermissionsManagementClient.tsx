@@ -15,8 +15,8 @@ export default function PermissionsManagementClient() {
       try {
         setLoading(true);
         const data = await getPermissionsAction();
-        if (data) {
-          setPermissions(data);
+        if (data && data.success && Array.isArray(data.data)) {
+          setPermissions(data.data);
         }
       } catch (error) {
         console.error('Failed to fetch permissions:', error);

@@ -315,7 +315,7 @@ export default function HealthTab({ data, onAddHealthLog, onDeleteHealthLog, onU
                   required
                 >
                   <option value="">-- Choose option --</option>
-                  {type === 'Vaccination' && data.settings.vaccineTypes.map(v => <option key={v} value={v}>{v}</option>)}
+                  {type === 'Vaccination' && (data.settings.vaccineTypes ?? []).map(v => <option key={v} value={v}>{v}</option>)}
                   {type === 'Deworming' && <option value="Broad Spectrum Dewormer">Broad Spectrum Dewormer</option>}
                   {type === 'Disease' && <option value="Foot and Mouth Disease">Foot and Mouth Disease</option>}
                   {type === 'Treatment' && <option value="Antibiotics Injection">Antibiotics Injection</option>}

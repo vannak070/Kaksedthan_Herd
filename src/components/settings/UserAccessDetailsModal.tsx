@@ -51,8 +51,8 @@ export default function UserAccessDetailsModal({ user, callerUserId, isSuperAdmi
         getRolesAction(),
       ]);
       if (permsResult.success && permsResult.data) {
-        setEffectivePermissions(permsResult.data.permissions || []);
-        setAssignedRoles(permsResult.data.roles || []);
+        setEffectivePermissions((permsResult.data as any).permissions || []);
+        setAssignedRoles((permsResult.data as any).roles || []);
       }
       if (rolesResult.success && rolesResult.data) {
         setAllRoles(rolesResult.data as CustomRoleDefinition[]);

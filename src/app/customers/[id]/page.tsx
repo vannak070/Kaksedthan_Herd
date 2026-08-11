@@ -61,9 +61,9 @@ export default async function CustomerDetailPage({ params }: PageProps) {
     fetchCustomerCertificatesAction(id)
   ]);
 
-  const rawAnimals = animalsRes.success ? animalsRes.data : [];
-  const breedingPrograms = programsRes.success ? programsRes.data : [];
-  const certificates = certsRes.success ? certsRes.data : [];
+  const rawAnimals = (animalsRes.success && Array.isArray(animalsRes.data)) ? animalsRes.data : [];
+  const breedingPrograms = (programsRes.success && Array.isArray(programsRes.data)) ? programsRes.data : [];
+  const certificates = (certsRes.success && Array.isArray(certsRes.data)) ? certsRes.data : [];
 
   // Format animals for FarmCattleSectionClient
   const formattedAnimals = rawAnimals.map((a: any) => ({

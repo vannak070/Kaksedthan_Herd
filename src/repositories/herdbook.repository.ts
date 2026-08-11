@@ -17,15 +17,30 @@ export class HerdbookRepository {
   // ─────────────────────────────────────────────────────────────
   // 1. Sire Repository
   // ─────────────────────────────────────────────────────────────
-  async getSires(): Promise<SireItem[]> {
+  /**
+   * @param breederIdScope  If provided (and not 'ALL'/'ADMIN'), returns only
+   *                        sires where breeder_id matches OR breeder_id IS NULL
+   *                        (global pool sires are visible to all breeders).
+   */
+  async getSires(breederIdScope?: string): Promise<SireItem[]> {
+    // Sires with no breeder_id are "global pool" — visible to everyone
+    const scopeClause = (breederIdScope && breederIdScope !== 'ALL' && breederIdScope !== 'ADMIN')
+      ? `AND (s.breeder_id = '${breederIdScope}' OR s.breeder_id IS NULL)`
+      : '';
     const sql = `
-      SELECT s.*, COALESCE(c.status, 'NOT_APPLIED') as certification_status
+      SELECT s.*,
+             sc.name as sourcing_company_name,
+             sc.country as sourcing_company_country,
+             sc.image_url as sourcing_company_image,
+             COALESCE(c.status, 'NOT_APPLIED') as certification_status
       FROM sires s
+      LEFT JOIN sourcing_companies sc ON sc.id = s.sourcing_company_id
       LEFT JOIN (
         SELECT DISTINCT ON (COALESCE(animal_id, calf_id)) COALESCE(animal_id, calf_id) as target_id, status
         FROM certificates
         ORDER BY COALESCE(animal_id, calf_id), created_at DESC
       ) c ON c.target_id = s.id
+      WHERE 1=1 ${scopeClause}
       ORDER BY s.created_at DESC
     `;
     const res = await query(sql);
@@ -35,7 +50,11 @@ export class HerdbookRepository {
       breed: r.breed,
       dob: r.dob ? new Date(r.dob).toISOString().split('T')[0] : undefined,
       bloodline: r.bloodline,
-      sourcingCompany: r.sourcing_company || 'ABS Global Inc.',
+      sourcingCompany: r.sourcing_company_name || r.sourcing_company || 'ABS Global Inc.',
+      sourcingCompanyId: r.sourcing_company_id || null,
+      sourcingCompanyCountry: r.sourcing_company_country || null,
+      sourcingCompanyImage: r.sourcing_company_image || null,
+      breederId: r.breeder_id || null,
       fatherId: r.father_id,
       motherId: r.mother_id,
       imageUrl: r.image_url,
@@ -70,10 +89,10 @@ export class HerdbookRepository {
     };
   }
 
-  async createSire(sire: SireItem): Promise<SireItem> {
+  async createSire(sire: SireItem & { breederId?: string }): Promise<SireItem> {
     const sql = `
-      INSERT INTO sires (id, name, breed, dob, bloodline, sourcing_company, sourcing_company_id, father_id, mother_id, image_url, owner_name, farm_location, status)
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+      INSERT INTO sires (id, name, breed, dob, bloodline, sourcing_company, sourcing_company_id, breeder_id, father_id, mother_id, image_url, owner_name, farm_location, status)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
       RETURNING *
     `;
     const params = [
@@ -82,8 +101,9 @@ export class HerdbookRepository {
       sire.breed,
       sire.dob ? new Date(sire.dob) : null,
       sire.bloodline || null,
-      sire.sourcingCompany || 'ABS Global Inc.',
+      sire.sourcingCompany || null,
       sire.sourcingCompanyId || null,
+      sire.breederId || null,
       sire.fatherId || null,
       sire.motherId || null,
       sire.imageUrl || null,
@@ -185,13 +205,14 @@ export class HerdbookRepository {
     };
   }
 
-  async createStockInsemination(item: StockInseminationItem): Promise<StockInseminationItem> {
+  async createStockInsemination(item: StockInseminationItem & { breederId?: string; sourcingCompanyId?: string }): Promise<StockInseminationItem> {
     const sql = `
       INSERT INTO stock_insemination (
         id, sire_id, stock_available, price_usd, price_khr, currency,
-        owner_name, farm_location, breeder_name, availability, status
+        owner_name, farm_location, breeder_name, availability, status,
+        breeder_id, sourcing_company_id
       )
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
       RETURNING *
     `;
     const params = [
@@ -205,7 +226,9 @@ export class HerdbookRepository {
       item.farmLocation || null,
       item.breederName || null,
       item.availability || 'Available',
-      item.status || 'Active'
+      item.status || 'Active',
+      item.breederId || null,
+      item.sourcingCompanyId || null
     ];
     await query(sql, params);
     return item;
@@ -234,15 +257,26 @@ export class HerdbookRepository {
   // ─────────────────────────────────────────────────────────────
   // 3. Dam Repository
   // ─────────────────────────────────────────────────────────────
-  async getDams(): Promise<DamItem[]> {
+  /**
+   * @param breederIdScope  If provided (and not 'ALL'/'ADMIN'), returns only dams
+   *                        where breeder_id matches OR breeder_id IS NULL (global).
+   */
+  async getDams(breederIdScope?: string): Promise<DamItem[]> {
+    const scopeClause = (breederIdScope && breederIdScope !== 'ALL' && breederIdScope !== 'ADMIN')
+      ? `AND (d.breeder_id = '${breederIdScope}' OR d.breeder_id IS NULL)`
+      : '';
     const sql = `
-      SELECT d.*, COALESCE(c.status, 'NOT_APPLIED') as certification_status
+      SELECT d.*,
+             cu.name as customer_name,
+             COALESCE(c.status, 'NOT_APPLIED') as certification_status
       FROM dams d
+      LEFT JOIN customers cu ON cu.id = d.customer_id
       LEFT JOIN (
         SELECT DISTINCT ON (COALESCE(animal_id, calf_id)) COALESCE(animal_id, calf_id) as target_id, status
         FROM certificates
         ORDER BY COALESCE(animal_id, calf_id), created_at DESC
       ) c ON c.target_id = d.id
+      WHERE 1=1 ${scopeClause}
       ORDER BY d.created_at DESC
     `;
     const res = await query(sql);
@@ -260,6 +294,9 @@ export class HerdbookRepository {
       breedingStatus: r.breeding_status,
       pregnancyStatus: r.pregnancy_status,
       certificationStatus: r.certification_status || 'NOT_APPLIED',
+      breederId: r.breeder_id || null,
+      customerId: r.customer_id || null,
+      customerName: r.customer_name || r.owner_name || null,
       createdAt: r.created_at,
       updatedAt: r.updated_at
     }));
@@ -307,10 +344,10 @@ export class HerdbookRepository {
     }));
   }
 
-  async createDam(dam: DamItem): Promise<DamItem> {
+  async createDam(dam: DamItem & { breederId?: string; customerId?: string }): Promise<DamItem> {
     const sql = `
-      INSERT INTO dams (id, name, breed, dob, father_id, mother_id, owner_name, farm_location, image_url, availability, breeding_status, pregnancy_status)
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+      INSERT INTO dams (id, name, breed, dob, father_id, mother_id, owner_name, farm_location, image_url, availability, breeding_status, pregnancy_status, breeder_id, customer_id)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
       RETURNING *
     `;
     const params = [
@@ -325,7 +362,9 @@ export class HerdbookRepository {
       dam.imageUrl || null,
       dam.availability || 'Available',
       dam.breedingStatus || 'Open',
-      dam.pregnancyStatus || 'Open'
+      dam.pregnancyStatus || 'Open',
+      dam.breederId || null,
+      dam.customerId || null
     ];
     await query(sql, params);
     return dam;
@@ -644,20 +683,30 @@ export class HerdbookRepository {
   // ─────────────────────────────────────────────────────────────
   // 5. Calf Repository & Transactional Calf Confirmation
   // ─────────────────────────────────────────────────────────────
-  async getCalves(): Promise<CalfItem[]> {
+  /**
+   * @param breederIdScope  If provided (and not 'ALL'/'ADMIN'), returns only
+   *                        calves where breeder_id matches OR breeder_id IS NULL.
+   */
+  async getCalves(breederIdScope?: string): Promise<CalfItem[]> {
+    const scopeClause = (breederIdScope && breederIdScope !== 'ALL' && breederIdScope !== 'ADMIN')
+      ? `AND (c.breeder_id = '${breederIdScope}' OR c.breeder_id IS NULL)`
+      : '';
     const sql = `
       SELECT c.*,
              s.name as sire_name, s.breed as sire_breed,
              d.name as dam_name, d.breed as dam_breed,
+             cu.name as customer_name,
              COALESCE(cert.status, 'NOT_APPLIED') as certification_status
       FROM calves c
       LEFT JOIN sires s ON c.sire_id = s.id
       LEFT JOIN dams d ON c.dam_id = d.id
+      LEFT JOIN customers cu ON cu.id = c.customer_id
       LEFT JOIN (
         SELECT DISTINCT ON (COALESCE(animal_id, calf_id)) COALESCE(animal_id, calf_id) as target_id, status
         FROM certificates
         ORDER BY COALESCE(animal_id, calf_id), created_at DESC
       ) cert ON cert.target_id = c.id
+      WHERE 1=1 ${scopeClause}
       ORDER BY c.created_at DESC
     `;
     const res = await query(sql);
@@ -682,6 +731,9 @@ export class HerdbookRepository {
       imageUrl: r.image_url,
       status: r.status,
       certificationStatus: r.certification_status || 'NOT_APPLIED',
+      breederId: r.breeder_id || null,
+      customerId: r.customer_id || null,
+      customerName: r.customer_name || r.owner_name || null,
       createdAt: r.created_at,
       updatedAt: r.updated_at
     }));
@@ -2649,21 +2701,22 @@ export class HerdbookRepository {
     const customer = await this.getCustomerById(customerId);
     if (!customer) return [];
 
+    // Primary: FK join (customer_id); Fallback: name-match for legacy records
     const sql = `
-      SELECT 'Dam' as animal_type, d.id, d.name, d.breed, d.dob, d.availability as status, d.image_url
+      SELECT 'Dam' as animal_type, d.id, d.name, d.breed, d.dob, d.availability as status, d.image_url, d.customer_id
       FROM dams d
-      WHERE d.owner_name = $1 OR d.owner_name = $2
+      WHERE d.customer_id = $3 OR d.owner_name = $1 OR d.owner_name = $2
       UNION ALL
-      SELECT 'Calf' as animal_type, c.id, c.name, c.breed, c.birth_date as dob, c.status, c.image_url
+      SELECT 'Calf' as animal_type, c.id, c.name, c.breed, c.birth_date as dob, c.status, c.image_url, c.customer_id
       FROM calves c
-      WHERE c.owner_name = $1 OR c.owner_name = $2
+      WHERE c.customer_id = $3 OR c.owner_name = $1 OR c.owner_name = $2
       UNION ALL
-      SELECT 'Sire' as animal_type, s.id, s.name, s.breed, s.dob, s.status, s.image_url
+      SELECT 'Sire' as animal_type, s.id, s.name, s.breed, s.dob, s.status, s.image_url, NULL as customer_id
       FROM sires s
       WHERE s.owner_name = $1 OR s.owner_name = $2
       ORDER BY name ASC
     `;
-    const res = await query(sql, [customer.name, customer.email]);
+    const res = await query(sql, [customer.name, customer.email, customerId]);
     return res.rows;
   }
 
@@ -2671,15 +2724,18 @@ export class HerdbookRepository {
     const customer = await this.getCustomerById(customerId);
     if (!customer) return [];
 
+    // Primary: FK join (customer_id); Fallback: name-match for legacy records
     const sql = `
       SELECT bp.*, s.name as sire_name, s.breed as sire_breed, d.name as dam_name, d.breed as dam_breed
       FROM breeding_programs bp
       LEFT JOIN sires s ON s.id = bp.sire_id
       LEFT JOIN dams d ON d.id = bp.dam_id
-      WHERE bp.cow_owner = $1 OR bp.owner_name = $1 OR bp.cow_owner = $2 OR bp.owner_name = $2
+      WHERE bp.customer_id = $3
+         OR bp.cow_owner = $1 OR bp.owner_name = $1
+         OR bp.cow_owner = $2 OR bp.owner_name = $2
       ORDER BY bp.created_at DESC
     `;
-    const res = await query(sql, [customer.name, customer.email]);
+    const res = await query(sql, [customer.name, customer.email, customerId]);
     return res.rows;
   }
 
@@ -3011,9 +3067,245 @@ export class HerdbookRepository {
     return this.getBreederById(breederId);
   }
 
+
+  // ─────────────────────────────────────────────────────────────
+  // 17. Sourcing Companies Repository
+  // ─────────────────────────────────────────────────────────────
+
+  async getSourcingCompanies(): Promise<any[]> {
+    const sql = `
+      SELECT sc.*,
+             (SELECT COUNT(*) FROM sires s WHERE s.sourcing_company_id = sc.id) as sire_count,
+             (SELECT COUNT(*) FROM stock_insemination si WHERE si.sourcing_company_id = sc.id) as stock_count
+      FROM sourcing_companies sc
+      ORDER BY sc.sort_order ASC, sc.name ASC
+    `;
+    const res = await query(sql);
+    return res.rows.map(r => ({
+      id: r.id,
+      code: r.code,
+      name: r.name,
+      country: r.country || '',
+      contactName: r.contact_name || '',
+      phone: r.phone || '',
+      email: r.email || '',
+      address: r.address || '',
+      website: r.website || '',
+      imageUrl: r.image_url || null,
+      notes: r.notes || '',
+      status: r.status || 'Active',
+      userId: r.user_id || null,
+      sireCount: parseInt(r.sire_count || '0', 10),
+      stockCount: parseInt(r.stock_count || '0', 10),
+      createdAt: r.created_at,
+      updatedAt: r.updated_at
+    }));
+  }
+
+  async getSourcingCompanyById(id: string): Promise<any | null> {
+    const sql = `
+      SELECT sc.*,
+             (SELECT COUNT(*) FROM sires s WHERE s.sourcing_company_id = sc.id) as sire_count,
+             (SELECT COUNT(*) FROM stock_insemination si WHERE si.sourcing_company_id = sc.id) as stock_count
+      FROM sourcing_companies sc
+      WHERE sc.id = $1 OR sc.code = $1
+    `;
+    const res = await query(sql, [id]);
+    if (res.rows.length === 0) return null;
+    const r = res.rows[0];
+    return {
+      id: r.id,
+      code: r.code,
+      name: r.name,
+      country: r.country || '',
+      contactName: r.contact_name || '',
+      phone: r.phone || '',
+      email: r.email || '',
+      address: r.address || '',
+      website: r.website || '',
+      imageUrl: r.image_url || null,
+      notes: r.notes || '',
+      status: r.status || 'Active',
+      userId: r.user_id || null,
+      sireCount: parseInt(r.sire_count || '0', 10),
+      stockCount: parseInt(r.stock_count || '0', 10),
+      createdAt: r.created_at,
+      updatedAt: r.updated_at
+    };
+  }
+
+  async createSourcingCompany(data: {
+    name: string;
+    code?: string;
+    country?: string;
+    contactName?: string;
+    phone?: string;
+    email?: string;
+    address?: string;
+    website?: string;
+    imageUrl?: string;
+    notes?: string;
+    status?: string;
+  }): Promise<any> {
+    const id = `SC-${Date.now().toString().slice(-6)}`;
+    const code = (data.code || data.name.trim().toUpperCase().replace(/[^A-Z0-9]+/g, '_')).slice(0, 50);
+    const sql = `
+      INSERT INTO sourcing_companies (id, code, name, country, contact_name, phone, email, address, website, image_url, notes, status)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+      RETURNING *
+    `;
+    await query(sql, [
+      id, code, data.name.trim(),
+      data.country || null,
+      data.contactName || null,
+      data.phone || null,
+      data.email || null,
+      data.address || null,
+      data.website || null,
+      data.imageUrl || null,
+      data.notes || null,
+      data.status || 'Active'
+    ]);
+    return this.getSourcingCompanyById(id);
+  }
+
+  async updateSourcingCompany(id: string, data: {
+    name?: string;
+    country?: string;
+    contactName?: string;
+    phone?: string;
+    email?: string;
+    address?: string;
+    website?: string;
+    imageUrl?: string;
+    notes?: string;
+    status?: string;
+  }): Promise<any> {
+    const fields: string[] = [];
+    const params: any[] = [];
+    let idx = 1;
+
+    if (data.name !== undefined) { fields.push(`name = $${idx++}`); params.push(data.name.trim()); }
+    if (data.country !== undefined) { fields.push(`country = $${idx++}`); params.push(data.country); }
+    if (data.contactName !== undefined) { fields.push(`contact_name = $${idx++}`); params.push(data.contactName); }
+    if (data.phone !== undefined) { fields.push(`phone = $${idx++}`); params.push(data.phone); }
+    if (data.email !== undefined) { fields.push(`email = $${idx++}`); params.push(data.email); }
+    if (data.address !== undefined) { fields.push(`address = $${idx++}`); params.push(data.address); }
+    if (data.website !== undefined) { fields.push(`website = $${idx++}`); params.push(data.website); }
+    if (data.imageUrl !== undefined) { fields.push(`image_url = $${idx++}`); params.push(data.imageUrl); }
+    if (data.notes !== undefined) { fields.push(`notes = $${idx++}`); params.push(data.notes); }
+    if (data.status !== undefined) { fields.push(`status = $${idx++}`); params.push(data.status); }
+    fields.push(`updated_at = CURRENT_TIMESTAMP`);
+
+    params.push(id);
+    if (fields.length > 1) {
+      await query(`UPDATE sourcing_companies SET ${fields.join(', ')} WHERE id = $${idx}`, params);
+    }
+    return this.getSourcingCompanyById(id);
+  }
+
+  async getSourcingCompanySires(companyId: string): Promise<any[]> {
+    const sql = `
+      SELECT s.id, s.name, s.breed, s.status, s.image_url, s.dob,
+             si.stock_available, si.price_usd
+      FROM sires s
+      LEFT JOIN stock_insemination si ON si.sire_id = s.id
+      WHERE s.sourcing_company_id = $1
+      ORDER BY s.name ASC
+    `;
+    const res = await query(sql, [companyId]);
+    return res.rows;
+  }
+
+  // ─────────────────────────────────────────────────────────────
+  // 18. Breed Configurations Repository
+  // ─────────────────────────────────────────────────────────────
+
+  async getBreedConfigurations(activeOnly = true): Promise<any[]> {
+    const where = activeOnly ? `WHERE is_active = true` : '';
+    const sql = `
+      SELECT * FROM breed_configurations
+      ${where}
+      ORDER BY sort_order ASC, name ASC
+    `;
+    const res = await query(sql);
+    return res.rows.map(r => ({
+      id: r.id,
+      code: r.code,
+      name: r.name,
+      category: r.category || 'Beef',
+      origin: r.origin || '',
+      description: r.description || '',
+      isActive: r.is_active,
+      sortOrder: r.sort_order || 10,
+      createdAt: r.created_at
+    }));
+  }
+
+  async createBreedConfiguration(data: {
+    name: string;
+    code?: string;
+    category?: string;
+    origin?: string;
+    description?: string;
+    sortOrder?: number;
+  }): Promise<any> {
+    const id = `BRD-${Date.now().toString().slice(-6)}`;
+    const code = (data.code || data.name.trim().toUpperCase().replace(/[^A-Z0-9]+/g, '_')).slice(0, 50);
+    const sql = `
+      INSERT INTO breed_configurations (id, code, name, category, origin, description, sort_order, is_active)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, true)
+      ON CONFLICT (code) DO UPDATE SET name = EXCLUDED.name, category = EXCLUDED.category
+      RETURNING *
+    `;
+    const res = await query(sql, [
+      id, code, data.name.trim(),
+      data.category || 'Beef',
+      data.origin || null,
+      data.description || null,
+      data.sortOrder || 10
+    ]);
+    return res.rows[0];
+  }
+
+  async toggleBreedConfigStatus(id: string, isActive: boolean): Promise<any> {
+    const res = await query(
+      `UPDATE breed_configurations SET is_active = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2 RETURNING *`,
+      [isActive, id]
+    );
+    return res.rows[0];
+  }
+
+  async updateBreedConfiguration(id: string, data: {
+    name?: string;
+    code?: string;
+    category?: string;
+    origin?: string;
+    description?: string;
+    sortOrder?: number;
+    isActive?: boolean;
+  }): Promise<any> {
+    const res = await query(
+      `UPDATE breed_configurations SET
+         name = COALESCE($1, name),
+         code = COALESCE($2, code),
+         category = COALESCE($3, category),
+         origin = COALESCE($4, origin),
+         description = COALESCE($5, description),
+         sort_order = COALESCE($6, sort_order),
+         is_active = COALESCE($7, is_active),
+         updated_at = CURRENT_TIMESTAMP
+       WHERE id = $8
+       RETURNING *`,
+      [data.name?.trim() || null, data.code?.trim().toUpperCase() || null, data.category || null, data.origin || null, data.description || null, data.sortOrder ?? null, data.isActive ?? null, id]
+    );
+    return res.rows[0];
+  }
+
 }
 
 
 export const herdbookRepository = new HerdbookRepository();
+
 
 

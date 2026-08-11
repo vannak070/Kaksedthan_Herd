@@ -1,4 +1,4 @@
-import { Request, Response } from 'express';
+import { Response } from 'express';
 import { herdbookRepository } from '../repositories/herdbook.repository';
 import { AuthenticatedRequest } from '../middleware/auth.middleware';
 
@@ -18,7 +18,7 @@ export class CustomerController {
   // GET /api/v1/customers/:id — Get customer detail with data access security
   async getCustomerById(req: AuthenticatedRequest, res: Response) {
     try {
-      const { id } = req.params;
+      const id = req.params.id as string;
       const user = req.user;
       const breederId = (user?.role === 'Super Admin' || user?.role === 'Admin') ? undefined : (user?.id || 'BREEDER-01');
       const customer = await herdbookRepository.getCustomerById(id, breederId);
@@ -52,7 +52,7 @@ export class CustomerController {
   // PUT /api/v1/customers/:id — Update customer
   async updateCustomer(req: AuthenticatedRequest, res: Response) {
     try {
-      const { id } = req.params;
+      const id = req.params.id as string;
       const user = req.user;
       const breederId = (user?.role === 'Super Admin' || user?.role === 'Admin') ? undefined : (user?.id || 'BREEDER-01');
       const customer = await herdbookRepository.updateCustomer(id, req.body, breederId);
@@ -65,7 +65,7 @@ export class CustomerController {
   // PATCH /api/v1/customers/:id/status — Toggle status (Active / Inactive)
   async setCustomerStatus(req: AuthenticatedRequest, res: Response) {
     try {
-      const { id } = req.params;
+      const id = req.params.id as string;
       const { status } = req.body;
       const user = req.user;
       const breederId = (user?.role === 'Super Admin' || user?.role === 'Admin') ? undefined : (user?.id || 'BREEDER-01');
@@ -79,7 +79,7 @@ export class CustomerController {
   // GET /api/v1/customers/:id/animals — Get customer's animals
   async getCustomerAnimals(req: AuthenticatedRequest, res: Response) {
     try {
-      const { id } = req.params;
+      const id = req.params.id as string;
       const user = req.user;
       const breederId = (user?.role === 'Super Admin' || user?.role === 'Admin') ? undefined : (user?.id || 'BREEDER-01');
       const customer = await herdbookRepository.getCustomerById(id, breederId);
@@ -98,7 +98,7 @@ export class CustomerController {
   // GET /api/v1/customers/:id/breeding-programs — Get customer's breeding programs
   async getCustomerBreedingPrograms(req: AuthenticatedRequest, res: Response) {
     try {
-      const { id } = req.params;
+      const id = req.params.id as string;
       const user = req.user;
       const breederId = (user?.role === 'Super Admin' || user?.role === 'Admin') ? undefined : (user?.id || 'BREEDER-01');
       const customer = await herdbookRepository.getCustomerById(id, breederId);
@@ -117,7 +117,7 @@ export class CustomerController {
   // GET /api/v1/customers/:id/certificates — Get customer's certificates
   async getCustomerCertificates(req: AuthenticatedRequest, res: Response) {
     try {
-      const { id } = req.params;
+      const id = req.params.id as string;
       const user = req.user;
       const breederId = (user?.role === 'Super Admin' || user?.role === 'Admin') ? undefined : (user?.id || 'BREEDER-01');
       const customer = await herdbookRepository.getCustomerById(id, breederId);

@@ -22,7 +22,8 @@ import {
   Users,
   UserCheck,
   ClipboardList,
-  Layers
+  Layers,
+  Globe2
 } from 'lucide-react';
 import { UserRoleItem } from '@/lib/types';
 import { useLanguage } from '@/context/LanguageContext';
@@ -402,6 +403,12 @@ export default function SidebarLayout({
                 label="Stock Insemination"
                 href="/stock-insemination"
                 isActive={pathname.startsWith('/stock-insemination')}
+              />
+              <NavItem
+                icon={<Globe2 className="h-4 w-4 text-blue-500" />}
+                label="Sourcing Companies"
+                href="/sourcing-companies"
+                isActive={pathname.startsWith('/sourcing-companies')}
               />
             </NavSection>
             <NavSection label="Herdbook System">

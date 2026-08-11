@@ -26,6 +26,7 @@ export interface StockInseminationItem {
   sireBreed?: string;
   sireImageUrl?: string;
   stockAvailable: number;
+  availableStraws?: number;
   priceUsd: number;
   priceKhr: number;
   currency: 'USD' | 'KHR';
@@ -55,6 +56,7 @@ export interface DamItem {
   breedingStatus: 'Open' | 'In Breeding' | 'Confirmed Pregnant' | 'Calved';
   pregnancyStatus: 'Open' | 'Pending Check' | 'Confirmed Pregnant';
   certificationStatus?: 'NOT_APPLIED' | 'PENDING_APPROVAL' | 'APPROVED' | 'REJECTED';
+  status?: string;
   createdAt?: string;
   updatedAt?: string;
 }
@@ -120,7 +122,35 @@ export interface BreedingProgramItem {
   notes?: string;
   createdAt?: string;
   updatedAt?: string;
+  // Extended fields used by legacy BreedingLogsSubTab
+  pregnancyStatus?: string;
+  damSource?: string;
+  calfIdSource?: string;
+  bullName?: string;
+  ownerType?: string;
+  price?: number;
+  breedingInseminationCost?: number;
+  serviceType?: string;
+  targetBreed?: string;
+  matingDate?: string;
+  expectedBirthdate?: string;
+  technician?: string;
+  checkupDate?: string;
+  calfId?: string;
+  heatDetectionDate?: string;
+  breedingServiceCost?: number;
+  farmCode?: string;
+  ownerContact?: string;
+  breederContact?: string;
 }
+
+export type BreedingRecord = BreedingProgramItem;
+
+// Legacy type aliases for BreedingLogsSubTab
+export type PregnancyStatus = string;
+export type ServiceType = string;
+export type BreedingMethod = string;
+export type DamSource = string;
 
 // Calf Register Interface
 export interface CalfItem {
@@ -139,7 +169,11 @@ export interface CalfItem {
   birthWeight: number;
   color?: string;
   ownerName?: string;
+  cowOwner?: string;
   farmLocation?: string;
+  breederName?: string;
+  breederId?: string;
+  registrationNumber?: string;
   imageUrl?: string;
   status: 'Registered to Herdbook' | 'Under Inspection' | 'Transferred' | 'Deceased' | 'Archived';
   certificationStatus?: 'NOT_APPLIED' | 'PENDING_APPROVAL' | 'APPROVED' | 'REJECTED';
@@ -209,6 +243,9 @@ export interface HerdbookCertificateItem {
   certificateNumber: string;
   registrationId: string;
   registrationNumber: string;
+  animalType?: string;
+  animalName?: string;
+  animalId?: string;
   calfId?: string;
   calfName?: string;
   calfBreed?: string;
@@ -231,6 +268,10 @@ export interface HerdbookCertificateItem {
   programNumber?: string;
   ownerName?: string;
   farmLocation?: string;
+  imageUrl?: string;
+  appliedDate?: string;
+  appliedBy?: string;
+  status?: string;
   issueDate: string;
   layoutType: 'A4 Landscape';
   publicVerificationUrl: string;

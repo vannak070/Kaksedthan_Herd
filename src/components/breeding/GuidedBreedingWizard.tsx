@@ -30,7 +30,7 @@ import {
   Lock
 } from 'lucide-react';
 
-import { fetchCustomersAction, fetchBreedersAction } from '@/app/actions';
+import { fetchCustomersAction, fetchBreedersAction, fetchBreedConfigurationsAction } from '@/app/actions';
 
 interface GuidedBreedingWizardProps {
   sires: SireItem[];
@@ -67,6 +67,8 @@ export default function GuidedBreedingWizard({
   const [customerList, setCustomerList] = useState<any[]>([]);
   // BREEDER LIST STATE — for Admin dropdown
   const [breederList, setBreederList] = useState<any[]>([]);
+  // BREED CONFIGURATIONS STATE — for dynamic breed dropdown
+  const [breedConfigList, setBreedConfigList] = useState<any[]>([]);
 
   React.useEffect(() => {
     // Scope customers: pass Breeder ID for Breeder accounts, undefined for Admin (all customers)
@@ -83,6 +85,12 @@ export default function GuidedBreedingWizard({
         }
       });
     }
+    // Load DB breed configurations
+    fetchBreedConfigurationsAction(true).then(res => {
+      if (res.success && Array.isArray(res.data) && res.data.length > 0) {
+        setBreedConfigList(res.data);
+      }
+    });
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isBreederAccount, lockedBreeder?.id]);
 
@@ -299,10 +307,10 @@ export default function GuidedBreedingWizard({
       // - Admin account: use the selected breederId from the dropdown
       const effectiveBreederId = isBreederAccount && lockedBreeder
         ? lockedBreeder.id
-        : breederId || null;
+        : breederId || undefined;
       const effectiveBreederName = isBreederAccount && lockedBreeder
         ? lockedBreeder.name
-        : breederName || null;
+        : breederName || undefined;
 
       const program: BreedingProgramItem = {
         id: `BP-${Date.now()}`,
@@ -494,11 +502,19 @@ export default function GuidedBreedingWizard({
                   onChange={e => setBreed(e.target.value)}
                   className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2.5 font-bold text-slate-900 focus:ring-2 focus:ring-[#dc5c15] focus:outline-none"
                 >
-                  <option value="Wagyu Cross">Wagyu Cross</option>
-                  <option value="100% Fullblood Wagyu">100% Fullblood Wagyu</option>
-                  <option value="Red Brahman">Red Brahman</option>
-                  <option value="Angus Cross">Angus Cross</option>
-                  <option value="Charolais Cross">Charolais Cross</option>
+                  {breedConfigList.length > 0 ? (
+                    breedConfigList.map((b: any) => (
+                      <option key={b.id || b.code} value={b.name}>{b.name} ({b.category || 'Beef'})</option>
+                    ))
+                  ) : (
+                    <>
+                      <option value="Wagyu Cross">Wagyu Cross</option>
+                      <option value="100% Fullblood Wagyu">100% Fullblood Wagyu</option>
+                      <option value="Red Brahman">Red Brahman</option>
+                      <option value="Angus Cross">Angus Cross</option>
+                      <option value="Charolais Cross">Charolais Cross</option>
+                    </>
+                  )}
                 </select>
               </div>
 

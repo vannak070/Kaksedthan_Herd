@@ -7,11 +7,12 @@ import StandardAnimalImage from '@/components/common/StandardAnimalImage';
 import GlobalPagination from '@/components/common/GlobalPagination';
 import GlobalExport from '@/components/common/GlobalExport';
 import { SireItem } from '@/types/breeding.types';
-import { fetchSiresAction } from '@/app/actions';
+import { fetchSiresAction, fetchBreedConfigurationsAction } from '@/app/actions';
 import { Beef, Plus, ChevronRight } from 'lucide-react';
 
 export default function SiresListPage() {
   const [sires, setSires] = useState<SireItem[]>([]);
+  const [masterBreeds, setMasterBreeds] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [breedFilter, setBreedFilter] = useState('All');
@@ -21,9 +22,15 @@ export default function SiresListPage() {
   const [pageSize, setPageSize] = useState(20);
 
   useEffect(() => {
-    fetchSiresAction()
-      .then((data) => {
-        setSires(data);
+    Promise.all([
+      fetchSiresAction(),
+      fetchBreedConfigurationsAction(false)
+    ])
+      .then(([siresData, breedRes]) => {
+        setSires(siresData);
+        if (breedRes.success && Array.isArray(breedRes.data)) {
+          setMasterBreeds(breedRes.data.map(b => b.name));
+        }
         setLoading(false);
       })
       .catch(() => setLoading(false));
@@ -47,7 +54,7 @@ export default function SiresListPage() {
   const totalCount = filtered.length;
   const paginatedItems = filtered.slice((currentPage - 1) * pageSize, currentPage * pageSize);
 
-  const breeds = Array.from(new Set(sires.map((s) => s.breed))).filter(Boolean);
+  const breeds = Array.from(new Set([...masterBreeds, ...sires.map((s) => s.breed)])).filter(Boolean);
 
   const sireExportColumns = [
     { header: 'Sire ID', key: 'id' },

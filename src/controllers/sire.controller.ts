@@ -13,7 +13,7 @@ export class SireController {
 
   async getSireById(req: Request, res: Response) {
     try {
-      const { id } = req.params;
+      const id = req.params.id as string;
       const sire = await herdbookRepository.getSireById(id);
       if (!sire) {
         return res.status(404).json({ success: false, message: 'Sire not found' });
@@ -40,7 +40,7 @@ export class SireController {
 
   async updateSire(req: Request, res: Response) {
     try {
-      const { id } = req.params;
+      const id = req.params.id as string;
       const sire = await herdbookRepository.updateSire(id, req.body);
       res.status(200).json({ success: true, data: sire });
     } catch (err: any) {

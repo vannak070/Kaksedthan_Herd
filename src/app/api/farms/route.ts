@@ -28,7 +28,7 @@ export async function POST(req: NextRequest) {
       capacity: capacity ? Number(capacity) : 100,
       imageUrl,
       notes
-    });
+    } as any);
     return NextResponse.json({ success: true, data: created }, { status: 201 });
   } catch (error: any) {
     return NextResponse.json({ success: false, error: error.message }, { status: 500 });

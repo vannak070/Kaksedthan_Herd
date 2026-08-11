@@ -40,7 +40,9 @@ async function updateExpenseCategories() {
         weightUnits: ['kg', 'lbs'],
         revenueTypes: ['Livestock Sale', 'Manure Sale', 'Milk Sale', 'Partnership Share'],
         purchaseTypes: ['Purchase', 'Born in Farm', 'Transfer', 'Partnership'],
-        users: []
+        users: [],
+        roles: [],
+        userLevels: []
       };
     } else {
       settings = res.rows[0].data;

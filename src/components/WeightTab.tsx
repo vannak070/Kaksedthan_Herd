@@ -467,7 +467,7 @@ export default function WeightTab({ data, onOpenLogWeight, onDeleteWeightRecord,
                   onChange={e => setEditingWeightRecord(prev => prev ? { ...prev, healthStatus: e.target.value } : null)}
                   className="flex h-9 w-full rounded-md border border-slate-200 bg-white px-3 py-1 text-sm text-slate-800 focus:outline-none"
                 >
-                  {data.settings.healthStatuses.map(s => <option key={s} value={s}>{s}</option>)}
+                  {(data.settings.healthStatuses ?? []).map(s => <option key={s} value={s}>{s}</option>)}
                 </select>
               </div>
               <div className="flex gap-2 justify-end pt-2">
