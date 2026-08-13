@@ -3,6 +3,9 @@ import { Metadata } from 'next';
 import { fetchFarmsAction } from '@/app/actions';
 import FarmsListClient from '@/components/farms/FarmsListClient';
 
+export const dynamic = 'force-dynamic';
+export const revalidate = 0;
+
 export const metadata: Metadata = {
   title: 'Farm Management | Kaksedthan Herdbook',
   description: 'Manage farm locations, barn stations, capacities, farm owners, and assigned livestock.',

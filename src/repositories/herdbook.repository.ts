@@ -1991,7 +1991,7 @@ export class HerdbookRepository {
     const levelTypeVal = level.levelType || 'ACCOUNT_MANAGEMENT';
     const sql = `
       INSERT INTO user_levels (id, code, name, description, purpose, sort_order, status, level_type)
-      VALUES ($1, $2, $3, $4, $5, $6, 'Draft', $7)
+      VALUES ($1, $2, $3, $4, $5, $6, 'Active', $7)
       RETURNING *
     `;
     const res = await query(sql, [
@@ -2253,11 +2253,15 @@ export class HerdbookRepository {
     let attachedEntityLabel = '';
 
     if (levelCode === 'SIRE_SOURCING_CO' || id === 'LEVEL-05' || levelName.toLowerCase().includes('sourcing')) {
-      const scRes = await query(`SELECT COUNT(*) as cnt FROM sourcing_companies`);
-      const scCnt = parseInt(scRes.rows[0]?.cnt || '0', 10);
-      if (scCnt > 0) {
-        attachedEntityCount += scCnt;
-        attachedEntityLabel = `${scCnt} Genetics Sourcing Company record(s)`;
+      try {
+        const scRes = await query(`SELECT COUNT(*) as cnt FROM sourcing_companies`);
+        const scCnt = parseInt(scRes.rows[0]?.cnt || '0', 10);
+        if (scCnt > 0) {
+          attachedEntityCount += scCnt;
+          attachedEntityLabel = `${scCnt} Genetics Sourcing Company record(s)`;
+        }
+      } catch {
+        // sourcing_companies table may not exist, safely continue
       }
     }
 
@@ -2273,6 +2277,10 @@ export class HerdbookRepository {
       };
     }
 
+    // Clean up dependent permission & module maps first
+    await query(`DELETE FROM user_level_modules WHERE user_level_id = $1`, [id]).catch(() => {});
+    await query(`DELETE FROM user_level_permissions WHERE user_level_id = $1`, [id]).catch(() => {});
+
     await query(`DELETE FROM user_levels WHERE id = $1`, [id]);
     if (performedBy) {
       await this.recordUserLevelAudit({
@@ -2280,7 +2288,7 @@ export class HerdbookRepository {
         resourceId: id,
         performedBy,
         details: { message: 'User level permanently deleted' }
-      });
+      }).catch(() => {});
     }
     return { deleted: true };
   }

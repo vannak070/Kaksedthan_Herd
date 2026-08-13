@@ -21,6 +21,7 @@ export async function migrateFullSystemAudit() {
         id          VARCHAR(50) PRIMARY KEY,
         code        VARCHAR(50) UNIQUE NOT NULL,
         name        VARCHAR(100) NOT NULL,
+        user_id     VARCHAR(50) REFERENCES users(id) ON DELETE SET NULL,
         owner_id    VARCHAR(50) REFERENCES users(id) ON DELETE SET NULL,
         owner_name  VARCHAR(100),
         address     TEXT,

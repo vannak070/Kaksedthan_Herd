@@ -3,6 +3,9 @@ import { Metadata } from 'next';
 import { fetchCustomersAction } from '@/app/actions';
 import CustomersListClient from '@/components/customers/CustomersListClient';
 
+export const dynamic = 'force-dynamic';
+export const revalidate = 0;
+
 export const metadata: Metadata = {
   title: 'Customer / Cow Owner Management | Kaksedthan Herdbook',
   description: 'Manage cow owner accounts, National ID verification status, and animal ownership records.',

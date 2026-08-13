@@ -5,10 +5,10 @@ import path from 'path';
 dotenv.config({ path: path.resolve(process.cwd(), '.env') });
 
 async function createDatabaseIfNotExists() {
-  const host = process.env.DB_HOST || 'localhost';
-  const port = parseInt(process.env.DB_PORT || '5433', 10);
-  const user = process.env.DB_USER || 'postgres';
-  const password = process.env.DB_PASSWORD || 'postgres123';
+  const host = process.env.DB_HOST || '127.0.0.1';
+  const port = parseInt(process.env.DB_PORT || '5432', 10);
+  const user = process.env.DB_USER || 'herdbook_user';
+  const password = process.env.DB_PASSWORD || 'HerdbookSecure2025';
   const targetDb = process.env.DB_NAME || 'kaksedthan_herdbook';
 
   console.log(`[Init DB] Connecting to PostgreSQL default instance at ${user}@${host}:${port}/postgres...`);

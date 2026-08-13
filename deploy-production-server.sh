@@ -56,7 +56,7 @@ sudo nginx -t && sudo systemctl reload nginx
 
 # 4. Spin up Docker containers
 echo -e "${BOLD}[4/6] Building & launching Docker containers (PostgreSQL + Next.js App)...${RESET}"
-docker compose up -d --build
+docker compose up -d --build 2>/dev/null || docker-compose up -d --build
 
 # 5. Run DB Schema Migration & Seed
 echo -e "${BOLD}[5/6] Running PostgreSQL Database Schema Migrations...${RESET}"

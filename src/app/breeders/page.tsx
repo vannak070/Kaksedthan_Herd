@@ -3,6 +3,9 @@ import { Metadata } from 'next';
 import { fetchBreedersAction } from '@/app/actions';
 import BreedersListClient from '@/components/breeders/BreedersListClient';
 
+export const dynamic = 'force-dynamic';
+export const revalidate = 0;
+
 export const metadata: Metadata = {
   title: 'Breeder Account & Management | Kaksedthan Herdbook',
   description: 'Manage breeder profiles, login user accounts, assigned user levels, and managed customers.',

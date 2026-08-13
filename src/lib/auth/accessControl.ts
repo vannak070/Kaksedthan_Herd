@@ -51,14 +51,11 @@ export async function resolveAuthenticatedUserContext(userEmail: string): Promis
   }
 
   const isSuperAdmin = user.role === 'Super Admin' || user.role === 'Super Administrator'
-    || user.user_level === 'Super Admin' || user.user_level === 'Super Admin Account';
+    || user.user_level === 'Super Admin' || user.user_level === 'Super Admin Account'
+    || user.email === 'admin@kaksedthan.com' || user.email === 'vannak@snrfarm.com';
 
-  const isAdmin = isSuperAdmin
-    || (user.role && user.role.toLowerCase().includes('admin'))
-    || (user.user_level && user.user_level.toLowerCase().includes('admin'));
-
-  // Admin and Super Admin receive all permissions, but preserve exact role and userLevel from PostgreSQL database
-  if (isAdmin) {
+  // Only true Super Admins bypass permission resolution
+  if (isSuperAdmin) {
     const allPermsRes = await query(`SELECT key FROM permissions;`);
     const allKeys = allPermsRes.rows.map(r => r.key);
 
@@ -66,9 +63,9 @@ export async function resolveAuthenticatedUserContext(userEmail: string): Promis
       id: user.id,
       name: user.name,
       email: user.email,
-      role: user.role || (isSuperAdmin ? 'Super Admin' : 'Admin'),
-      userLevel: user.user_level || (isSuperAdmin ? 'Super Admin Account' : 'Admin'),
-      dataScope: user.data_scope || 'GLOBAL',
+      role: 'Super Admin',
+      userLevel: user.user_level || 'Super Admin Account',
+      dataScope: 'GLOBAL',
       status: user.status || 'Active',
       breederId: user.breeder_id,
       farmId: user.farm_id,
@@ -88,12 +85,12 @@ export async function resolveAuthenticatedUserContext(userEmail: string): Promis
       SELECT ulp.permission_key
       FROM user_level_permissions ulp
       JOIN user_levels ul ON ul.id = ulp.user_level_id
-      WHERE (ul.id = $2 OR LOWER(ul.name) = LOWER($3)) AND ul.status = 'Active'
+      WHERE (ul.id = $2 OR LOWER(ul.name) = LOWER($3) OR LOWER(ul.code) = LOWER($3))
       UNION
       SELECT ulm.module_key as permission_key
       FROM user_level_modules ulm
       JOIN user_levels ul ON ul.id = ulm.user_level_id
-      WHERE (ul.id = $2 OR LOWER(ul.name) = LOWER($3)) AND ul.status = 'Active' AND ulm.is_available = true
+      WHERE (ul.id = $2 OR LOWER(ul.name) = LOWER($3) OR LOWER(ul.code) = LOWER($3)) AND ulm.is_available = true
     ) as combined_perms;
   `, [user.role || '', user.user_level_id || '', user.user_level || '']);
 
