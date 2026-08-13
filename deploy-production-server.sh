@@ -20,7 +20,7 @@ echo -e "${BOLD}${CYAN}🚀 Initializing KAKSEDTHAN Production Setup for livesto
 # 1. Update APT packages and install dependencies
 echo -e "${BOLD}[1/6] Installing Docker, Nginx, and Certbot SSL tools...${RESET}"
 sudo apt update && sudo apt upgrade -y
-sudo apt install -y curl git docker.io docker-compose-plugin nginx certbot python3-certbot-nginx
+sudo apt install -y curl git docker.io docker-compose docker-compose-v2 nginx certbot python3-certbot-nginx 2>/dev/null || sudo apt install -y curl git docker.io docker-compose nginx certbot python3-certbot-nginx
 
 # 2. Enable & start Docker service
 echo -e "${BOLD}[2/6] Enabling Docker daemon...${RESET}"
