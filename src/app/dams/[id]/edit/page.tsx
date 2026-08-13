@@ -4,7 +4,7 @@ import React, { useState, useEffect, use } from 'react';
 import { useRouter } from 'next/navigation';
 import PageHeader from '@/components/common/PageHeader';
 import ImageUploadContainer from '@/components/common/ImageUploadContainer';
-import { fetchDamsAction, saveDamAction, fetchBreedConfigurationsAction } from '@/app/actions';
+import { fetchDamsAction, saveDamAction, fetchDamFormOptionsAction } from '@/app/actions';
 import { DamItem } from '@/types/breeding.types';
 import { Save, ArrowLeft, Heart, Sparkles, UserCheck, MapPin, ShieldCheck, Activity, Dna } from 'lucide-react';
 
@@ -18,6 +18,19 @@ export default function EditDamPage({ params }: PageProps) {
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [activeBreeds, setActiveBreeds] = useState<Array<{ id: string; name: string; code: string }>>([]);
+  const [options, setOptions] = useState<{
+    userLevels: Array<{ id: string; name: string }>;
+    customers: Array<{ id: string; name: string }>;
+    breeders: Array<{ id: string; name: string }>;
+    farms: Array<{ id: string; name: string; code?: string; location?: string }>;
+    sourcingCompanies: Array<{ id: string; name: string; country?: string }>;
+  }>({
+    userLevels: [],
+    customers: [],
+    breeders: [],
+    farms: [],
+    sourcingCompanies: [],
+  });
 
   const [formData, setFormData] = useState<any>({
     id: id,
@@ -27,7 +40,10 @@ export default function EditDamPage({ params }: PageProps) {
     dob: '',
     fatherId: '',
     motherId: '',
+    ownerType: 'Customer / Cow Owner Account',
+    ownerId: '',
     ownerName: '',
+    farmId: '',
     farmLocation: '',
     imageUrl: '',
     availability: 'Available' as const,
@@ -36,36 +52,88 @@ export default function EditDamPage({ params }: PageProps) {
   });
 
   useEffect(() => {
-    fetchBreedConfigurationsAction(true).then((res) => {
-      if (res.success && Array.isArray(res.data)) {
-        setActiveBreeds(res.data);
+    Promise.all([
+      fetchDamFormOptionsAction(),
+      fetchDamsAction(),
+    ]).then(([optRes, dams]) => {
+      if (optRes.success && optRes.data) {
+        setActiveBreeds(optRes.data.breeds || []);
+        setOptions({
+          userLevels: (optRes.data.userLevels || []).map((ul: any) => ({ id: String(ul.id), name: String(ul.name) })),
+          customers: optRes.data.customers || [],
+          breeders: optRes.data.breeders || [],
+          farms: optRes.data.farms || [],
+          sourcingCompanies: optRes.data.sourcingCompanies || [],
+        });
       }
-    });
 
-    fetchDamsAction()
-      .then((dams) => {
-        const found = dams.find((d) => d.id === id);
-        if (found) {
-          setFormData({
-            id: found.id,
-            name: found.name || '',
-            breed: found.breed,
-            breedId: (found as any).breedId || (found as any).breed_id || '',
-            dob: found.dob || '',
-            fatherId: found.fatherId || '',
-            motherId: found.motherId || '',
-            ownerName: found.ownerName || '',
-            farmLocation: found.farmLocation || '',
-            imageUrl: found.imageUrl || '',
-            availability: (found.availability || 'Available') as DamItem['availability'],
-            breedingStatus: (found.breedingStatus || 'Open') as DamItem['breedingStatus'],
-            pregnancyStatus: (found.pregnancyStatus || 'Open') as DamItem['pregnancyStatus'],
-          });
-        }
-        setLoading(false);
-      })
-      .catch(() => setLoading(false));
+      const found = dams.find((d) => d.id === id);
+      if (found) {
+        setFormData({
+          id: found.id,
+          name: found.name || '',
+          breed: found.breed,
+          breedId: (found as any).breedId || (found as any).breed_id || '',
+          dob: found.dob || '',
+          fatherId: found.fatherId || '',
+          motherId: found.motherId || '',
+          ownerType: (found as any).ownerType || 'Customer / Cow Owner Account',
+          ownerId: (found as any).ownerId || '',
+          ownerName: found.ownerName || '',
+          farmId: (found as any).farmId || '',
+          farmLocation: found.farmLocation || '',
+          imageUrl: found.imageUrl || '',
+          availability: (found.availability || 'Available') as DamItem['availability'],
+          breedingStatus: (found.breedingStatus || 'Open') as DamItem['breedingStatus'],
+          pregnancyStatus: (found.pregnancyStatus || 'Open') as DamItem['pregnancyStatus'],
+        });
+      }
+      setLoading(false);
+    }).catch(() => setLoading(false));
   }, [id]);
+
+  const getOwnerTypeCategory = (ownerType: string): 'CUSTOMER' | 'BREEDER' | 'FARM_OWNER' | 'SOURCING_COMPANY' | 'INTERNAL' => {
+    const normalized = (ownerType || '').toLowerCase();
+    if (normalized.includes('customer') || normalized.includes('cow owner')) return 'CUSTOMER';
+    if (normalized.includes('breeder')) return 'BREEDER';
+    if (normalized.includes('farm owner') || normalized.includes('station owner')) return 'FARM_OWNER';
+    if (normalized.includes('sourcing')) return 'SOURCING_COMPANY';
+    return 'INTERNAL';
+  };
+
+  const handleOwnerTypeChange = (newType: string) => {
+    const cat = getOwnerTypeCategory(newType);
+    let newOwnerId = '';
+    let newOwnerName = '';
+
+    if (cat === 'CUSTOMER') {
+      const first = options.customers[0];
+      newOwnerId = first ? first.id : '';
+      newOwnerName = first ? first.name : '';
+    } else if (cat === 'BREEDER') {
+      const first = options.breeders[0];
+      newOwnerId = first ? first.id : '';
+      newOwnerName = first ? first.name : '';
+    } else if (cat === 'FARM_OWNER') {
+      const first = options.farms[0];
+      newOwnerId = first ? first.id : '';
+      newOwnerName = first ? first.name : '';
+    } else if (cat === 'SOURCING_COMPANY') {
+      const first = options.sourcingCompanies[0];
+      newOwnerId = first ? first.id : '';
+      newOwnerName = first ? first.name : '';
+    } else {
+      newOwnerId = 'INTERNAL';
+      newOwnerName = 'Kaksedthan Dam Bank';
+    }
+
+    setFormData({
+      ...formData,
+      ownerType: newType,
+      ownerId: newOwnerId,
+      ownerName: newOwnerName,
+    });
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -302,37 +370,215 @@ export default function EditDamPage({ params }: PageProps) {
               </div>
             </div>
 
-            {/* Section 3: Ownership & Station Location */}
+            {/* Section 3: Dynamic Polymorphic Ownership & Station Location */}
             <div className="bg-white rounded-3xl border border-slate-200/90 p-6 shadow-sm space-y-4">
               <div className="flex items-center gap-2 border-b border-slate-100 pb-3">
                 <div className="h-8 w-8 rounded-xl bg-emerald-50 flex items-center justify-center text-emerald-700">
                   <UserCheck className="h-4 w-4" />
                 </div>
                 <div>
-                  <h3 className="text-xs font-black text-slate-900 uppercase tracking-wider">3. Ownership & Station Location</h3>
-                  <p className="text-[10px] text-slate-500">Owner entity and physical station location.</p>
+                  <h3 className="text-xs font-black text-slate-900 uppercase tracking-wider">
+                    3. OWNERSHIP & STATION LOCATION SETUP
+                  </h3>
+                  <p className="text-[10px] text-slate-500">
+                    Dynamic Account Ownership (Cow Owner / Breeder / Station) and Physical Farm Location from PostgreSQL setup.
+                  </p>
                 </div>
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
+                {/* Ownership Type */}
                 <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1.5">Owner Name</label>
-                  <input
-                    type="text"
-                    value={formData.ownerName}
-                    onChange={(e) => setFormData({ ...formData, ownerName: e.target.value })}
-                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2.5 text-xs font-bold text-slate-900 focus:ring-2 focus:ring-purple-600 focus:outline-none"
-                  />
+                  <label className="block text-xs font-bold text-slate-700 mb-1.5">
+                    Ownership Type <span className="text-rose-500">*</span>
+                  </label>
+                  <select
+                    value={formData.ownerType || ''}
+                    onChange={(e) => handleOwnerTypeChange(e.target.value)}
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2.5 text-xs font-black text-slate-900 focus:ring-2 focus:ring-purple-600 focus:outline-none"
+                  >
+                    {options.userLevels && options.userLevels.length > 0 ? (
+                      options.userLevels.map((ul) => (
+                        <option key={ul.id} value={ul.name}>
+                          {ul.name}
+                        </option>
+                      ))
+                    ) : (
+                      <>
+                        <option value="Customer / Cow Owner Account">Customer / Cow Owner Account</option>
+                        <option value="Breeder Account">Breeder Account</option>
+                        <option value="Farm Owner Account">Farm Owner Account</option>
+                        <option value="Sire Sourcing Company Account">Sire Sourcing Company Account</option>
+                        <option value="Admin">Admin (Internal Company)</option>
+                      </>
+                    )}
+                  </select>
                 </div>
 
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1.5">Station Location</label>
-                  <input
-                    type="text"
-                    value={formData.farmLocation}
-                    onChange={(e) => setFormData({ ...formData, farmLocation: e.target.value })}
+                {/* Dynamic Owner Entity Selector based on Ownership Type */}
+                {(() => {
+                  const cat = getOwnerTypeCategory(formData.ownerType || '');
+                  if (cat === 'CUSTOMER') {
+                    return (
+                      <div>
+                        <label className="block text-xs font-bold text-slate-700 mb-1.5">
+                          Select Cow Owner Account <span className="text-rose-500">*</span>
+                        </label>
+                        <select
+                          value={formData.ownerId || ''}
+                          onChange={(e) => {
+                            const selId = e.target.value;
+                            const found = options.customers.find((c) => c.id === selId);
+                            setFormData({ ...formData, ownerId: selId, ownerName: found ? found.name : '' });
+                          }}
+                          className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2.5 text-xs font-bold text-slate-900 focus:ring-2 focus:ring-purple-600 focus:outline-none"
+                        >
+                          {formData.ownerName && !options.customers.some(c => c.id === formData.ownerId || c.name === formData.ownerName) && (
+                            <option value={formData.ownerId || formData.ownerName}>
+                              {formData.ownerName} (Current Owner)
+                            </option>
+                          )}
+                          {options.customers.map((c) => (
+                            <option key={c.id} value={c.id}>
+                              {c.name}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                    );
+                  }
+                  if (cat === 'BREEDER') {
+                    return (
+                      <div>
+                        <label className="block text-xs font-bold text-slate-700 mb-1.5">
+                          Select Breeder Account <span className="text-rose-500">*</span>
+                        </label>
+                        <select
+                          value={formData.ownerId || ''}
+                          onChange={(e) => {
+                            const selId = e.target.value;
+                            const found = options.breeders.find((b) => b.id === selId);
+                            setFormData({ ...formData, ownerId: selId, ownerName: found ? found.name : '' });
+                          }}
+                          className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2.5 text-xs font-bold text-slate-900 focus:ring-2 focus:ring-purple-600 focus:outline-none"
+                        >
+                          {formData.ownerName && !options.breeders.some(b => b.id === formData.ownerId || b.name === formData.ownerName) && (
+                            <option value={formData.ownerId || formData.ownerName}>
+                              {formData.ownerName} (Current Owner)
+                            </option>
+                          )}
+                          {options.breeders.map((b) => (
+                            <option key={b.id} value={b.id}>
+                              {b.name}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                    );
+                  }
+                  if (cat === 'FARM_OWNER') {
+                    return (
+                      <div>
+                        <label className="block text-xs font-bold text-slate-700 mb-1.5">
+                          Select Farm Owner Account <span className="text-rose-500">*</span>
+                        </label>
+                        <select
+                          value={formData.ownerId || ''}
+                          onChange={(e) => {
+                            const selId = e.target.value;
+                            const found = options.farms.find((f) => f.id === selId);
+                            setFormData({ ...formData, ownerId: selId, ownerName: found ? found.name : '' });
+                          }}
+                          className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2.5 text-xs font-bold text-slate-900 focus:ring-2 focus:ring-purple-600 focus:outline-none"
+                        >
+                          {formData.ownerName && !options.farms.some(f => f.id === formData.ownerId || f.name === formData.ownerName) && (
+                            <option value={formData.ownerId || formData.ownerName}>
+                              {formData.ownerName} (Current Owner)
+                            </option>
+                          )}
+                          {options.farms.map((f) => (
+                            <option key={f.id} value={f.id}>
+                              {f.name} ({f.code || 'Farm'})
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                    );
+                  }
+                  if (cat === 'SOURCING_COMPANY') {
+                    return (
+                      <div>
+                        <label className="block text-xs font-bold text-slate-700 mb-1.5">
+                          Select Sourcing Company Owner <span className="text-rose-500">*</span>
+                        </label>
+                        <select
+                          value={formData.ownerId || ''}
+                          onChange={(e) => {
+                            const selId = e.target.value;
+                            const found = options.sourcingCompanies.find((s) => s.id === selId);
+                            setFormData({ ...formData, ownerId: selId, ownerName: found ? found.name : '' });
+                          }}
+                          className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2.5 text-xs font-bold text-slate-900 focus:ring-2 focus:ring-purple-600 focus:outline-none"
+                        >
+                          {formData.ownerName && !options.sourcingCompanies.some(sc => sc.id === formData.ownerId || sc.name === formData.ownerName) && (
+                            <option value={formData.ownerId || formData.ownerName}>
+                              {formData.ownerName} (Current Owner)
+                            </option>
+                          )}
+                          {options.sourcingCompanies.map((sc) => (
+                            <option key={sc.id} value={sc.id}>
+                              {sc.name} ({sc.country || 'Global'})
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                    );
+                  }
+                  // Default: Internal
+                  return (
+                    <div>
+                      <label className="block text-xs font-bold text-slate-700 mb-1.5">
+                        Select Internal Entity <span className="text-rose-500">*</span>
+                      </label>
+                      <input
+                        type="text"
+                        value={formData.ownerName || 'Kaksedthan Dam Bank'}
+                        onChange={(e) => setFormData({ ...formData, ownerName: e.target.value, ownerId: 'INTERNAL' })}
+                        className="w-full bg-slate-100 border border-slate-200 rounded-xl px-3.5 py-2.5 text-xs font-bold text-slate-800"
+                      />
+                    </div>
+                  );
+                })()}
+
+                {/* Physical Farm Station Location Selector */}
+                <div className="sm:col-span-2">
+                  <label className="block text-xs font-bold text-slate-700 mb-1.5">
+                    Physical Farm Station Location <span className="text-rose-500">*</span>
+                  </label>
+                  <select
+                    value={formData.farmId || ''}
+                    onChange={(e) => {
+                      const selId = e.target.value;
+                      const found = options.farms.find((f) => f.id === selId);
+                      setFormData({
+                        ...formData,
+                        farmId: selId,
+                        farmLocation: found ? found.name : '',
+                      });
+                    }}
                     className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2.5 text-xs font-bold text-slate-900 focus:ring-2 focus:ring-purple-600 focus:outline-none"
-                  />
+                  >
+                    {formData.farmLocation && !options.farms.some(f => f.id === formData.farmId || f.name === formData.farmLocation) && (
+                      <option value={formData.farmId || formData.farmLocation}>
+                        {formData.farmLocation} (Current Location)
+                      </option>
+                    )}
+                    {options.farms.map((f) => (
+                      <option key={f.id} value={f.id}>
+                        {f.name} ({f.location || 'Station Location'})
+                      </option>
+                    ))}
+                  </select>
                 </div>
               </div>
             </div>

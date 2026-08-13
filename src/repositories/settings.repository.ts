@@ -72,14 +72,14 @@ export class SettingsRepository {
 
     const usersRes = await query('SELECT * FROM users ORDER BY created_at ASC');
     if (usersRes.rows.length === 0) {
-      for (const u of DEFAULT_USERS) {
-        await query(
+      await Promise.all(DEFAULT_USERS.map(u => 
+        query(
           `INSERT INTO users (id, name, email, role, status, password, permissions, farm_location)
            VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
            ON CONFLICT (id) DO UPDATE SET name=$2, email=$3, role=$4, status=$5, password=$6, permissions=$7, farm_location=$8`,
           [u.id, u.name, u.email, u.role, u.status, u.password, JSON.stringify(u.permissions || DEFAULT_ROLE_PERMISSIONS[u.role] || []), u.farmLocation || null]
-        );
-      }
+        )
+      ));
       settings.users = DEFAULT_USERS;
     } else {
       settings.users = usersRes.rows.map(row => {
@@ -422,8 +422,24 @@ export class SettingsRepository {
         id: 'ROLE-SUPER-ADMIN',
         name: 'Super Admin',
         category: 'System',
-        description: 'Unrestricted access to all modules and configurations.',
-        permissions: ['dashboard.view', 'sire.view', 'sire.create', 'sire.update', 'sire.delete', 'dam.view', 'dam.create', 'dam.update', 'dam.delete', 'calf.view', 'calf.create', 'calf.update', 'calf.delete', 'breeding_program.view', 'breeding_program.create', 'breeding_program.update', 'breeding_program.delete', 'stock.view', 'stock.create', 'stock.update', 'stock.delete', 'farm.view', 'farm.create', 'farm.update', 'farm.delete', 'customer.view', 'customer.create', 'customer.update', 'customer.delete', 'herdbook.view', 'herdbook.verify', 'herdbook.publish', 'certificate.view', 'certificate.generate', 'certificate.download', 'user.view', 'user.create', 'user.update', 'user.disable', 'role.view', 'role.create', 'role.update', 'role.delete', 'permission.view', 'permission.assign', 'system_setup.view', 'system_setup.edit'],
+        permissions: [
+          'dashboard.view', 'sire.view', 'sire.create', 'sire.update', 'sire.delete', 'sire.verify', 'sire.download',
+          'dam.view', 'dam.create', 'dam.update', 'dam.delete', 'dam.verify',
+          'calf.view', 'calf.create', 'calf.update', 'calf.delete', 'calf.verify',
+          'breeding_program.view', 'breeding_program.create', 'breeding_program.update', 'breeding_program.delete', 'breeding_program.confirm', 'breeding_program.approve',
+          'breeding_cost.view', 'breeding_cost.create', 'breeding_cost.update', 'breeding_cost.delete',
+          'stock.view', 'stock.create', 'stock.update', 'stock.delete', 'stock.transfer',
+          'farm.view', 'farm.create', 'farm.update', 'farm.delete',
+          'customer.view', 'customer.create', 'customer.update', 'customer.delete',
+          'herdbook.view', 'herdbook.verify', 'herdbook.publish',
+          'certificate.view', 'certificate.generate', 'certificate.download',
+          'certification.view', 'certification.apply', 'certification.approve', 'certification.reject',
+          'user.view', 'user.create', 'user.update', 'user.disable',
+          'role.view', 'role.create', 'role.update', 'role.delete',
+          'permission.view', 'permission.assign',
+          'report.view', 'report.export', 'export.view',
+          'system_setup.view', 'system_setup.edit'
+        ],
         isSystem: true
       });
     }

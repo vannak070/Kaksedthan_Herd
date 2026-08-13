@@ -145,30 +145,11 @@ export default function DashboardHome({ data }: DashboardHomeProps) {
               <h2 className="text-base sm:text-lg font-black tracking-tight">
                 Welcome to Kaksedthan Operational Dashboard
               </h2>
-              <span className="text-[10px] font-black uppercase px-2.5 py-0.5 rounded-full bg-[#dc5c15] text-white tracking-wider">
-                {activeRole}
-              </span>
             </div>
             <p className="text-xs text-slate-400 mt-1 font-medium">
               Real-time operational summary from PostgreSQL database <code className="text-orange-400 font-mono">kaksedthan_herdbook</code> • <span className="text-emerald-400 font-bold">{filteredData.scopeLabel}</span>
             </p>
           </div>
-        </div>
-
-        {/* Dashboard Role Switcher Toolbar */}
-        <div className="bg-slate-900 border border-slate-800 p-1.5 rounded-2xl flex items-center gap-2 shrink-0">
-          <span className="text-[9.5px] font-black uppercase tracking-wider text-slate-400 px-2">Role View:</span>
-          <select
-            value={activeRole}
-            onChange={(e: any) => setActiveRole(e.target.value)}
-            className="bg-slate-800 text-white text-xs font-bold px-3 py-1.5 rounded-xl border border-slate-700 focus:ring-2 focus:ring-[#dc5c15] focus:outline-none cursor-pointer"
-          >
-            <option value="Super Admin">🛡️ Super Admin View</option>
-            <option value="Breeder">🧬 Breeder Dashboard</option>
-            <option value="Farm Owner">🏡 Farm Owner Dashboard</option>
-            <option value="Customer / Cow Owner">🐮 Customer Dashboard</option>
-            <option value="Sire Sourcing Company">🏢 Sire Sourcing Co. Dashboard</option>
-          </select>
         </div>
       </div>
 
@@ -436,9 +417,9 @@ export default function DashboardHome({ data }: DashboardHomeProps) {
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {filteredData.sires.map(sire => (
               <div key={sire.id} className="p-3.5 bg-slate-50 border border-slate-200 rounded-2xl flex items-center gap-3">
-                <div className="h-14 w-14 rounded-xl border border-slate-200 overflow-hidden bg-white shrink-0">
+                <Link href={`/sires/${sire.id}`} className="h-14 w-14 rounded-xl border border-slate-200 overflow-hidden bg-white shrink-0 block cursor-pointer">
                   <StandardAnimalImage src={sire.imageUrl} alt={sire.name} />
-                </div>
+                </Link>
                 <div className="flex-1 min-w-0 text-xs">
                   <h5 className="font-black text-slate-900 truncate">{sire.name}</h5>
                   <p className="text-[10px] text-slate-500 font-semibold">ID: {sire.id} • Breed: <span className="font-bold text-[#dc5c15]">{sire.breed}</span></p>

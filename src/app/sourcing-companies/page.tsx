@@ -1,10 +1,13 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
+import Link from 'next/link';
+import PageHeader from '@/components/common/PageHeader';
 import {
   Building2, Plus, Search, Globe, Phone, Mail,
   MapPin, ExternalLink, Edit3, X, CheckCircle2,
-  Dna, Beef, RefreshCw, Globe2, Star, Award
+  Dna, Beef, RefreshCw, Globe2, Star, Award, AlertTriangle,
+  Upload, Image as ImageIcon, ShieldCheck, UserCheck, Eye
 } from 'lucide-react';
 import {
   fetchSourcingCompaniesAction,
@@ -41,6 +44,10 @@ const FLAG_MAP: Record<string, string> = {
   'United Kingdom': '🇬🇧',
   'Germany': '🇩🇪',
   'New Zealand': '🇳🇿',
+  'Brazil': '🇧🇷',
+  'Argentina': '🇦🇷',
+  'Thailand': '🇹🇭',
+  'Vietnam': '🇻🇳',
 };
 
 const COUNTRIES = [
@@ -54,291 +61,483 @@ export default function SourcingCompaniesPage() {
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<'All' | 'Active' | 'Inactive'>('All');
+  const [countryFilter, setCountryFilter] = useState<string>('All');
+
   const [showModal, setShowModal] = useState(false);
   const [editTarget, setEditTarget] = useState<Company | null>(null);
   const [selectedCompany, setSelectedCompany] = useState<Company | null>(null);
   const [companySires, setCompanySires] = useState<any[]>([]);
   const [siresLoading, setSiresLoading] = useState(false);
   const [saving, setSaving] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  
+  // Toast feedback
+  const [toast, setToast] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
 
   // Form state
   const [form, setForm] = useState({
-    name: '', country: 'Cambodia', contactName: '', phone: '', email: '',
-    address: '', website: '', notes: '', status: 'Active',
+    name: '',
+    code: '',
+    country: 'Cambodia',
+    contactName: '',
+    phone: '',
+    email: '',
+    address: '',
+    website: '',
+    notes: '',
+    imageUrl: '',
+    status: 'Active' as 'Active' | 'Inactive',
   });
+
+  const showToast = (type: 'success' | 'error', message: string) => {
+    setToast({ type, message });
+    setTimeout(() => setToast(null), 5000);
+  };
 
   useEffect(() => { loadCompanies(); }, []);
 
   async function loadCompanies() {
     setLoading(true);
     const res = await fetchSourcingCompaniesAction();
-    if (res.success && Array.isArray(res.data)) setCompanies(res.data);
+    if (res.success && Array.isArray(res.data)) {
+      setCompanies(res.data);
+    } else {
+      showToast('error', res.error || 'Failed to load sourcing companies.');
+    }
     setLoading(false);
   }
 
   async function handleSelectCompany(c: Company) {
+    if (selectedCompany?.id === c.id) {
+      setSelectedCompany(null);
+      return;
+    }
     setSelectedCompany(c);
     setSiresLoading(true);
     const res = await fetchSourcingCompanySiresAction(c.id);
-    if (res.success && Array.isArray(res.data)) setCompanySires(res.data);
-    else setCompanySires([]);
+    if (res.success && Array.isArray(res.data)) {
+      setCompanySires(res.data);
+    } else {
+      setCompanySires([]);
+    }
     setSiresLoading(false);
   }
 
   function openCreate() {
     setEditTarget(null);
-    setForm({ name: '', country: 'Cambodia', contactName: '', phone: '', email: '', address: '', website: '', notes: '', status: 'Active' });
+    setForm({
+      name: '',
+      code: '',
+      country: 'Cambodia',
+      contactName: '',
+      phone: '',
+      email: '',
+      address: '',
+      website: '',
+      notes: '',
+      imageUrl: '',
+      status: 'Active',
+    });
     setShowModal(true);
-    setError(null);
   }
 
   function openEdit(c: Company) {
     setEditTarget(c);
-    setForm({ name: c.name, country: c.country || 'Cambodia', contactName: c.contactName || '', phone: c.phone || '', email: c.email || '', address: c.address || '', website: c.website || '', notes: c.notes || '', status: c.status || 'Active' });
+    setForm({
+      name: c.name,
+      code: c.code || '',
+      country: c.country || 'Cambodia',
+      contactName: c.contactName || '',
+      phone: c.phone || '',
+      email: c.email || '',
+      address: c.address || '',
+      website: c.website || '',
+      notes: c.notes || '',
+      imageUrl: c.imageUrl || '',
+      status: c.status || 'Active',
+    });
     setShowModal(true);
-    setError(null);
   }
 
+  const handleImageFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        setForm(prev => ({ ...prev, imageUrl: reader.result as string }));
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+
   async function handleSave() {
-    if (!form.name.trim()) { setError('Company name is required.'); return; }
+    if (!form.name.trim()) {
+      showToast('error', 'Company Name is required.');
+      return;
+    }
     setSaving(true);
-    setError(null);
     try {
       if (editTarget) {
         const res = await updateSourcingCompanyAction(editTarget.id, form);
-        if (!res.success) { setError(res.error || 'Failed to update'); setSaving(false); return; }
+        if (res.success) {
+          showToast('success', `Sourcing Company "${form.name}" updated successfully.`);
+          setShowModal(false);
+          await loadCompanies();
+        } else {
+          showToast('error', res.error || 'Failed to update sourcing company.');
+        }
       } else {
         const res = await createSourcingCompanyAction(form);
-        if (!res.success) { setError(res.error || 'Failed to create'); setSaving(false); return; }
+        if (res.success) {
+          showToast('success', `Sourcing Company "${form.name}" created successfully.`);
+          setShowModal(false);
+          await loadCompanies();
+        } else {
+          showToast('error', res.error || 'Failed to create sourcing company.');
+        }
       }
-      setShowModal(false);
-      await loadCompanies();
     } catch (e: any) {
-      setError(e.message || 'An unexpected error occurred');
+      showToast('error', e.message || 'An unexpected error occurred.');
+    } finally {
+      setSaving(false);
     }
-    setSaving(false);
   }
 
-  const filtered = companies.filter(c => {
-    const matchSearch = !searchQuery ||
-      c.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      c.country?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      c.contactName?.toLowerCase().includes(searchQuery.toLowerCase());
-    const matchStatus = statusFilter === 'All' || c.status === statusFilter;
-    return matchSearch && matchStatus;
-  });
+  const filtered = useMemo(() => {
+    return companies.filter(c => {
+      const matchSearch = !searchQuery ||
+        c.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        (c.code || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
+        (c.country || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
+        (c.contactName || '').toLowerCase().includes(searchQuery.toLowerCase());
+      
+      const matchStatus = statusFilter === 'All' || c.status === statusFilter;
+      const matchCountry = countryFilter === 'All' || c.country === countryFilter;
+      return matchSearch && matchStatus && matchCountry;
+    });
+  }, [companies, searchQuery, statusFilter, countryFilter]);
+
+  const availableCountries = Array.from(new Set(companies.map(c => c.country).filter(Boolean)));
+  const activeCount = companies.filter(c => c.status === 'Active').length;
+  const totalSires = companies.reduce((sum, c) => sum + (c.sireCount || 0), 0);
 
   return (
-    <div style={{ minHeight: '100vh', background: 'linear-gradient(135deg, #0a0f1e 0%, #0d1b2a 50%, #0a1628 100%)', padding: '24px', fontFamily: "'Inter', sans-serif" }}>
-      {/* Header */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '32px' }}>
-        <div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '8px' }}>
-            <div style={{ width: '48px', height: '48px', borderRadius: '14px', background: 'linear-gradient(135deg, #3b82f6, #6366f1)', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 8px 24px rgba(99,102,241,0.4)' }}>
-              <Building2 size={24} color="white" />
-            </div>
-            <div>
-              <h1 style={{ margin: 0, fontSize: '28px', fontWeight: 800, color: 'white', letterSpacing: '-0.5px' }}>Sire Sourcing Companies</h1>
-              <p style={{ margin: 0, fontSize: '14px', color: '#64748b' }}>Manage genetic material sourcing partners</p>
-            </div>
+    <div className="space-y-6 max-w-7xl mx-auto">
+      {/* Toast Notification */}
+      {toast && (
+        <div className={`fixed top-4 right-4 z-50 max-w-sm p-4 rounded-2xl shadow-2xl border text-xs font-bold flex items-start gap-3 animate-in fade-in duration-200 ${
+          toast.type === 'success' ? 'bg-emerald-50 border-emerald-200 text-emerald-900' : 'bg-rose-50 border-rose-200 text-rose-900'
+        }`}>
+          {toast.type === 'success' ? <CheckCircle2 className="h-4 w-4 text-emerald-600 shrink-0" /> : <AlertTriangle className="h-4 w-4 text-rose-600 shrink-0" />}
+          <span className="flex-1">{toast.message}</span>
+          <button onClick={() => setToast(null)} className="opacity-60 hover:opacity-100">✕</button>
+        </div>
+      )}
+
+      {/* Page Header Standard */}
+      <PageHeader
+        title="Genetics Sourcing Companies"
+        subtitle="Manage global sire genetics suppliers, registration parameters, contact profiles, and imported semen stock."
+        breadcrumbs={[{ label: 'Account Management' }, { label: 'Sourcing Companies' }]}
+        searchQuery={searchQuery}
+        onSearchChange={setSearchQuery}
+        searchPlaceholder="Search Company Name, Code, Country, Contact..."
+        onActionClick={openCreate}
+        actionLabel="+ Add New Sourcing Company"
+      >
+        <div className="flex flex-wrap items-center gap-2">
+          {/* Country Filter */}
+          <select
+            value={countryFilter}
+            onChange={(e) => setCountryFilter(e.target.value)}
+            className="bg-slate-50 border border-slate-200 text-xs font-semibold rounded-xl px-3 py-2 text-slate-700 focus:outline-none focus:ring-2 focus:ring-[#dc5c15]"
+          >
+            <option value="All">All Countries</option>
+            {availableCountries.map(c => (
+              <option key={c} value={c}>{FLAG_MAP[c] || '🌏'} {c}</option>
+            ))}
+          </select>
+
+          {/* Status Filter */}
+          <select
+            value={statusFilter}
+            onChange={(e) => setStatusFilter(e.target.value as any)}
+            className="bg-slate-50 border border-slate-200 text-xs font-semibold rounded-xl px-3 py-2 text-slate-700 focus:outline-none focus:ring-2 focus:ring-[#dc5c15]"
+          >
+            <option value="All">All Statuses</option>
+            <option value="Active">Active Partners</option>
+            <option value="Inactive">Inactive Partners</option>
+          </select>
+
+          <button
+            onClick={loadCompanies}
+            title="Refresh List"
+            className="p-2 bg-slate-50 border border-slate-200 text-slate-600 rounded-xl hover:bg-slate-100 transition-colors"
+          >
+            <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
+          </button>
+        </div>
+      </PageHeader>
+
+      {/* KPI Stats Summary Bar */}
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+        <div className="bg-white border border-slate-200/90 rounded-3xl p-5 shadow-2xs flex items-center gap-4">
+          <div className="h-12 w-12 rounded-2xl bg-blue-50 text-blue-600 flex items-center justify-center shrink-0">
+            <Building2 className="h-6 w-6" />
+          </div>
+          <div>
+            <span className="text-[10px] font-black uppercase text-slate-400 tracking-wider">Total Companies</span>
+            <div className="text-2xl font-black text-slate-900 mt-0.5">{companies.length}</div>
           </div>
         </div>
-        <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
-          <button onClick={loadCompanies} style={{ padding: '10px 16px', borderRadius: '10px', border: '1px solid rgba(255,255,255,0.1)', background: 'rgba(255,255,255,0.05)', color: '#94a3b8', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px', fontSize: '13px' }}>
-            <RefreshCw size={14} /> Refresh
-          </button>
-          <button onClick={openCreate} style={{ padding: '10px 20px', borderRadius: '10px', border: 'none', background: 'linear-gradient(135deg, #3b82f6, #6366f1)', color: 'white', cursor: 'pointer', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '8px', fontSize: '14px', boxShadow: '0 4px 16px rgba(99,102,241,0.4)' }}>
-            <Plus size={16} /> Add Company
-          </button>
+
+        <div className="bg-white border border-slate-200/90 rounded-3xl p-5 shadow-2xs flex items-center gap-4">
+          <div className="h-12 w-12 rounded-2xl bg-emerald-50 text-emerald-600 flex items-center justify-center shrink-0">
+            <CheckCircle2 className="h-6 w-6" />
+          </div>
+          <div>
+            <span className="text-[10px] font-black uppercase text-slate-400 tracking-wider">Active Partners</span>
+            <div className="text-2xl font-black text-slate-900 mt-0.5">{activeCount}</div>
+          </div>
+        </div>
+
+        <div className="bg-white border border-slate-200/90 rounded-3xl p-5 shadow-2xs flex items-center gap-4">
+          <div className="h-12 w-12 rounded-2xl bg-orange-50 text-[#dc5c15] flex items-center justify-center shrink-0">
+            <Dna className="h-6 w-6" />
+          </div>
+          <div>
+            <span className="text-[10px] font-black uppercase text-slate-400 tracking-wider">Total Sires Sourced</span>
+            <div className="text-2xl font-black text-slate-900 mt-0.5">{totalSires}</div>
+          </div>
         </div>
       </div>
 
-      {/* Stats Bar */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '16px', marginBottom: '28px' }}>
-        {[
-          { label: 'Total Companies', value: companies.length, icon: <Building2 size={18} />, color: '#3b82f6' },
-          { label: 'Active Partners', value: companies.filter(c => c.status === 'Active').length, icon: <CheckCircle2 size={18} />, color: '#10b981' },
-          { label: 'Total Sires Sourced', value: companies.reduce((s, c) => s + (c.sireCount || 0), 0), icon: <Dna size={18} />, color: '#f59e0b' },
-        ].map((stat, i) => (
-          <div key={i} style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.07)', borderRadius: '16px', padding: '20px', display: 'flex', alignItems: 'center', gap: '16px', backdropFilter: 'blur(10px)' }}>
-            <div style={{ width: '44px', height: '44px', borderRadius: '12px', background: `${stat.color}22`, display: 'flex', alignItems: 'center', justifyContent: 'center', color: stat.color }}>
-              {stat.icon}
-            </div>
-            <div>
-              <div style={{ fontSize: '24px', fontWeight: 800, color: 'white' }}>{stat.value}</div>
-              <div style={{ fontSize: '12px', color: '#64748b', marginTop: '2px' }}>{stat.label}</div>
-            </div>
-          </div>
-        ))}
-      </div>
-
-      <div style={{ display: 'grid', gridTemplateColumns: selectedCompany ? '1fr 380px' : '1fr', gap: '24px' }}>
-        {/* Company List */}
-        <div>
-          {/* Search + Filter */}
-          <div style={{ display: 'flex', gap: '12px', marginBottom: '20px' }}>
-            <div style={{ flex: 1, position: 'relative' }}>
-              <Search size={16} style={{ position: 'absolute', left: '14px', top: '50%', transform: 'translateY(-50%)', color: '#64748b' }} />
-              <input
-                value={searchQuery}
-                onChange={e => setSearchQuery(e.target.value)}
-                placeholder="Search companies, countries, contacts..."
-                style={{ width: '100%', padding: '11px 14px 11px 42px', borderRadius: '10px', background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', color: 'white', fontSize: '14px', boxSizing: 'border-box', outline: 'none' }}
-              />
-            </div>
-            <div style={{ display: 'flex', gap: '6px' }}>
-              {(['All', 'Active', 'Inactive'] as const).map(s => (
-                <button key={s} onClick={() => setStatusFilter(s)} style={{ padding: '10px 16px', borderRadius: '10px', border: '1px solid rgba(255,255,255,0.1)', background: statusFilter === s ? 'rgba(99,102,241,0.2)' : 'rgba(255,255,255,0.03)', color: statusFilter === s ? '#818cf8' : '#64748b', cursor: 'pointer', fontSize: '13px', fontWeight: statusFilter === s ? 600 : 400, transition: 'all 0.2s' }}>
-                  {s}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          {/* Company Cards */}
+      {/* Main Grid View + Detail Side Panel */}
+      <div className={`grid grid-cols-1 ${selectedCompany ? 'lg:grid-cols-3' : 'grid-cols-1'} gap-6`}>
+        {/* Company Cards Section */}
+        <div className={selectedCompany ? 'lg:col-span-2' : ''}>
           {loading ? (
-            <div style={{ textAlign: 'center', padding: '80px', color: '#64748b' }}>
-              <RefreshCw size={32} style={{ animation: 'spin 1s linear infinite', marginBottom: '12px' }} />
-              <div>Loading companies...</div>
+            <div className="bg-white rounded-3xl border border-slate-200 p-16 text-center">
+              <RefreshCw className="h-8 w-8 text-[#dc5c15] animate-spin mx-auto mb-3" />
+              <p className="text-xs font-bold text-slate-500">Loading Genetics Sourcing Companies...</p>
             </div>
           ) : filtered.length === 0 ? (
-            <div style={{ textAlign: 'center', padding: '80px', color: '#64748b' }}>
-              <Building2 size={40} style={{ marginBottom: '12px', opacity: 0.5 }} />
-              <div>No sourcing companies found</div>
+            <div className="bg-white rounded-3xl border border-slate-200 p-16 text-center">
+              <Building2 className="h-12 w-12 text-slate-300 mx-auto mb-3" />
+              <h3 className="text-sm font-black text-slate-800">No Sourcing Companies Found</h3>
+              <p className="text-xs text-slate-500 mt-1 max-w-sm mx-auto">
+                No company records match your parameters. Click <strong>+ Add New Sourcing Company</strong> to register one.
+              </p>
+              <button
+                onClick={openCreate}
+                className="mt-4 bg-[#dc5c15] hover:bg-orange-700 text-white text-xs font-bold px-4 py-2 rounded-xl transition-colors inline-flex items-center gap-2"
+              >
+                <Plus className="h-4 w-4" />
+                <span>Add Sourcing Company</span>
+              </button>
             </div>
           ) : (
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))', gap: '16px' }}>
-              {filtered.map(company => (
-                <div
-                  key={company.id}
-                  onClick={() => handleSelectCompany(company)}
-                  style={{
-                    background: selectedCompany?.id === company.id ? 'rgba(99,102,241,0.12)' : 'rgba(255,255,255,0.03)',
-                    border: `1px solid ${selectedCompany?.id === company.id ? 'rgba(99,102,241,0.5)' : 'rgba(255,255,255,0.08)'}`,
-                    borderRadius: '16px',
-                    padding: '20px',
-                    cursor: 'pointer',
-                    transition: 'all 0.2s',
-                    backdropFilter: 'blur(10px)',
-                    position: 'relative',
-                    overflow: 'hidden',
-                  }}
-                >
-                  {/* Status badge */}
-                  <div style={{ position: 'absolute', top: '16px', right: '16px' }}>
-                    <span style={{ padding: '4px 10px', borderRadius: '20px', fontSize: '11px', fontWeight: 600, background: company.status === 'Active' ? 'rgba(16,185,129,0.15)' : 'rgba(239,68,68,0.15)', color: company.status === 'Active' ? '#10b981' : '#ef4444', border: `1px solid ${company.status === 'Active' ? 'rgba(16,185,129,0.3)' : 'rgba(239,68,68,0.3)'}` }}>
-                      {company.status}
-                    </span>
-                  </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+              {filtered.map(company => {
+                const isSelected = selectedCompany?.id === company.id;
+                return (
+                  <div
+                    key={company.id}
+                    className={`bg-white border rounded-3xl p-5 transition-all relative flex flex-col justify-between ${
+                      isSelected
+                        ? 'border-[#dc5c15] ring-2 ring-[#dc5c15]/20 shadow-md'
+                        : 'border-slate-200/90 hover:border-slate-300 hover:shadow-2xs'
+                    }`}
+                  >
+                    <div>
+                      {/* Top Header Row */}
+                      <div className="flex items-start justify-between gap-3 mb-3">
+                        <Link href={`/sourcing-companies/${company.id}`} className="flex items-center gap-3 group/link flex-1 min-w-0">
+                          {company.imageUrl ? (
+                            <img src={company.imageUrl} alt={company.name} className="h-11 w-11 rounded-2xl object-cover border border-slate-200 shrink-0 group-hover/link:scale-105 transition-transform" />
+                          ) : (
+                            <div className="h-11 w-11 rounded-2xl bg-gradient-to-br from-blue-500 to-indigo-600 text-white flex items-center justify-center font-black text-lg shadow-xs shrink-0 group-hover/link:scale-105 transition-transform">
+                              {FLAG_MAP[company.country] || '🌏'}
+                            </div>
+                          )}
+                          <div className="min-w-0">
+                            <h3 className="text-xs font-black text-slate-900 group-hover/link:text-[#dc5c15] transition-colors truncate">{company.name}</h3>
+                            <span className="text-[10px] text-slate-500 font-bold flex items-center gap-1 mt-0.5">
+                              <Globe2 className="h-3 w-3 text-slate-400" />
+                              {company.country || 'Global'}
+                            </span>
+                          </div>
+                        </Link>
 
-                  <div style={{ display: 'flex', alignItems: 'flex-start', gap: '14px', marginBottom: '16px', paddingRight: '60px' }}>
-                    <div style={{ width: '52px', height: '52px', borderRadius: '14px', background: 'linear-gradient(135deg, #3b82f6, #6366f1)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '24px', flexShrink: 0 }}>
-                      {FLAG_MAP[company.country] || '🌏'}
-                    </div>
-                    <div style={{ minWidth: 0 }}>
-                      <div style={{ fontWeight: 700, fontSize: '15px', color: 'white', marginBottom: '4px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{company.name}</div>
-                      <div style={{ fontSize: '12px', color: '#64748b', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                        <Globe2 size={11} /> {company.country || 'Unknown'}
+                        <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider shrink-0 ${
+                          company.status === 'Active'
+                            ? 'bg-emerald-50 border border-emerald-200 text-emerald-700'
+                            : 'bg-slate-100 border border-slate-200 text-slate-500'
+                        }`}>
+                          {company.status}
+                        </span>
+                      </div>
+
+                      {/* Stat Counters */}
+                      <div className="grid grid-cols-2 gap-2 my-3">
+                        <div className="bg-slate-50 border border-slate-100 rounded-xl p-2 text-center">
+                          <span className="text-[10px] font-bold text-slate-400 block">Sires</span>
+                          <span className="text-xs font-black text-slate-900">{company.sireCount || 0}</span>
+                        </div>
+                        <div className="bg-slate-50 border border-slate-100 rounded-xl p-2 text-center">
+                          <span className="text-[10px] font-bold text-slate-400 block">Stock Logs</span>
+                          <span className="text-xs font-black text-slate-900">{company.stockCount || 0}</span>
+                        </div>
+                      </div>
+
+                      {/* Info Details */}
+                      <div className="space-y-1 text-[11px] text-slate-600 border-t border-slate-100 pt-3">
+                        {company.contactName && (
+                          <div className="flex items-center gap-2">
+                            <Star className="h-3.5 w-3.5 text-amber-500 shrink-0" />
+                            <span className="truncate">{company.contactName}</span>
+                          </div>
+                        )}
+                        {company.phone && (
+                          <div className="flex items-center gap-2">
+                            <Phone className="h-3.5 w-3.5 text-slate-400 shrink-0" />
+                            <span className="truncate">{company.phone}</span>
+                          </div>
+                        )}
+                        {company.email && (
+                          <div className="flex items-center gap-2">
+                            <Mail className="h-3.5 w-3.5 text-slate-400 shrink-0" />
+                            <span className="truncate">{company.email}</span>
+                          </div>
+                        )}
                       </div>
                     </div>
-                  </div>
 
-                  <div style={{ display: 'flex', gap: '16px', marginBottom: '16px' }}>
-                    {[
-                      { label: 'Sires', value: company.sireCount, icon: <Dna size={13} />, color: '#3b82f6' },
-                      { label: 'Stock', value: company.stockCount, icon: <Beef size={13} />, color: '#f59e0b' },
-                    ].map((m, i) => (
-                      <div key={i} style={{ flex: 1, background: 'rgba(255,255,255,0.04)', borderRadius: '10px', padding: '10px', textAlign: 'center' }}>
-                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '4px', color: m.color, marginBottom: '4px' }}>{m.icon}</div>
-                        <div style={{ fontSize: '18px', fontWeight: 700, color: 'white' }}>{m.value}</div>
-                        <div style={{ fontSize: '10px', color: '#64748b' }}>{m.label}</div>
-                      </div>
-                    ))}
+                    {/* Card Actions */}
+                    <div className="mt-4 pt-3 border-t border-slate-100 flex items-center justify-between gap-1.5">
+                      <Link
+                        href={`/sourcing-companies/${company.id}`}
+                        className="flex-1 py-1.5 px-2 bg-purple-50 hover:bg-purple-100 text-purple-700 text-[11px] font-bold rounded-xl transition-colors flex items-center justify-center gap-1 border border-purple-200"
+                      >
+                        <Eye className="h-3.5 w-3.5" />
+                        <span>View Detail</span>
+                      </Link>
+                      <button
+                        onClick={(e) => { e.stopPropagation(); openEdit(company); }}
+                        className="py-1.5 px-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 text-[11px] font-bold rounded-xl transition-colors flex items-center justify-center gap-1"
+                      >
+                        <Edit3 className="h-3.5 w-3.5" />
+                        <span>Edit</span>
+                      </button>
+                      {company.website && (
+                        <a
+                          href={company.website}
+                          target="_blank"
+                          rel="noreferrer"
+                          onClick={(e) => e.stopPropagation()}
+                          className="p-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl transition-colors"
+                          title="Visit Official Website"
+                        >
+                          <ExternalLink className="h-3.5 w-3.5" />
+                        </a>
+                      )}
+                    </div>
                   </div>
-
-                  {company.contactName && <div style={{ fontSize: '12px', color: '#94a3b8', marginBottom: '4px', display: 'flex', alignItems: 'center', gap: '6px' }}><Star size={11} />{company.contactName}</div>}
-                  {company.phone && <div style={{ fontSize: '12px', color: '#94a3b8', marginBottom: '4px', display: 'flex', alignItems: 'center', gap: '6px' }}><Phone size={11} />{company.phone}</div>}
-                  {company.email && <div style={{ fontSize: '12px', color: '#94a3b8', marginBottom: '12px', display: 'flex', alignItems: 'center', gap: '6px' }}><Mail size={11} />{company.email}</div>}
-
-                  <div style={{ display: 'flex', gap: '8px' }}>
-                    <button onClick={e => { e.stopPropagation(); openEdit(company); }} style={{ flex: 1, padding: '8px', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.1)', background: 'rgba(255,255,255,0.05)', color: '#94a3b8', cursor: 'pointer', fontSize: '12px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '4px', transition: 'all 0.2s' }}>
-                      <Edit3 size={12} /> Edit
-                    </button>
-                    {company.website && (
-                      <a href={company.website} target="_blank" rel="noreferrer" onClick={e => e.stopPropagation()} style={{ flex: 1, padding: '8px', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.1)', background: 'rgba(255,255,255,0.05)', color: '#94a3b8', cursor: 'pointer', fontSize: '12px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '4px', textDecoration: 'none', transition: 'all 0.2s' }}>
-                        <ExternalLink size={12} /> Website
-                      </a>
-                    )}
-                  </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           )}
         </div>
 
-        {/* Detail Panel */}
+        {/* Selected Company Detail Side Panel */}
         {selectedCompany && (
-          <div style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: '20px', padding: '24px', height: 'fit-content', position: 'sticky', top: '24px', backdropFilter: 'blur(16px)' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
-              <h3 style={{ margin: 0, color: 'white', fontSize: '16px', fontWeight: 700 }}>Company Detail</h3>
-              <button onClick={() => setSelectedCompany(null)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#64748b', padding: '4px' }}>
-                <X size={16} />
+          <div className="bg-white border border-slate-200/90 rounded-3xl p-6 shadow-2xs space-y-5 h-fit sticky top-6 animate-in slide-in-from-right-4 duration-200">
+            <div className="flex items-center justify-between border-b border-slate-100 pb-4">
+              <h3 className="text-sm font-black text-slate-900 flex items-center gap-2">
+                <Building2 className="h-4 w-4 text-[#dc5c15]" />
+                <span>Company Details</span>
+              </h3>
+              <button
+                onClick={() => setSelectedCompany(null)}
+                className="text-slate-400 hover:text-slate-600 transition-colors p-1"
+              >
+                <X className="h-4 w-4" />
               </button>
             </div>
 
-            <div style={{ textAlign: 'center', marginBottom: '20px' }}>
-              <div style={{ width: '64px', height: '64px', borderRadius: '18px', background: 'linear-gradient(135deg, #3b82f6, #6366f1)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '28px', margin: '0 auto 12px' }}>
-                {FLAG_MAP[selectedCompany.country] || '🌏'}
-              </div>
-              <div style={{ fontWeight: 700, fontSize: '18px', color: 'white', marginBottom: '4px' }}>{selectedCompany.name}</div>
-              <div style={{ fontSize: '13px', color: '#64748b' }}>{selectedCompany.country}</div>
-              <span style={{ marginTop: '8px', display: 'inline-block', padding: '4px 12px', borderRadius: '20px', fontSize: '11px', fontWeight: 600, background: selectedCompany.status === 'Active' ? 'rgba(16,185,129,0.15)' : 'rgba(239,68,68,0.15)', color: selectedCompany.status === 'Active' ? '#10b981' : '#ef4444' }}>
+            <div className="text-center">
+              {selectedCompany.imageUrl ? (
+                <img src={selectedCompany.imageUrl} alt={selectedCompany.name} className="h-16 w-16 rounded-2xl object-cover border border-slate-200 mx-auto mb-3" />
+              ) : (
+                <div className="h-16 w-16 rounded-2xl bg-gradient-to-br from-blue-500 to-indigo-600 text-white flex items-center justify-center font-black text-3xl mx-auto mb-3 shadow-xs">
+                  {FLAG_MAP[selectedCompany.country] || '🌏'}
+                </div>
+              )}
+              <h4 className="text-base font-black text-slate-900">{selectedCompany.name}</h4>
+              <p className="text-xs text-slate-500 font-bold mt-0.5">{selectedCompany.country}</p>
+              <span className={`inline-flex items-center gap-1.5 px-3 py-0.5 rounded-full text-[10px] font-black uppercase mt-2 ${
+                selectedCompany.status === 'Active'
+                  ? 'bg-emerald-50 border border-emerald-200 text-emerald-700'
+                  : 'bg-slate-100 border border-slate-200 text-slate-500'
+              }`}>
                 {selectedCompany.status}
               </span>
             </div>
 
-            <div style={{ borderTop: '1px solid rgba(255,255,255,0.07)', paddingTop: '16px', marginBottom: '16px' }}>
-              {[
-                { label: 'Contact', value: selectedCompany.contactName, icon: <Star size={13} /> },
-                { label: 'Phone', value: selectedCompany.phone, icon: <Phone size={13} /> },
-                { label: 'Email', value: selectedCompany.email, icon: <Mail size={13} /> },
-                { label: 'Address', value: selectedCompany.address, icon: <MapPin size={13} /> },
-                { label: 'Website', value: selectedCompany.website, icon: <Globe size={13} />, link: true },
-              ].filter(f => f.value).map((f, i) => (
-                <div key={i} style={{ display: 'flex', gap: '10px', marginBottom: '10px', alignItems: 'flex-start' }}>
-                  <div style={{ color: '#64748b', marginTop: '2px', flexShrink: 0 }}>{f.icon}</div>
-                  <div style={{ minWidth: 0 }}>
-                    <div style={{ fontSize: '10px', color: '#64748b', marginBottom: '2px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>{f.label}</div>
-                    {f.link ? (
-                      <a href={f.value} target="_blank" rel="noreferrer" style={{ fontSize: '13px', color: '#818cf8', textDecoration: 'none', wordBreak: 'break-all' }}>{f.value}</a>
-                    ) : (
-                      <div style={{ fontSize: '13px', color: '#e2e8f0', wordBreak: 'break-word' }}>{f.value}</div>
-                    )}
-                  </div>
+            <div className="space-y-2 text-xs border-t border-slate-100 pt-4">
+              {selectedCompany.contactName && (
+                <div>
+                  <span className="text-[10px] font-black text-slate-400 uppercase tracking-wider block">Contact Person</span>
+                  <span className="font-bold text-slate-800">{selectedCompany.contactName}</span>
                 </div>
-              ))}
+              )}
+              {selectedCompany.phone && (
+                <div>
+                  <span className="text-[10px] font-black text-slate-400 uppercase tracking-wider block">Phone Number</span>
+                  <span className="font-bold text-slate-800">{selectedCompany.phone}</span>
+                </div>
+              )}
+              {selectedCompany.email && (
+                <div>
+                  <span className="text-[10px] font-black text-slate-400 uppercase tracking-wider block">Email Address</span>
+                  <span className="font-bold text-slate-800">{selectedCompany.email}</span>
+                </div>
+              )}
+              {selectedCompany.address && (
+                <div>
+                  <span className="text-[10px] font-black text-slate-400 uppercase tracking-wider block">Physical Address</span>
+                  <span className="font-medium text-slate-700">{selectedCompany.address}</span>
+                </div>
+              )}
+              {selectedCompany.website && (
+                <div>
+                  <span className="text-[10px] font-black text-slate-400 uppercase tracking-wider block">Official Website</span>
+                  <a href={selectedCompany.website} target="_blank" rel="noreferrer" className="font-bold text-[#dc5c15] hover:underline break-all">
+                    {selectedCompany.website}
+                  </a>
+                </div>
+              )}
             </div>
 
-            {/* Sires from this company */}
-            <div style={{ borderTop: '1px solid rgba(255,255,255,0.07)', paddingTop: '16px' }}>
-              <div style={{ fontSize: '13px', fontWeight: 600, color: '#94a3b8', marginBottom: '12px', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                <Dna size={13} /> Registered Sires ({selectedCompany.sireCount})
-              </div>
+            {/* Registered Sires List */}
+            <div className="border-t border-slate-100 pt-4">
+              <h5 className="text-xs font-black text-slate-900 flex items-center gap-1.5 mb-3">
+                <Dna className="h-4 w-4 text-[#dc5c15]" />
+                <span>Registered Sires ({selectedCompany.sireCount || 0})</span>
+              </h5>
               {siresLoading ? (
-                <div style={{ textAlign: 'center', color: '#64748b', padding: '20px 0', fontSize: '13px' }}>Loading sires...</div>
+                <div className="text-center py-6 text-slate-400 text-xs font-bold">Loading sires...</div>
               ) : companySires.length === 0 ? (
-                <div style={{ textAlign: 'center', color: '#64748b', padding: '20px 0', fontSize: '13px' }}>No sires from this company yet</div>
+                <div className="text-center py-6 text-slate-400 text-xs italic">No registered sires from this company yet.</div>
               ) : (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', maxHeight: '200px', overflowY: 'auto' }}>
+                <div className="space-y-2 max-h-48 overflow-y-auto">
                   {companySires.map((sire: any) => (
-                    <div key={sire.id} style={{ background: 'rgba(255,255,255,0.04)', borderRadius: '10px', padding: '10px 14px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <div key={sire.id} className="bg-slate-50 border border-slate-100 rounded-xl p-2.5 flex items-center justify-between text-xs">
                       <div>
-                        <div style={{ fontSize: '13px', fontWeight: 600, color: 'white' }}>{sire.name}</div>
-                        <div style={{ fontSize: '11px', color: '#64748b' }}>{sire.breed}</div>
+                        <span className="font-black text-slate-900 block">{sire.name}</span>
+                        <span className="text-[10px] text-slate-500">{sire.breed}</span>
                       </div>
                       {sire.price_usd && (
-                        <div style={{ fontSize: '12px', color: '#f59e0b', fontWeight: 600 }}>${sire.price_usd}</div>
+                        <span className="font-black text-[#dc5c15] text-xs">${sire.price_usd}</span>
                       )}
                     </div>
                   ))}
@@ -346,114 +545,220 @@ export default function SourcingCompaniesPage() {
               )}
             </div>
 
-            <button onClick={() => openEdit(selectedCompany)} style={{ marginTop: '20px', width: '100%', padding: '12px', borderRadius: '12px', border: '1px solid rgba(99,102,241,0.4)', background: 'rgba(99,102,241,0.1)', color: '#818cf8', cursor: 'pointer', fontWeight: 600, fontSize: '13px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', transition: 'all 0.2s' }}>
-              <Edit3 size={14} /> Edit Company
+            <button
+              onClick={() => openEdit(selectedCompany)}
+              className="w-full bg-[#dc5c15] hover:bg-orange-700 text-white text-xs font-bold py-2.5 rounded-xl transition-colors flex items-center justify-center gap-2 shadow-xs"
+            >
+              <Edit3 className="h-4 w-4" />
+              <span>Edit Company Profile</span>
             </button>
           </div>
         )}
       </div>
 
-      {/* Create / Edit Modal */}
+      {/* Create / Edit Modal Dialog */}
       {showModal && (
-        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.7)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, backdropFilter: 'blur(4px)', padding: '20px' }}>
-          <div style={{ background: '#0f1729', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '20px', width: '100%', maxWidth: '560px', maxHeight: '90vh', overflowY: 'auto', padding: '32px' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '28px' }}>
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl border border-slate-200 shadow-2xl max-w-lg w-full overflow-hidden animate-in zoom-in-95 duration-150 max-h-[90vh] flex flex-col">
+            {/* Modal Header */}
+            <div className="bg-slate-900 text-white p-5 flex items-center justify-between shrink-0">
               <div>
-                <h2 style={{ margin: 0, fontSize: '20px', fontWeight: 700, color: 'white' }}>
-                  {editTarget ? 'Edit Sourcing Company' : 'Add Sourcing Company'}
-                </h2>
-                <p style={{ margin: '4px 0 0', fontSize: '13px', color: '#64748b' }}>Sire genetic material supplier</p>
+                <h3 className="text-sm font-black uppercase tracking-wider">
+                  {editTarget ? 'Edit Sourcing Company' : 'Add New Sourcing Company'}
+                </h3>
+                <p className="text-[11px] text-slate-400 mt-0.5">
+                  Global Sire Genetics & Semen Supplier Profile
+                </p>
               </div>
-              <button onClick={() => setShowModal(false)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#64748b', padding: '4px' }}>
-                <X size={20} />
+              <button onClick={() => setShowModal(false)} className="text-slate-400 hover:text-white transition-colors">
+                <X className="h-5 w-5" />
               </button>
             </div>
 
-            {error && (
-              <div style={{ padding: '12px 16px', borderRadius: '10px', background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.3)', color: '#ef4444', fontSize: '13px', marginBottom: '20px' }}>
-                {error}
-              </div>
-            )}
+            <div className="p-6 space-y-4 text-xs overflow-y-auto flex-1">
+              {/* Media Logo Upload Section */}
+              <div className="bg-slate-50 border border-dashed border-slate-300 rounded-2xl p-4 space-y-3">
+                <div className="flex items-center justify-between">
+                  <label className="font-extrabold text-slate-800 flex items-center gap-1.5">
+                    <ImageIcon className="h-4 w-4 text-[#dc5c15]" />
+                    <span>Company Logo / Reference Photo</span>
+                  </label>
+                  {form.imageUrl && (
+                    <button
+                      type="button"
+                      onClick={() => setForm(prev => ({ ...prev, imageUrl: '' }))}
+                      className="text-[10px] text-rose-600 font-bold hover:underline"
+                    >
+                      Remove Logo
+                    </button>
+                  )}
+                </div>
 
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-              {/* Company Name */}
+                {form.imageUrl ? (
+                  <div className="flex items-center gap-3 bg-white p-2 rounded-xl border border-slate-200">
+                    <img src={form.imageUrl} alt="Company Logo Preview" className="h-14 w-14 rounded-lg object-cover border border-slate-200 shrink-0" />
+                    <div className="flex-1 truncate">
+                      <p className="text-[11px] font-bold text-slate-800 truncate">Logo Uploaded</p>
+                      <p className="text-[10px] text-slate-400 truncate">Saved directly to company profile</p>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                    <label className="cursor-pointer bg-white border border-slate-200 rounded-xl p-3 text-center hover:border-orange-400 transition-all block">
+                      <Upload className="h-5 w-5 text-slate-400 mx-auto mb-1" />
+                      <span className="text-[11px] font-bold text-slate-700 block">Upload Logo File</span>
+                      <input type="file" accept="image/*" onChange={handleImageFileChange} className="hidden" />
+                    </label>
+                    <div className="bg-white border border-slate-200 rounded-xl p-2.5 flex items-center">
+                      <input
+                        type="url"
+                        placeholder="Paste Logo URL..."
+                        value={form.imageUrl}
+                        onChange={(e) => setForm(prev => ({ ...prev, imageUrl: e.target.value }))}
+                        className="w-full text-[11px] font-medium bg-transparent focus:outline-none"
+                      />
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Company Name & Code */}
               <div>
-                <label style={{ display: 'block', fontSize: '12px', color: '#94a3b8', marginBottom: '8px', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.5px' }}>Company Name *</label>
-                <input value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} placeholder="e.g. ABS Global Inc." style={{ width: '100%', padding: '12px 16px', borderRadius: '10px', background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', color: 'white', fontSize: '14px', boxSizing: 'border-box', outline: 'none' }} />
+                <label className="block font-bold text-slate-700 mb-1">
+                  Company Name <span className="text-rose-500">*</span>
+                </label>
+                <input
+                  type="text"
+                  placeholder="e.g. ABS Global Inc."
+                  value={form.name}
+                  onChange={(e) => setForm({ ...form, name: e.target.value })}
+                  className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2 text-xs font-bold text-slate-900 focus:ring-2 focus:ring-[#dc5c15] focus:outline-none"
+                  required
+                />
               </div>
 
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
-                {/* Country */}
+              <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label style={{ display: 'block', fontSize: '12px', color: '#94a3b8', marginBottom: '8px', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.5px' }}>Country</label>
-                  <select value={form.country} onChange={e => setForm(f => ({ ...f, country: e.target.value }))} style={{ width: '100%', padding: '12px 16px', borderRadius: '10px', background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', color: 'white', fontSize: '14px', boxSizing: 'border-box', outline: 'none' }}>
-                    {COUNTRIES.map(c => <option key={c} value={c} style={{ background: '#1e293b' }}>{FLAG_MAP[c] || '🌏'} {c}</option>)}
+                  <label className="block font-bold text-slate-700 mb-1">Country of Origin</label>
+                  <select
+                    value={form.country}
+                    onChange={(e) => setForm({ ...form, country: e.target.value })}
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2 text-xs font-bold text-slate-900 focus:ring-2 focus:ring-[#dc5c15] focus:outline-none"
+                  >
+                    {COUNTRIES.map(c => (
+                      <option key={c} value={c}>{FLAG_MAP[c] || '🌏'} {c}</option>
+                    ))}
                   </select>
                 </div>
-                {/* Status */}
+
                 <div>
-                  <label style={{ display: 'block', fontSize: '12px', color: '#94a3b8', marginBottom: '8px', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.5px' }}>Status</label>
-                  <select value={form.status} onChange={e => setForm(f => ({ ...f, status: e.target.value }))} style={{ width: '100%', padding: '12px 16px', borderRadius: '10px', background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', color: 'white', fontSize: '14px', boxSizing: 'border-box', outline: 'none' }}>
-                    <option value="Active" style={{ background: '#1e293b' }}>Active</option>
-                    <option value="Inactive" style={{ background: '#1e293b' }}>Inactive</option>
+                  <label className="block font-bold text-slate-700 mb-1">Status</label>
+                  <select
+                    value={form.status}
+                    onChange={(e) => setForm({ ...form, status: e.target.value as any })}
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2 text-xs font-bold text-slate-900 focus:ring-2 focus:ring-[#dc5c15] focus:outline-none"
+                  >
+                    <option value="Active">Active Partner</option>
+                    <option value="Inactive">Inactive Partner</option>
                   </select>
                 </div>
               </div>
 
-              {/* Contact Name */}
+              {/* Contact Person */}
               <div>
-                <label style={{ display: 'block', fontSize: '12px', color: '#94a3b8', marginBottom: '8px', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.5px' }}>Contact Person</label>
-                <input value={form.contactName} onChange={e => setForm(f => ({ ...f, contactName: e.target.value }))} placeholder="Contact name" style={{ width: '100%', padding: '12px 16px', borderRadius: '10px', background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', color: 'white', fontSize: '14px', boxSizing: 'border-box', outline: 'none' }} />
+                <label className="block font-bold text-slate-700 mb-1">Contact Person Name</label>
+                <input
+                  type="text"
+                  placeholder="Primary contact representative..."
+                  value={form.contactName}
+                  onChange={(e) => setForm({ ...form, contactName: e.target.value })}
+                  className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2 text-xs font-medium text-slate-900 focus:ring-2 focus:ring-[#dc5c15] focus:outline-none"
+                />
               </div>
 
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+              <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label style={{ display: 'block', fontSize: '12px', color: '#94a3b8', marginBottom: '8px', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.5px' }}>Phone</label>
-                  <input value={form.phone} onChange={e => setForm(f => ({ ...f, phone: e.target.value }))} placeholder="+1 800 000 0000" style={{ width: '100%', padding: '12px 16px', borderRadius: '10px', background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', color: 'white', fontSize: '14px', boxSizing: 'border-box', outline: 'none' }} />
+                  <label className="block font-bold text-slate-700 mb-1">Phone Number</label>
+                  <input
+                    type="text"
+                    placeholder="+1 800 000 0000"
+                    value={form.phone}
+                    onChange={(e) => setForm({ ...form, phone: e.target.value })}
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2 text-xs font-medium text-slate-900 focus:ring-2 focus:ring-[#dc5c15] focus:outline-none"
+                  />
                 </div>
+
                 <div>
-                  <label style={{ display: 'block', fontSize: '12px', color: '#94a3b8', marginBottom: '8px', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.5px' }}>Email</label>
-                  <input value={form.email} onChange={e => setForm(f => ({ ...f, email: e.target.value }))} placeholder="info@company.com" style={{ width: '100%', padding: '12px 16px', borderRadius: '10px', background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', color: 'white', fontSize: '14px', boxSizing: 'border-box', outline: 'none' }} />
+                  <label className="block font-bold text-slate-700 mb-1">Email Address</label>
+                  <input
+                    type="email"
+                    placeholder="info@company.com"
+                    value={form.email}
+                    onChange={(e) => setForm({ ...form, email: e.target.value })}
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2 text-xs font-medium text-slate-900 focus:ring-2 focus:ring-[#dc5c15] focus:outline-none"
+                  />
                 </div>
               </div>
 
               <div>
-                <label style={{ display: 'block', fontSize: '12px', color: '#94a3b8', marginBottom: '8px', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.5px' }}>Website</label>
-                <input value={form.website} onChange={e => setForm(f => ({ ...f, website: e.target.value }))} placeholder="https://www.company.com" style={{ width: '100%', padding: '12px 16px', borderRadius: '10px', background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', color: 'white', fontSize: '14px', boxSizing: 'border-box', outline: 'none' }} />
+                <label className="block font-bold text-slate-700 mb-1">Official Website</label>
+                <input
+                  type="url"
+                  placeholder="https://www.company.com"
+                  value={form.website}
+                  onChange={(e) => setForm({ ...form, website: e.target.value })}
+                  className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2 text-xs font-medium text-slate-900 focus:ring-2 focus:ring-[#dc5c15] focus:outline-none"
+                />
               </div>
 
               <div>
-                <label style={{ display: 'block', fontSize: '12px', color: '#94a3b8', marginBottom: '8px', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.5px' }}>Address</label>
-                <input value={form.address} onChange={e => setForm(f => ({ ...f, address: e.target.value }))} placeholder="Full address" style={{ width: '100%', padding: '12px 16px', borderRadius: '10px', background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', color: 'white', fontSize: '14px', boxSizing: 'border-box', outline: 'none' }} />
+                <label className="block font-bold text-slate-700 mb-1">Physical Address</label>
+                <input
+                  type="text"
+                  placeholder="Full office or station address..."
+                  value={form.address}
+                  onChange={(e) => setForm({ ...form, address: e.target.value })}
+                  className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2 text-xs font-medium text-slate-900 focus:ring-2 focus:ring-[#dc5c15] focus:outline-none"
+                />
               </div>
 
               <div>
-                <label style={{ display: 'block', fontSize: '12px', color: '#94a3b8', marginBottom: '8px', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.5px' }}>Notes</label>
-                <textarea value={form.notes} onChange={e => setForm(f => ({ ...f, notes: e.target.value }))} placeholder="Additional notes..." rows={3} style={{ width: '100%', padding: '12px 16px', borderRadius: '10px', background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', color: 'white', fontSize: '14px', boxSizing: 'border-box', outline: 'none', resize: 'vertical' }} />
+                <label className="block font-bold text-slate-700 mb-1">Notes / Description</label>
+                <textarea
+                  rows={2}
+                  placeholder="Optional company description, genetics specialty, or notes..."
+                  value={form.notes}
+                  onChange={(e) => setForm({ ...form, notes: e.target.value })}
+                  className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2 text-xs font-medium text-slate-900 focus:ring-2 focus:ring-[#dc5c15] focus:outline-none resize-none"
+                />
               </div>
             </div>
 
-            <div style={{ display: 'flex', gap: '12px', marginTop: '28px' }}>
-              <button onClick={() => setShowModal(false)} style={{ flex: 1, padding: '13px', borderRadius: '12px', border: '1px solid rgba(255,255,255,0.1)', background: 'transparent', color: '#94a3b8', cursor: 'pointer', fontWeight: 600, fontSize: '14px' }}>
+            <div className="p-5 border-t border-slate-100 flex items-center justify-end gap-2 shrink-0">
+              <button
+                type="button"
+                onClick={() => setShowModal(false)}
+                className="px-4 py-2 bg-slate-100 text-slate-700 text-xs font-bold rounded-xl hover:bg-slate-200 transition-colors"
+              >
                 Cancel
               </button>
-              <button onClick={handleSave} disabled={saving} style={{ flex: 2, padding: '13px', borderRadius: '12px', border: 'none', background: 'linear-gradient(135deg, #3b82f6, #6366f1)', color: 'white', cursor: 'pointer', fontWeight: 700, fontSize: '14px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', opacity: saving ? 0.7 : 1, boxShadow: '0 4px 16px rgba(99,102,241,0.4)' }}>
-                {saving ? <><RefreshCw size={14} style={{ animation: 'spin 1s linear infinite' }} /> Saving...</> : <><CheckCircle2 size={14} /> {editTarget ? 'Update Company' : 'Add Company'}</>}
+              <button
+                type="button"
+                onClick={handleSave}
+                disabled={saving}
+                className="px-5 py-2 bg-[#dc5c15] text-white text-xs font-bold rounded-xl hover:bg-orange-700 transition-colors flex items-center gap-1.5 shadow-xs disabled:opacity-50"
+              >
+                {saving ? (
+                  <RefreshCw className="h-4 w-4 animate-spin" />
+                ) : (
+                  <ShieldCheck className="h-4 w-4" />
+                )}
+                <span>{editTarget ? 'Update Company Profile' : 'Save Sourcing Company'}</span>
               </button>
             </div>
           </div>
         </div>
       )}
-
-      <style>{`
-        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
-        @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
-        input::placeholder, textarea::placeholder { color: #475569; }
-        select option { background: #1e293b; color: white; }
-        ::-webkit-scrollbar { width: 6px; }
-        ::-webkit-scrollbar-track { background: transparent; }
-        ::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 3px; }
-      `}</style>
     </div>
   );
 }

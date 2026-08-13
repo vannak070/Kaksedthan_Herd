@@ -11,6 +11,7 @@ import {
 } from 'lucide-react';
 import { createFarmAction, updateFarmAction, deleteFarmAction } from '@/app/actions';
 import { DynamicUpload } from '@/components/common/DynamicUpload';
+import ImageUploadContainer from '@/components/common/ImageUploadContainer';
 
 interface FarmItem {
   id: string;
@@ -539,11 +540,12 @@ export default function FarmsListClient({ initialFarms }: Props) {
                   <h4 className="font-black text-slate-900 uppercase text-[11px] tracking-wider">SECTION 2 — FARM STATION IMAGE</h4>
                 </div>
 
-                <DynamicUpload
-                  label="Farm Station Display Image (Up to 200 MB)"
+                <ImageUploadContainer
                   value={imageUrl}
                   onChange={(url) => setImageUrl(url)}
-                  targetSizeText="Supports up to 200 MB (Auto-optimized & compressed)"
+                  aspectRatio="1:1"
+                  placeholder="Upload or Capture Farm Station Photo"
+                  label="Farm Station Display Image (1:1 Standardized HD)"
                 />
               </div>
 

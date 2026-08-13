@@ -64,7 +64,24 @@ import { processDailyFeedStockOuts } from './daily-feed-cron';
 
 import { herdbookRepository } from '../repositories/herdbook.repository';
 
+// ─── In-memory cache for getDbData() ─────────────────────────────────────────
+// Running 15+ parallel DB queries on every request is expensive. Cache the result
+// for 30 seconds so rapid navigation and hot-reload don't hammer PostgreSQL.
+let _dbDataCache: ERPLivestockData | null = null;
+let _dbDataCacheTime = 0;
+const DB_DATA_CACHE_TTL_MS = 120_000; // 2 minutes in-memory cache for fast reload
+
+export function invalidateDbDataCache() {
+  _dbDataCache = null;
+  _dbDataCacheTime = 0;
+}
+
 export async function getDbData(): Promise<ERPLivestockData> {
+  // Return cached data if still fresh
+  if (_dbDataCache && Date.now() - _dbDataCacheTime < DB_DATA_CACHE_TTL_MS) {
+    return _dbDataCache;
+  }
+
   try {
     const jsonDb = getJsonDbData();
     const [
@@ -129,10 +146,18 @@ export async function getDbData(): Promise<ERPLivestockData> {
     // Auto-calculate daily feed stock outs based on Daily Feed Ration
     await processDailyFeedStockOuts(erpData).catch(e => console.warn('[Daily Feed Cron] Non-blocking error:', e));
 
+    // Store in cache
+    _dbDataCache = erpData;
+    _dbDataCacheTime = Date.now();
+
     return erpData;
   } catch (err) {
     console.warn('[getDbData] PostgreSQL read error, falling back to db.json:', err);
-    return getJsonDbData();
+    const fallback = getJsonDbData();
+    // Cache the fallback too so we don't retry failed DB 15+ times per minute
+    _dbDataCache = fallback;
+    _dbDataCacheTime = Date.now();
+    return fallback;
   }
 }
 

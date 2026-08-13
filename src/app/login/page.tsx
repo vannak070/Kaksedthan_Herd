@@ -32,14 +32,15 @@ export default function LoginPage() {
         localStorage.removeItem('kaksedthan_logged_out');
         localStorage.setItem('kaksedthan_user_session', 'active');
         localStorage.setItem('kaksedthan_user', JSON.stringify(user));
-        localStorage.setItem('kaksedthan_active_role', user.role || user.userLevel || 'Breeder Account');
+        localStorage.setItem('kaksedthan_active_role', user.role || user.userLevel || 'Super Admin');
         document.cookie = `kaksedthan_token=${user.id}; path=/; max-age=86400`;
+        document.cookie = `kaksedthan_role=${encodeURIComponent(user.role || 'Super Admin')}; path=/; max-age=86400`;
 
         setLoading(false);
         setSuccess(true);
         setTimeout(() => {
-          router.push('/');
-        }, 500);
+          window.location.href = '/';
+        }, 400);
       } else {
         setLoading(false);
         setError(res.error || 'Invalid credentials or account is not authorized.');

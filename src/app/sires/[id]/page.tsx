@@ -74,15 +74,19 @@ export default async function SireDetailPage({ params }: PageProps) {
         </div>
 
         <div className="md:col-span-2 bg-white rounded-2xl border border-slate-200 p-6 shadow-sm space-y-4">
-          <h2 className="text-lg font-black text-slate-900 border-b border-slate-100 pb-3">Biological Profile & Pedigree Lineage</h2>
+          <h2 className="text-lg font-black text-slate-900 border-b border-slate-100 pb-3">Biological Profile & Setup Architecture</h2>
           <div className="grid grid-cols-2 sm:grid-cols-3 gap-4 text-xs">
             <div>
-              <p className="text-slate-400 font-medium">Sire ID</p>
-              <p className="font-bold text-slate-900 mt-0.5">{sire.id}</p>
+              <p className="text-slate-400 font-medium">Sire ID Tag</p>
+              <p className="font-mono font-bold text-slate-900 mt-0.5">{sire.id}</p>
             </div>
             <div>
-              <p className="text-slate-400 font-medium">Breed</p>
-              <p className="font-bold text-slate-900 mt-0.5">{sire.breed}</p>
+              <p className="text-slate-400 font-medium">Registration No.</p>
+              <p className="font-bold text-slate-900 mt-0.5">{sire.registrationNumber || 'Unregistered'}</p>
+            </div>
+            <div>
+              <p className="text-slate-400 font-medium">Master Breed</p>
+              <p className="font-bold text-[#dc5c15] mt-0.5">{sire.breed}</p>
             </div>
             <div>
               <p className="text-slate-400 font-medium">Date of Birth</p>
@@ -90,19 +94,23 @@ export default async function SireDetailPage({ params }: PageProps) {
             </div>
             <div>
               <p className="text-slate-400 font-medium">Bloodline</p>
-              <p className="font-bold text-slate-900 mt-0.5">{sire.bloodline || 'Fullblood'}</p>
+              <p className="font-bold text-slate-900 mt-0.5">{sire.bloodline || 'N/A'}</p>
             </div>
             <div>
-              <p className="text-slate-400 font-medium">Sourcing Company</p>
-              <p className="font-extrabold text-[#dc5c15] mt-0.5">{sire.sourcingCompany || 'ABS Global Inc.'}</p>
+              <p className="text-slate-400 font-medium">Genetics Provider</p>
+              <p className="font-extrabold text-purple-700 mt-0.5">{sire.sourcingCompany || 'N/A'} {sire.sourcingCompanyCountry ? `(${sire.sourcingCompanyCountry})` : ''}</p>
             </div>
             <div>
-              <p className="text-slate-400 font-medium">Owner Name</p>
-              <p className="font-bold text-slate-900 mt-0.5">{sire.ownerName || 'Kaksedthan Sire Bank'}</p>
+              <p className="text-slate-400 font-medium">Ownership Type</p>
+              <p className="font-bold text-slate-900 mt-0.5">{sire.ownerType || 'N/A'}</p>
+            </div>
+            <div>
+              <p className="text-slate-400 font-medium">Actual Owner</p>
+              <p className="font-bold text-emerald-700 mt-0.5">{sire.ownerName || 'N/A'}</p>
             </div>
             <div>
               <p className="text-slate-400 font-medium">Station Location</p>
-              <p className="font-bold text-slate-900 mt-0.5">{sire.farmLocation || 'រទាំង'}</p>
+              <p className="font-bold text-slate-900 mt-0.5">{sire.farmLocation || 'Unassigned Station'}</p>
             </div>
           </div>
         </div>

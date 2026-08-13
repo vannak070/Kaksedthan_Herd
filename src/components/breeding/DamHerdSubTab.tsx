@@ -1,5 +1,6 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { Search, Plus, Edit, User, Building2, Calendar, ShieldCheck, HeartPulse, Filter, ArrowUpDown } from 'lucide-react';
+import { fetchDamFormOptionsAction } from '@/app/actions';
 
 export interface DamRecord {
   id: string;
@@ -90,6 +91,35 @@ export default function DamHerdSubTab({
   const [ownerTypeInput, setOwnerTypeInput] = useState<'Farm' | 'Cow Owner'>('Farm');
   const [selectedFarmName, setSelectedFarmName] = useState('0001 - SNR Farm Facility');
   const [selectedOwnerName, setSelectedOwnerName] = useState('0001 - SNR Farm');
+
+  const [masterFarmsList, setMasterFarmsList] = useState(MASTER_FARMS);
+  const [masterOwnersList, setMasterOwnersList] = useState(MASTER_COW_OWNERS);
+
+  useEffect(() => {
+    fetchDamFormOptionsAction().then((res) => {
+      if (res.success && res.data) {
+        if (res.data.farms?.length > 0) {
+          const mappedFarms = res.data.farms.map((f: any) => ({
+            code: f.code || f.id,
+            name: f.name,
+            location: f.address || f.province || 'Station Location',
+            contact: f.phone || '+855 12 345 678'
+          }));
+          setMasterFarmsList(mappedFarms);
+          setSelectedFarmName(mappedFarms[0].name);
+        }
+        if (res.data.customers?.length > 0) {
+          const mappedOwners = res.data.customers.map((c: any) => ({
+            name: c.name,
+            contact: c.phone || '+855 12 345 678',
+            address: c.address || 'Cambodia'
+          }));
+          setMasterOwnersList(mappedOwners);
+          setSelectedOwnerName(mappedOwners[0].name);
+        }
+      }
+    });
+  }, []);
 
   // Section 3: Physical Info
   const [dWeight, setDWeight] = useState('');
@@ -185,8 +215,8 @@ export default function DamHerdSubTab({
 
   const handleDamSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    const farmObj = MASTER_FARMS.find(f => f.name === selectedFarmName) || MASTER_FARMS[0];
-    const ownerObj = MASTER_COW_OWNERS.find(o => o.name === selectedOwnerName) || MASTER_COW_OWNERS[0];
+    const farmObj = masterFarmsList.find(f => f.name === selectedFarmName) || masterFarmsList[0];
+    const ownerObj = masterOwnersList.find(o => o.name === selectedOwnerName) || masterOwnersList[0];
 
     await onSaveDam({
       id: dId,
@@ -218,8 +248,8 @@ export default function DamHerdSubTab({
   };
 
   // Selected objects for auto-populated card
-  const selectedFarmObj = MASTER_FARMS.find(f => f.name === selectedFarmName) || MASTER_FARMS[0];
-  const selectedOwnerObj = MASTER_COW_OWNERS.find(o => o.name === selectedOwnerName) || MASTER_COW_OWNERS[0];
+  const selectedFarmObj = masterFarmsList.find(f => f.name === selectedFarmName) || masterFarmsList[0];
+  const selectedOwnerObj = masterOwnersList.find(o => o.name === selectedOwnerName) || masterOwnersList[0];
 
   // ── ADVANCED FILTERING & SORTING (NO BREED FILTER) ──
   const filteredAndSortedDams = useMemo(() => {
@@ -671,7 +701,7 @@ export default function DamHerdSubTab({
                       onChange={e => setSelectedFarmName(e.target.value)}
                       className="w-full px-3 py-2 text-xs font-bold border border-purple-300 rounded-xl bg-white text-slate-900 shadow-xs"
                     >
-                      {MASTER_FARMS.map(f => (
+                      {masterFarmsList.map(f => (
                         <option key={f.code} value={f.name}>
                           {f.name} — ({f.location}, Code: {f.code})
                         </option>
@@ -693,7 +723,7 @@ export default function DamHerdSubTab({
                       onChange={e => setSelectedOwnerName(e.target.value)}
                       className="w-full px-3 py-2 text-xs font-bold border border-purple-300 rounded-xl bg-white text-slate-900 shadow-xs"
                     >
-                      {MASTER_COW_OWNERS.map(o => (
+                      {masterOwnersList.map(o => (
                         <option key={o.name} value={o.name}>
                           {o.name} — ({o.address})
                         </option>

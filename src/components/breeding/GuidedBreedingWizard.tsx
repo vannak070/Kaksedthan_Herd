@@ -30,7 +30,7 @@ import {
   Lock
 } from 'lucide-react';
 
-import { fetchCustomersAction, fetchBreedersAction, fetchBreedConfigurationsAction } from '@/app/actions';
+import { fetchCustomersAction, fetchBreedersAction, fetchBreedConfigurationsAction, fetchFarmsAction } from '@/app/actions';
 
 interface GuidedBreedingWizardProps {
   sires: SireItem[];
@@ -65,6 +65,8 @@ export default function GuidedBreedingWizard({
 
   // CUSTOMER LIST STATE — scoped to Breeder if applicable
   const [customerList, setCustomerList] = useState<any[]>([]);
+  // FARM LIST STATE — loaded from PostgreSQL DB
+  const [farmList, setFarmList] = useState<any[]>([]);
   // BREEDER LIST STATE — for Admin dropdown
   const [breederList, setBreederList] = useState<any[]>([]);
   // BREED CONFIGURATIONS STATE — for dynamic breed dropdown
@@ -75,6 +77,12 @@ export default function GuidedBreedingWizard({
     fetchCustomersAction(isBreederAccount && lockedBreeder ? lockedBreeder.id : undefined).then(res => {
       if (res.success && Array.isArray(res.data)) {
         setCustomerList(res.data);
+      }
+    });
+    // Load Farm list
+    fetchFarmsAction().then(res => {
+      if (res.success && Array.isArray(res.data) && res.data.length > 0) {
+        setFarmList(res.data);
       }
     });
     // Load Breeder list for Admin dropdown
@@ -114,15 +122,30 @@ export default function GuidedBreedingWizard({
 
   // STEP 2 — Owner Information
   const [ownerType, setOwnerType] = useState<'Farm' | 'Cow Owner'>('Cow Owner');
-  const [ownerName, setOwnerName] = useState('Sophea Nhek');
-  const [cowOwner, setCowOwner] = useState('Sophea Nhek');
-  const [farmLocation, setFarmLocation] = useState(farms[0] || 'រទាំង');
-  const [ownerContact] = useState('+855 12 888 999');
-  const [isOwnerSelected, setIsOwnerSelected] = useState(true);
+  const [ownerName, setOwnerName] = useState('');
+  const [cowOwner, setCowOwner] = useState('');
+  const [selectedCustomerId, setSelectedCustomerId] = useState('');
+  const [selectedFarmId, setSelectedFarmId] = useState('');
+  const [farmLocation, setFarmLocation] = useState(farms[0] || 'Kaksedthan Central Ranch');
+  const [ownerContact, setOwnerContact] = useState('');
+  const [isOwnerSelected, setIsOwnerSelected] = useState(false);
+
+  // Auto-initialize owner from customerList once loaded if unselected
+  React.useEffect(() => {
+    if (customerList.length > 0 && !selectedCustomerId && !cowOwner) {
+      const firstCust = customerList[0];
+      setSelectedCustomerId(firstCust.id);
+      setCowOwner(firstCust.name);
+      setOwnerName(firstCust.name);
+      if (firstCust.phone) setOwnerContact(firstCust.phone);
+      if (firstCust.farmLocation || firstCust.province) {
+        setFarmLocation(firstCust.farmLocation || firstCust.province);
+      }
+      setIsOwnerSelected(true);
+    }
+  }, [customerList, selectedCustomerId, cowOwner]);
 
   // STEP 3 — Breeder Information
-  // For Breeder accounts: always use the locked Breeder from the backend (never trust frontend)
-  // For Admin: allow selection from real DB breeders list
   const [breederId, setBreederId] = useState(
     lockedBreeder ? lockedBreeder.id : ''
   );
@@ -156,24 +179,145 @@ export default function GuidedBreedingWizard({
   const selectedSire = useMemo(() => sires.find(s => s.id === selectedSireId), [sires, selectedSireId]);
   const selectedDam = useMemo(() => dams.find(d => d.id === selectedDamId), [dams, selectedDamId]);
 
-  // Search filtered arrays
+  // Search filtered Sires
   const filteredSires = useMemo(() => {
     if (!sireSearch) return sires;
     const q = sireSearch.toLowerCase();
     return sires.filter(s => s.name.toLowerCase().includes(q) || s.id.toLowerCase().includes(q) || s.breed.toLowerCase().includes(q));
   }, [sires, sireSearch]);
 
+  // ── DYNAMIC DAM FILTERING BY SELECTED OWNER & STATION ───────────────────
+  const eligibleDamsForSelectedOwner = useMemo(() => {
+    const normOwnerName = (cowOwner || ownerName || '').toLowerCase().trim();
+    const normCustId = (selectedCustomerId || '').toLowerCase().trim();
+    const normFarmLoc = (farmLocation || '').toLowerCase().trim();
+    const normFarmId = (selectedFarmId || '').toLowerCase().trim();
+
+    if (!normOwnerName && !normCustId && !normFarmLoc && !normFarmId) {
+      return dams;
+    }
+
+    return dams.filter(d => {
+      const damOwnerName = (d.ownerName || (d as any).customerName || '').toLowerCase().trim();
+      const damOwnerId = (d.ownerId || d.customerId || '').toLowerCase().trim();
+      const damFarmLoc = (d.farmLocation || '').toLowerCase().trim();
+      const damFarmId = (d.farmId || '').toLowerCase().trim();
+
+      if (ownerType === 'Cow Owner') {
+        const matchId = Boolean(normCustId && damOwnerId === normCustId);
+        const matchName = Boolean(normOwnerName && (
+          damOwnerName === normOwnerName ||
+          damOwnerName.includes(normOwnerName) ||
+          normOwnerName.includes(damOwnerName)
+        ));
+        return matchId || matchName;
+      } else {
+        const matchFarmId = Boolean(normFarmId && damFarmId === normFarmId);
+        const matchLoc = Boolean(normFarmLoc && (
+          damFarmLoc === normFarmLoc ||
+          damFarmLoc.includes(normFarmLoc) ||
+          normFarmLoc.includes(damFarmLoc) ||
+          damOwnerName === normFarmLoc
+        ));
+        return matchFarmId || matchLoc;
+      }
+    });
+  }, [dams, ownerType, cowOwner, ownerName, selectedCustomerId, selectedFarmId, farmLocation]);
+
   const filteredDams = useMemo(() => {
-    if (!damSearch) return dams;
-    const q = damSearch.toLowerCase();
-    return dams.filter(d => (d.name || '').toLowerCase().includes(q) || d.id.toLowerCase().includes(q) || d.breed.toLowerCase().includes(q));
-  }, [dams, damSearch]);
+    if (!damSearch) return eligibleDamsForSelectedOwner;
+    const q = damSearch.toLowerCase().trim();
+    return eligibleDamsForSelectedOwner.filter(d => (d.name || '').toLowerCase().includes(q) || d.id.toLowerCase().includes(q) || d.breed.toLowerCase().includes(q));
+  }, [eligibleDamsForSelectedOwner, damSearch]);
+
+  // Helper to count dams for each customer/farm
+  const getDamCountsForCustomer = (custName: string, custId: string) => {
+    const normName = (custName || '').toLowerCase().trim();
+    const normId = (custId || '').toLowerCase().trim();
+    const matching = dams.filter(d => {
+      const dName = (d.ownerName || d.customerName || '').toLowerCase().trim();
+      const dId = (d.ownerId || d.customerId || '').toLowerCase().trim();
+      return Boolean((normId && dId === normId) || (normName && (dName === normName || dName.includes(normName) || normName.includes(dName))));
+    });
+    const availableCount = matching.filter(d => d.availability === 'Available').length;
+    return { total: matching.length, available: availableCount };
+  };
+
+  const getDamCountsForFarm = (farmName: string, farmId: string) => {
+    const normName = (farmName || '').toLowerCase().trim();
+    const normId = (farmId || '').toLowerCase().trim();
+    const matching = dams.filter(d => {
+      const dLoc = (d.farmLocation || '').toLowerCase().trim();
+      const dId = (d.farmId || '').toLowerCase().trim();
+      const dOwner = (d.ownerName || '').toLowerCase().trim();
+      return Boolean((normId && dId === normId) || (normName && (dLoc === normName || dLoc.includes(normName) || normName.includes(dLoc) || dOwner === normName)));
+    });
+    const availableCount = matching.filter(d => d.availability === 'Available').length;
+    return { total: matching.length, available: availableCount };
+  };
+
+  // Filter customerList to ONLY those who have AT LEAST 1 available dam to breed
+  const availableCustomerList = useMemo(() => {
+    return customerList.filter(c => {
+      const counts = getDamCountsForCustomer(c.name, c.id);
+      return counts.available > 0;
+    });
+  }, [customerList, dams]);
+
+  // Filter farmList to ONLY those farm stations that have AT LEAST 1 available dam to breed
+  const availableFarmList = useMemo(() => {
+    return farmList.filter(f => {
+      const counts = getDamCountsForFarm(f.name, f.id);
+      return counts.available > 0;
+    });
+  }, [farmList, dams]);
+
+  // Auto-select first available owner when list loads or mode changes
+  React.useEffect(() => {
+    if (ownerType === 'Cow Owner') {
+      if (availableCustomerList.length > 0) {
+        const isCurrentValid = availableCustomerList.some(c => c.id === selectedCustomerId || c.name === cowOwner);
+        if (!isCurrentValid) {
+          const first = availableCustomerList[0];
+          setSelectedCustomerId(first.id);
+          setCowOwner(first.name);
+          setOwnerName(first.name);
+          setOwnerContact(first.phone || first.email || '');
+          if (first.farmLocation || first.province) setFarmLocation(first.farmLocation || first.province);
+          setIsOwnerSelected(true);
+        }
+      }
+    } else {
+      // ownerType === 'Farm'
+      if (availableFarmList.length > 0) {
+        const isCurrentValid = availableFarmList.some(f => f.id === selectedFarmId || f.name === farmLocation);
+        if (!isCurrentValid) {
+          const first = availableFarmList[0];
+          setSelectedFarmId(first.id);
+          setFarmLocation(first.name);
+          if (first.ownerName) {
+            setOwnerName(first.ownerName);
+            setCowOwner(first.ownerName);
+          }
+          setIsOwnerSelected(true);
+        }
+      }
+    }
+  }, [ownerType, availableCustomerList, availableFarmList]);
+
+  // Deselect Dam if owner changes and dam is no longer eligible
+  React.useEffect(() => {
+    if (selectedDamId) {
+      const isStillEligible = eligibleDamsForSelectedOwner.some(d => d.id === selectedDamId);
+      if (!isStillEligible) {
+        setSelectedDamId('');
+      }
+    }
+  }, [eligibleDamsForSelectedOwner, selectedDamId]);
 
   // Auto update semen price from Stock Insemination if available
   React.useEffect(() => {
     if (selectedSire) {
-      if (selectedSire.ownerName) setOwnerName(selectedSire.ownerName);
-      if (selectedSire.farmLocation) setFarmLocation(selectedSire.farmLocation);
       const sem = semenStock.find(st => st.sireId === selectedSire.id);
       if (sem && sem.priceUsd) {
         setUnitPrice(sem.priceUsd);
@@ -246,11 +390,20 @@ export default function GuidedBreedingWizard({
         setValidationError('Please select a Sire Bull for this breeding program.');
         return false;
       }
+      if (eligibleDamsForSelectedOwner.length === 0) {
+        setValidationError(`No registered breeding cows (Dams) found for owner "${ownerName || cowOwner || farmLocation}". Please select another owner in Step 2.`);
+        return false;
+      }
       if (!selectedDamId) {
-        setValidationError('Please select an eligible Dam Cow.');
+        setValidationError(`Please select an eligible Dam cow belonging to "${ownerName || cowOwner || farmLocation}". Cows belonging to other owners cannot be selected.`);
         return false;
       }
       if (selectedDam) {
+        const isDamOwned = eligibleDamsForSelectedOwner.some(d => d.id === selectedDam.id);
+        if (!isDamOwned) {
+          setValidationError(`Selected Dam ${selectedDam.id} does not belong to owner "${ownerName || cowOwner}". Selection of other owners' cows is restricted.`);
+          return false;
+        }
         const isUnavailable = ['Pregnant', 'In Breeding'].includes(selectedDam.availability) || selectedDam.breedingStatus === 'Confirmed Pregnant';
         if (isUnavailable) {
           setValidationError(`Dam ${selectedDam.id} is currently unavailable (${selectedDam.availability}). Please select an open eligible Dam.`);
@@ -561,119 +714,251 @@ export default function GuidedBreedingWizard({
 
         {/* STEP 2 — SELECT OWNER */}
         {currentStep === 2 && (
-          <div className="bg-white rounded-3xl border border-slate-200/90 p-5 space-y-4 shadow-sm">
+          <div className="bg-white rounded-3xl border border-slate-200/90 p-5 sm:p-6 space-y-5 shadow-sm">
+            
+            {/* Step 2 Header */}
             <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-              <div className="flex items-center gap-2">
-                <Building2 className="h-4 w-4 text-[#dc5c15]" />
-                <h4 className="text-xs font-black text-slate-900 uppercase tracking-wider">Step 2 — Select Owner</h4>
+              <div>
+                <div className="flex items-center gap-2">
+                  <Building2 className="h-4.5 w-4.5 text-[#dc5c15]" />
+                  <h4 className="text-xs font-black text-slate-900 uppercase tracking-wider">Step 2 — Select Cattle Owner or Station</h4>
+                </div>
+                <p className="text-[11px] text-slate-500 font-semibold mt-0.5">
+                  Choose the owner or farm station facility that owns the female cow (Dam) you plan to breed.
+                </p>
               </div>
               {isOwnerSelected && !isChangingOwner && (
                 <button
                   type="button"
                   onClick={() => setIsChangingOwner(true)}
-                  className="text-xs font-black text-[#dc5c15] hover:underline cursor-pointer flex items-center gap-1"
+                  className="text-xs font-black text-[#dc5c15] hover:underline cursor-pointer flex items-center gap-1 shrink-0"
                 >
                   <RefreshCw className="h-3.5 w-3.5" />
-                  [Change Owner]
+                  <span>[Change Selection]</span>
                 </button>
               )}
             </div>
 
-            {/* Selected Owner Summary Card */}
-            {isOwnerSelected && !isChangingOwner ? (
-              <div className="p-4 bg-emerald-50/90 border border-emerald-200 rounded-2xl flex items-center justify-between">
-                <div>
-                  <span className="text-[9.5px] font-black uppercase tracking-wider text-emerald-700">Selected Owner</span>
-                  <h5 className="text-sm font-black text-slate-900 mt-0.5">{ownerName}</h5>
-                  <p className="text-xs text-slate-600 font-bold">{ownerType} • {farmLocation} Station • {ownerContact}</p>
-                </div>
-                <div className="flex items-center gap-1.5 bg-emerald-600 text-white text-xs font-black px-3 py-1.5 rounded-xl shadow-xs">
-                  <Check className="h-4 w-4 stroke-[3]" />
-                  <span>Selected</span>
-                </div>
-              </div>
-            ) : (
-              <div className="space-y-4 text-xs">
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <div>
-                    <label className="block font-bold text-slate-700 mb-1">Owner Category Type</label>
-                    <div className="flex gap-2">
-                      <button
-                        type="button"
-                        onClick={() => setOwnerType('Farm')}
-                        className={`flex-1 py-2.5 rounded-xl font-black border transition-all cursor-pointer ${
-                          ownerType === 'Farm' ? 'bg-[#dc5c15] text-white border-[#dc5c15]' : 'bg-slate-50 text-slate-700 border-slate-200'
-                        }`}
-                      >
-                        Farm Owner
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setOwnerType('Cow Owner')}
-                        className={`flex-1 py-2.5 rounded-xl font-black border transition-all cursor-pointer ${
-                          ownerType === 'Cow Owner' ? 'bg-[#dc5c15] text-white border-[#dc5c15]' : 'bg-slate-50 text-slate-700 border-slate-200'
-                        }`}
-                      >
-                        Cow Owner
-                      </button>
+            {/* 1. VISUAL OWNER CATEGORY SELECTION CARDS */}
+            {(!isOwnerSelected || isChangingOwner) && (
+              <div className="space-y-4">
+                <label className="block text-xs font-bold text-slate-700">Choose Ownership Entity Type:</label>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+                  
+                  {/* Card 1: Cow Owner (Customer) */}
+                  <div
+                    onClick={() => {
+                      setOwnerType('Cow Owner');
+                      if (customerList.length > 0) {
+                        const cust = customerList[0];
+                        setSelectedCustomerId(cust.id);
+                        setCowOwner(cust.name);
+                        setOwnerName(cust.name);
+                        setOwnerContact(cust.phone || cust.email || '');
+                        if (cust.farmLocation || cust.province) setFarmLocation(cust.farmLocation || cust.province);
+                      }
+                    }}
+                    className={`p-4 rounded-2xl border-2 transition-all cursor-pointer flex items-start gap-3.5 ${
+                      ownerType === 'Cow Owner'
+                        ? 'border-[#dc5c15] bg-orange-50/70 shadow-sm ring-2 ring-orange-200/50'
+                        : 'border-slate-200 hover:border-slate-300 bg-slate-50/60'
+                    }`}
+                  >
+                    <div className={`p-2.5 rounded-xl shrink-0 ${ownerType === 'Cow Owner' ? 'bg-[#dc5c15] text-white' : 'bg-white border border-slate-200 text-slate-600'}`}>
+                      <User className="h-5 w-5" />
+                    </div>
+                    <div>
+                      <h5 className="text-xs font-black text-slate-900">Individual Cow Owner</h5>
+                      <p className="text-[11px] text-slate-500 font-medium mt-0.5 leading-snug">
+                        Select a registered customer / cow owner account to breed their specific cattle.
+                      </p>
                     </div>
                   </div>
 
-                  <div>
-                    <label className="block font-bold text-slate-700 mb-1">Farm / Station Location</label>
-                    <select
-                      value={farmLocation}
-                      onChange={e => setFarmLocation(e.target.value)}
-                      className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2.5 font-bold text-slate-900 focus:ring-2 focus:ring-[#dc5c15] focus:outline-none"
-                    >
-                      {farms.map(f => <option key={f} value={f}>{f} Station</option>)}
-                    </select>
+                  {/* Card 2: Farm Station */}
+                  <div
+                    onClick={() => {
+                      setOwnerType('Farm');
+                      if (farmList.length > 0) {
+                        const farm = farmList[0];
+                        setSelectedFarmId(farm.id);
+                        setFarmLocation(farm.name);
+                        if (farm.ownerName) {
+                          setOwnerName(farm.ownerName);
+                          setCowOwner(farm.ownerName);
+                        }
+                      }
+                    }}
+                    className={`p-4 rounded-2xl border-2 transition-all cursor-pointer flex items-start gap-3.5 ${
+                      ownerType === 'Farm'
+                        ? 'border-[#dc5c15] bg-orange-50/70 shadow-sm ring-2 ring-orange-200/50'
+                        : 'border-slate-200 hover:border-slate-300 bg-slate-50/60'
+                    }`}
+                  >
+                    <div className={`p-2.5 rounded-xl shrink-0 ${ownerType === 'Farm' ? 'bg-[#dc5c15] text-white' : 'bg-white border border-slate-200 text-slate-600'}`}>
+                      <Building2 className="h-5 w-5" />
+                    </div>
+                    <div>
+                      <h5 className="text-xs font-black text-slate-900">Farm Station</h5>
+                      <p className="text-[11px] text-slate-500 font-medium mt-0.5 leading-snug">
+                        Select a central farm station to breed cattle housed at that facility.
+                      </p>
+                    </div>
                   </div>
 
-                  <div>
-                    <label className="block font-bold text-slate-700 mb-1">Select Customer / Cow Owner <span className="text-rose-500">*</span></label>
-                    {customerList.length > 0 ? (
-                      <select
-                        value={cowOwner}
-                        onChange={e => {
-                          setCowOwner(e.target.value);
-                          setOwnerName(e.target.value);
-                        }}
-                        className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2.5 font-bold text-slate-900 focus:ring-2 focus:ring-[#dc5c15] focus:outline-none"
-                      >
-                        {customerList.map((c: any) => (
-                          <option key={c.id} value={c.name}>
-                            {c.name} ({c.id} • {c.phone || c.email || 'No contact'})
-                          </option>
-                        ))}
-                      </select>
-                    ) : (
-                      <input
-                        type="text"
-                        value={cowOwner}
-                        onChange={e => {
-                          setCowOwner(e.target.value);
-                          setOwnerName(e.target.value);
-                        }}
-                        placeholder="e.g. Sophea Nhek"
-                        className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2.5 font-bold text-slate-900 focus:ring-2 focus:ring-[#dc5c15] focus:outline-none"
-                      />
-                    )}
-                  </div>
                 </div>
 
-                <button
-                  type="button"
-                  onClick={() => {
-                    setIsOwnerSelected(true);
-                    setIsChangingOwner(false);
-                  }}
-                  className="w-full py-2.5 rounded-xl bg-emerald-600 text-white font-black text-xs shadow-md hover:bg-emerald-700 transition-all cursor-pointer"
-                >
-                  ✓ Confirm & Select Owner
-                </button>
+                {/* 2. DYNAMIC SELECTOR WITH LIVE DAM COUNTS (AVAILABLE COWS ONLY) */}
+                <div className="pt-2">
+                  {ownerType === 'Cow Owner' ? (
+                    <div className="space-y-1.5">
+                      <label className="block text-xs font-bold text-slate-800">
+                        Select Customer / Cow Owner Account <span className="text-rose-500">*</span>
+                      </label>
+                      {availableCustomerList.length > 0 ? (
+                        <select
+                          value={selectedCustomerId || cowOwner}
+                          onChange={e => {
+                            const val = e.target.value;
+                            const matchedCust = availableCustomerList.find((c: any) => c.id === val || c.name === val);
+                            if (matchedCust) {
+                              setSelectedCustomerId(matchedCust.id);
+                              setCowOwner(matchedCust.name);
+                              setOwnerName(matchedCust.name);
+                              setOwnerContact(matchedCust.phone || matchedCust.email || '');
+                              if (matchedCust.farmLocation || matchedCust.province) {
+                                setFarmLocation(matchedCust.farmLocation || matchedCust.province);
+                              }
+                            } else {
+                              setSelectedCustomerId('');
+                              setCowOwner(val);
+                              setOwnerName(val);
+                            }
+                            setIsOwnerSelected(true);
+                            setIsChangingOwner(false);
+                          }}
+                          className="w-full bg-white border border-slate-300 rounded-xl px-3.5 py-3 text-xs font-bold text-slate-900 focus:ring-2 focus:ring-[#dc5c15] focus:outline-none cursor-pointer shadow-xs"
+                        >
+                          <option value="">— Select Customer / Cow Owner —</option>
+                          {availableCustomerList.map((c: any) => {
+                            const counts = getDamCountsForCustomer(c.name, c.id);
+                            return (
+                              <option key={c.id} value={c.id}>
+                                {c.name} ({c.id} • {c.phone || c.email || 'No contact'}) — [{counts.available} Available Dam{counts.available > 1 ? 's' : ''}]
+                              </option>
+                            );
+                          })}
+                        </select>
+                      ) : (
+                        <div className="p-3.5 bg-amber-50 border border-amber-200 rounded-xl text-xs text-amber-800 font-bold flex items-center gap-2">
+                          <AlertCircle className="h-4 w-4 text-amber-600 shrink-0" />
+                          <span>No registered cow owners currently have available breeding cows in the database.</span>
+                        </div>
+                      )}
+                    </div>
+                  ) : (
+                    <div className="space-y-1.5">
+                      <label className="block text-xs font-bold text-slate-800">
+                        Select Farm Station <span className="text-rose-500">*</span>
+                      </label>
+                      {availableFarmList.length > 0 ? (
+                        <select
+                          value={selectedFarmId || farmLocation}
+                          onChange={e => {
+                            const val = e.target.value;
+                            const matchedFarm = availableFarmList.find((f: any) => f.id === val || f.name === val);
+                            if (matchedFarm) {
+                              setSelectedFarmId(matchedFarm.id);
+                              setFarmLocation(matchedFarm.name);
+                              if (matchedFarm.ownerName) {
+                                setOwnerName(matchedFarm.ownerName);
+                                setCowOwner(matchedFarm.ownerName);
+                              }
+                            } else {
+                              setSelectedFarmId('');
+                              setFarmLocation(val);
+                            }
+                            setIsOwnerSelected(true);
+                            setIsChangingOwner(false);
+                          }}
+                          className="w-full bg-white border border-slate-300 rounded-xl px-3.5 py-3 text-xs font-bold text-slate-900 focus:ring-2 focus:ring-[#dc5c15] focus:outline-none cursor-pointer shadow-xs"
+                        >
+                          <option value="">— Select Farm Station —</option>
+                          {availableFarmList.map((f: any) => {
+                            const counts = getDamCountsForFarm(f.name, f.id);
+                            return (
+                              <option key={f.id} value={f.id}>
+                                {f.name} ({f.code} • {f.province || 'Station'}) — [{counts.available} Available Dam{counts.available > 1 ? 's' : ''}]
+                              </option>
+                            );
+                          })}
+                        </select>
+                      ) : (
+                        <div className="p-3.5 bg-amber-50 border border-amber-200 rounded-xl text-xs text-amber-800 font-bold flex items-center gap-2">
+                          <AlertCircle className="h-4 w-4 text-amber-600 shrink-0" />
+                          <span>No farm stations currently have available breeding cows in the database.</span>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
               </div>
             )}
+
+            {/* 3. LIVE SELECTED OWNER SUMMARY CARD */}
+            {isOwnerSelected && !isChangingOwner && (
+              <div className="space-y-3">
+                {(() => {
+                  const counts = ownerType === 'Cow Owner'
+                    ? getDamCountsForCustomer(ownerName || cowOwner, selectedCustomerId)
+                    : getDamCountsForFarm(farmLocation, selectedFarmId);
+
+                  return (
+                    <div className="p-4 sm:p-5 bg-emerald-50/90 border-2 border-emerald-200/90 rounded-2xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 shadow-sm">
+                      <div className="space-y-1">
+                        <div className="flex items-center gap-2">
+                          <span className="text-[9.5px] font-black uppercase tracking-wider bg-emerald-200 text-emerald-900 px-2 py-0.5 rounded-md">
+                            Selected {ownerType}
+                          </span>
+                          {selectedCustomerId && (
+                            <span className="text-[9.5px] font-mono font-bold text-emerald-800">
+                              ID: {selectedCustomerId}
+                            </span>
+                          )}
+                        </div>
+                        <h5 className="text-base font-black text-slate-900 leading-snug">{ownerName || cowOwner || farmLocation}</h5>
+                        <p className="text-xs text-slate-600 font-semibold flex items-center gap-2">
+                          <span>📍 Location: <strong>{farmLocation || 'Central Station'}</strong></span>
+                          {ownerContact && <span>• 📞 {ownerContact}</span>}
+                        </p>
+                        <div className="pt-1 flex items-center gap-2">
+                          {counts.available > 0 ? (
+                            <span className="inline-flex items-center gap-1 bg-emerald-600 text-white text-[10.5px] font-black px-2.5 py-0.5 rounded-full shadow-2xs">
+                              <CheckCircle2 className="h-3.5 w-3.5" />
+                              <span>{counts.available} Breeding Cow{counts.available > 1 ? 's' : ''} Available</span>
+                            </span>
+                          ) : (
+                            <span className="inline-flex items-center gap-1 bg-amber-500 text-white text-[10.5px] font-black px-2.5 py-0.5 rounded-full shadow-2xs">
+                              <AlertCircle className="h-3.5 w-3.5" />
+                              <span>0 Breeding Cows Available (0/{counts.total} Total)</span>
+                            </span>
+                          )}
+                        </div>
+                      </div>
+
+                      <button
+                        type="button"
+                        onClick={() => setIsChangingOwner(true)}
+                        className="px-3.5 py-2 bg-white border border-emerald-300 text-emerald-900 hover:bg-emerald-100 font-extrabold text-xs rounded-xl shadow-2xs transition-colors cursor-pointer shrink-0"
+                      >
+                        Change Selection
+                      </button>
+                    </div>
+                  );
+                })()}
+              </div>
+            )}
+
           </div>
         )}
 
@@ -914,43 +1199,72 @@ export default function GuidedBreedingWizard({
                   </div>
                 )}
 
-                <div className="grid grid-cols-1 gap-2 max-h-[170px] overflow-y-auto pr-1">
-                  {filteredDams.map(dam => {
-                    const isSelected = selectedDamId === dam.id;
-                    const isUnavailable = ['Pregnant', 'In Breeding'].includes(dam.availability) || dam.breedingStatus === 'Confirmed Pregnant';
+                {eligibleDamsForSelectedOwner.length === 0 ? (
+                  <div className="p-4 bg-amber-50 border-2 border-amber-300/80 rounded-2xl text-center space-y-2.5 my-2">
+                    <AlertCircle className="h-7 w-7 text-amber-600 mx-auto" />
+                    <div>
+                      <h5 className="font-black text-slate-900 text-xs uppercase tracking-wider">
+                        No Registered Dams Owned by {ownerName || cowOwner || farmLocation || 'Selected Owner'}
+                      </h5>
+                      <p className="text-[11px] text-amber-900 font-semibold mt-1 max-w-sm mx-auto leading-relaxed">
+                        This owner ({ownerName || cowOwner || farmLocation}) currently has 0 female breeding cows registered in the database.
+                      </p>
+                      <p className="text-[10px] text-slate-500 font-medium mt-1">
+                        Selection of cows belonging to other owners is strictly restricted by permission rules.
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setCurrentStep(2)}
+                      className="inline-flex items-center gap-1.5 px-3.5 py-2 bg-[#dc5c15] text-white font-black text-xs rounded-xl shadow-sm hover:bg-[#c44f0e] transition-colors cursor-pointer"
+                    >
+                      <ChevronLeft className="h-4 w-4" />
+                      <span>Select Another Owner (Step 2)</span>
+                    </button>
+                  </div>
+                ) : filteredDams.length === 0 ? (
+                  <div className="p-3 text-center bg-slate-50 border border-dashed border-slate-200 rounded-xl text-xs text-slate-400">
+                    No dams match your search query "{damSearch}".
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-1 gap-2 max-h-[170px] overflow-y-auto pr-1">
+                    {filteredDams.map(dam => {
+                      const isSelected = selectedDamId === dam.id;
+                      const isUnavailable = ['Pregnant', 'In Breeding'].includes(dam.availability) || dam.breedingStatus === 'Confirmed Pregnant';
 
-                    return (
-                      <div
-                        key={dam.id}
-                        onClick={() => {
-                          if (!isUnavailable) setSelectedDamId(dam.id);
-                        }}
-                        className={`p-2.5 rounded-xl border-2 transition-all flex items-center gap-2.5 ${
-                          isUnavailable
-                            ? 'border-slate-200 bg-slate-100/70 opacity-60 cursor-not-allowed'
-                            : isSelected
-                            ? 'border-purple-600 bg-purple-50/80 shadow-xs cursor-pointer'
-                            : 'border-slate-200 hover:border-slate-300 bg-white cursor-pointer'
-                        }`}
-                      >
-                        <div className="h-9 w-9 rounded-lg bg-slate-100 overflow-hidden shrink-0 border border-slate-200">
-                          <StandardAnimalImage src={dam.imageUrl} alt={dam.name || dam.id} />
-                        </div>
-                        <div className="flex-1 min-w-0 text-xs">
-                          <div className="flex items-center justify-between">
-                            <h5 className="font-black text-slate-900 truncate text-[11px]">{dam.name || dam.id}</h5>
-                            {isUnavailable ? (
-                              <span className="text-[8px] font-black text-rose-700 bg-rose-100 px-1 rounded">✕ Unavailable</span>
-                            ) : (
-                              <span className="text-[8.5px] font-black text-emerald-700 bg-emerald-100 px-1.5 py-0.2 rounded">✓ Available</span>
-                            )}
+                      return (
+                        <div
+                          key={dam.id}
+                          onClick={() => {
+                            if (!isUnavailable) setSelectedDamId(dam.id);
+                          }}
+                          className={`p-2.5 rounded-xl border-2 transition-all flex items-center gap-2.5 ${
+                            isUnavailable
+                              ? 'border-slate-200 bg-slate-100/70 opacity-60 cursor-not-allowed'
+                              : isSelected
+                              ? 'border-purple-600 bg-purple-50/80 shadow-xs cursor-pointer'
+                              : 'border-slate-200 hover:border-slate-300 bg-white cursor-pointer'
+                          }`}
+                        >
+                          <div className="h-9 w-9 rounded-lg bg-slate-100 overflow-hidden shrink-0 border border-slate-200">
+                            <StandardAnimalImage src={dam.imageUrl} alt={dam.name || dam.id} />
                           </div>
-                          <p className="text-[9.5px] text-slate-400 font-semibold truncate">ID: {dam.id} • {dam.breed}</p>
+                          <div className="flex-1 min-w-0 text-xs">
+                            <div className="flex items-center justify-between">
+                              <h5 className="font-black text-slate-900 truncate text-[11px]">{dam.name || dam.id}</h5>
+                              {isUnavailable ? (
+                                <span className="text-[8px] font-black text-rose-700 bg-rose-100 px-1 rounded">✕ Unavailable</span>
+                              ) : (
+                                <span className="text-[8.5px] font-black text-emerald-700 bg-emerald-100 px-1.5 py-0.2 rounded">✓ Available</span>
+                              )}
+                            </div>
+                            <p className="text-[9.5px] text-slate-400 font-semibold truncate">ID: {dam.id} • {dam.breed}</p>
+                          </div>
                         </div>
-                      </div>
-                    );
-                  })}
-                </div>
+                      );
+                    })}
+                  </div>
+                )}
               </div>
 
             </div>

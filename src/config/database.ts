@@ -4,18 +4,18 @@ import path from 'path';
 
 dotenv.config({ path: path.resolve(process.cwd(), '.env') });
 
-const host = process.env.DB_HOST || 'localhost';
-const port = parseInt(process.env.DB_PORT || '5432', 10);
+const host = process.env.DB_HOST || '127.0.0.1';
+const port = parseInt(process.env.DB_PORT || '5433', 10);
 const user = process.env.DB_USER || 'postgres';
 const password = process.env.DB_PASSWORD || 'postgres123';
 const database = process.env.DB_NAME || 'kaksedthan_herdbook';
 const ssl = process.env.DB_SSL === 'true' ? { rejectUnauthorized: false } : false;
 
-const max = parseInt(process.env.DB_POOL_MAX || '20', 10);
-const idleTimeoutMillis = parseInt(process.env.DB_IDLE_TIMEOUT_MS || '30000', 10);
-const connectionTimeoutMillis = parseInt(process.env.DB_CONN_TIMEOUT_MS || '1500', 10);
+const max = parseInt(process.env.DB_POOL_MAX || '30', 10);
+const idleTimeoutMillis = parseInt(process.env.DB_IDLE_TIMEOUT_MS || '10000', 10);
+const connectionTimeoutMillis = parseInt(process.env.DB_CONN_TIMEOUT_MS || '3000', 10);
 
-console.log(`[Database] Configuring connection pool for PostgreSQL instance at ${user}@${host}:${port}/${database}...`);
+console.log(`[Database] Configuring connection pool (max ${max}) for PostgreSQL at ${user}@${host}:${port}/${database}...`);
 
 export const pool = new Pool({
   host,
@@ -27,7 +27,8 @@ export const pool = new Pool({
   max,
   idleTimeoutMillis,
   connectionTimeoutMillis,
-});
+  family: 4,
+} as any);
 
 pool.on('error', (err: Error) => {
   console.error('[Database Pool Error] Unexpected error on idle database client:', err.message);
@@ -73,6 +74,22 @@ export async function query<T extends QueryResultRow = QueryResultRow>(
     return res;
   } catch (error: unknown) {
     const errorMsg = error instanceof Error ? error.message : String(error);
+    if (errorMsg.includes('EPERM') || errorMsg.includes('connect') || errorMsg.includes('AggregateError')) {
+      try {
+        console.warn(`[Database Connection Retry] Retrying query after socket notice: ${errorMsg}`);
+        const client = await pool.connect();
+        try {
+          const retryRes = await client.query<T>(text, params);
+          return retryRes;
+        } finally {
+          client.release();
+        }
+      } catch (retryErr: unknown) {
+        const retryMsg = retryErr instanceof Error ? retryErr.message : String(retryErr);
+        console.error(`[Database Query Retry Error] Query failed after retry: ${retryMsg} | SQL: ${text}`);
+        throw retryErr;
+      }
+    }
     console.error(`[Database Query Error] Query failed: ${errorMsg} | SQL: ${text}`);
     throw error;
   }

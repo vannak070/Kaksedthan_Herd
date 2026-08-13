@@ -23,18 +23,21 @@ export class HerdbookRepository {
    *                        (global pool sires are visible to all breeders).
    */
   async getSires(breederIdScope?: string): Promise<SireItem[]> {
-    // Sires with no breeder_id are "global pool" — visible to everyone
     const scopeClause = (breederIdScope && breederIdScope !== 'ALL' && breederIdScope !== 'ADMIN')
       ? `AND (s.breeder_id = '${breederIdScope}' OR s.breeder_id IS NULL)`
       : '';
     const sql = `
       SELECT s.*,
+             bc.name as breed_master_name,
              sc.name as sourcing_company_name,
              sc.country as sourcing_company_country,
              sc.image_url as sourcing_company_image,
+             f.name as farm_station_name,
              COALESCE(c.status, 'NOT_APPLIED') as certification_status
       FROM sires s
+      LEFT JOIN breed_configurations bc ON bc.id = s.breed_id
       LEFT JOIN sourcing_companies sc ON sc.id = s.sourcing_company_id
+      LEFT JOIN farms f ON f.id = s.farm_id
       LEFT JOIN (
         SELECT DISTINCT ON (COALESCE(animal_id, calf_id)) COALESCE(animal_id, calf_id) as target_id, status
         FROM certificates
@@ -47,10 +50,12 @@ export class HerdbookRepository {
     return res.rows.map(r => ({
       id: r.id,
       name: r.name,
-      breed: r.breed,
+      breed: r.breed_master_name || r.breed,
+      breedId: r.breed_id || null,
+      registrationNumber: r.registration_number || null,
       dob: r.dob ? new Date(r.dob).toISOString().split('T')[0] : undefined,
       bloodline: r.bloodline,
-      sourcingCompany: r.sourcing_company_name || r.sourcing_company || 'ABS Global Inc.',
+      sourcingCompany: r.sourcing_company_name || r.sourcing_company || null,
       sourcingCompanyId: r.sourcing_company_id || null,
       sourcingCompanyCountry: r.sourcing_company_country || null,
       sourcingCompanyImage: r.sourcing_company_image || null,
@@ -58,8 +63,13 @@ export class HerdbookRepository {
       fatherId: r.father_id,
       motherId: r.mother_id,
       imageUrl: r.image_url,
+      ownerType: r.owner_type || null,
+      ownerId: r.owner_id || null,
       ownerName: r.owner_name,
-      farmLocation: r.farm_location,
+      farmId: r.farm_id || null,
+      farmLocation: r.farm_station_name || r.farm_location,
+      ownershipStatus: r.ownership_status || 'Active',
+      ownershipStartDate: r.ownership_start_date ? new Date(r.ownership_start_date).toISOString().split('T')[0] : undefined,
       status: r.status,
       certificationStatus: r.certification_status || 'NOT_APPLIED',
       createdAt: r.created_at,
@@ -68,37 +78,93 @@ export class HerdbookRepository {
   }
 
   async getSireById(id: string): Promise<SireItem | null> {
-    const res = await query('SELECT * FROM sires WHERE id = $1', [id]);
+    const sql = `
+      SELECT s.*,
+             bc.name as breed_master_name,
+             sc.name as sourcing_company_name,
+             sc.country as sourcing_company_country,
+             sc.image_url as sourcing_company_image,
+             f.name as farm_station_name,
+             COALESCE(c.status, 'NOT_APPLIED') as certification_status
+      FROM sires s
+      LEFT JOIN breed_configurations bc ON bc.id = s.breed_id
+      LEFT JOIN sourcing_companies sc ON sc.id = s.sourcing_company_id
+      LEFT JOIN farms f ON f.id = s.farm_id
+      LEFT JOIN (
+        SELECT DISTINCT ON (COALESCE(animal_id, calf_id)) COALESCE(animal_id, calf_id) as target_id, status
+        FROM certificates
+        ORDER BY COALESCE(animal_id, calf_id), created_at DESC
+      ) c ON c.target_id = s.id
+      WHERE s.id = $1
+      LIMIT 1
+    `;
+    const res = await query(sql, [id]);
     if (res.rows.length === 0) return null;
     const r = res.rows[0];
     return {
       id: r.id,
       name: r.name,
-      breed: r.breed,
+      breed: r.breed_master_name || r.breed,
+      breedId: r.breed_id || null,
+      registrationNumber: r.registration_number || null,
       dob: r.dob ? new Date(r.dob).toISOString().split('T')[0] : undefined,
       bloodline: r.bloodline,
-      sourcingCompany: r.sourcing_company || 'ABS Global Inc.',
+      sourcingCompany: r.sourcing_company_name || r.sourcing_company || null,
+      sourcingCompanyId: r.sourcing_company_id || null,
+      sourcingCompanyCountry: r.sourcing_company_country || null,
+      sourcingCompanyImage: r.sourcing_company_image || null,
+      breederId: r.breeder_id || null,
       fatherId: r.father_id,
       motherId: r.mother_id,
       imageUrl: r.image_url,
+      ownerType: r.owner_type || null,
+      ownerId: r.owner_id || null,
       ownerName: r.owner_name,
-      farmLocation: r.farm_location,
+      farmId: r.farm_id || null,
+      farmLocation: r.farm_station_name || r.farm_location,
+      ownershipStatus: r.ownership_status || 'Active',
+      ownershipStartDate: r.ownership_start_date ? new Date(r.ownership_start_date).toISOString().split('T')[0] : undefined,
       status: r.status,
+      certificationStatus: r.certification_status || 'NOT_APPLIED',
       createdAt: r.created_at,
       updatedAt: r.updated_at
     };
   }
 
   async createSire(sire: SireItem & { breederId?: string }): Promise<SireItem> {
+    // Resolve breed_id and breed name against breed_configurations master table
+    let finalBreedId = sire.breedId || null;
+    let finalBreedName = sire.breed || '';
+
+    if (finalBreedId) {
+      const bcRes = await query('SELECT id, name FROM breed_configurations WHERE id = $1', [finalBreedId]);
+      if (bcRes.rows.length > 0) {
+        finalBreedName = bcRes.rows[0].name;
+      }
+    } else if (finalBreedName) {
+      const bcRes = await query('SELECT id, name FROM breed_configurations WHERE LOWER(TRIM(name)) = LOWER(TRIM($1)) OR LOWER(TRIM(code)) = LOWER(TRIM($1))', [finalBreedName]);
+      if (bcRes.rows.length > 0) {
+        finalBreedId = bcRes.rows[0].id;
+        finalBreedName = bcRes.rows[0].name;
+      }
+    }
+
     const sql = `
-      INSERT INTO sires (id, name, breed, dob, bloodline, sourcing_company, sourcing_company_id, breeder_id, father_id, mother_id, image_url, owner_name, farm_location, status)
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
+      INSERT INTO sires (
+        id, name, breed, breed_id, registration_number, dob, bloodline,
+        sourcing_company, sourcing_company_id, breeder_id, father_id, mother_id,
+        image_url, owner_type, owner_id, owner_name, farm_id, farm_location,
+        ownership_status, ownership_start_date, status
+      )
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21)
       RETURNING *
     `;
     const params = [
       sire.id,
       sire.name,
-      sire.breed,
+      finalBreedName,
+      finalBreedId,
+      sire.registrationNumber || null,
       sire.dob ? new Date(sire.dob) : null,
       sire.bloodline || null,
       sire.sourcingCompany || null,
@@ -107,12 +173,17 @@ export class HerdbookRepository {
       sire.fatherId || null,
       sire.motherId || null,
       sire.imageUrl || null,
+      sire.ownerType || 'Internal Company',
+      sire.ownerId || null,
       sire.ownerName || null,
+      sire.farmId || null,
       sire.farmLocation || null,
+      sire.ownershipStatus || 'Active',
+      sire.ownershipStartDate ? new Date(sire.ownershipStartDate) : null,
       sire.status || 'Active'
     ];
     await query(sql, params);
-    return sire;
+    return { ...sire, breed: finalBreedName, breedId: finalBreedId || undefined };
   }
 
   async updateSire(id: string, sire: Partial<SireItem>): Promise<SireItem> {
@@ -120,16 +191,39 @@ export class HerdbookRepository {
     const params: any[] = [];
     let idx = 1;
 
+    let finalBreedId = sire.breedId;
+    let finalBreedName = sire.breed;
+
+    if (finalBreedId) {
+      const bcRes = await query('SELECT id, name FROM breed_configurations WHERE id = $1', [finalBreedId]);
+      if (bcRes.rows.length > 0) {
+        finalBreedName = bcRes.rows[0].name;
+      }
+    } else if (finalBreedName) {
+      const bcRes = await query('SELECT id, name FROM breed_configurations WHERE LOWER(TRIM(name)) = LOWER(TRIM($1)) OR LOWER(TRIM(code)) = LOWER(TRIM($1))', [finalBreedName]);
+      if (bcRes.rows.length > 0) {
+        finalBreedId = bcRes.rows[0].id;
+        finalBreedName = bcRes.rows[0].name;
+      }
+    }
+
     if (sire.name !== undefined) { fields.push(`name = $${idx++}`); params.push(sire.name); }
-    if (sire.breed !== undefined) { fields.push(`breed = $${idx++}`); params.push(sire.breed); }
+    if (finalBreedName !== undefined) { fields.push(`breed = $${idx++}`); params.push(finalBreedName); }
+    if (finalBreedId !== undefined) { fields.push(`breed_id = $${idx++}`); params.push(finalBreedId); }
+    if (sire.registrationNumber !== undefined) { fields.push(`registration_number = $${idx++}`); params.push(sire.registrationNumber); }
     if (sire.dob !== undefined) { fields.push(`dob = $${idx++}`); params.push(sire.dob ? new Date(sire.dob) : null); }
     if (sire.bloodline !== undefined) { fields.push(`bloodline = $${idx++}`); params.push(sire.bloodline); }
     if (sire.sourcingCompany !== undefined) { fields.push(`sourcing_company = $${idx++}`); params.push(sire.sourcingCompany); }
+    if (sire.sourcingCompanyId !== undefined) { fields.push(`sourcing_company_id = $${idx++}`); params.push(sire.sourcingCompanyId); }
     if (sire.fatherId !== undefined) { fields.push(`father_id = $${idx++}`); params.push(sire.fatherId); }
     if (sire.motherId !== undefined) { fields.push(`mother_id = $${idx++}`); params.push(sire.motherId); }
     if (sire.imageUrl !== undefined) { fields.push(`image_url = $${idx++}`); params.push(sire.imageUrl); }
+    if (sire.ownerType !== undefined) { fields.push(`owner_type = $${idx++}`); params.push(sire.ownerType); }
+    if (sire.ownerId !== undefined) { fields.push(`owner_id = $${idx++}`); params.push(sire.ownerId); }
     if (sire.ownerName !== undefined) { fields.push(`owner_name = $${idx++}`); params.push(sire.ownerName); }
+    if (sire.farmId !== undefined) { fields.push(`farm_id = $${idx++}`); params.push(sire.farmId); }
     if (sire.farmLocation !== undefined) { fields.push(`farm_location = $${idx++}`); params.push(sire.farmLocation); }
+    if (sire.ownershipStatus !== undefined) { fields.push(`ownership_status = $${idx++}`); params.push(sire.ownershipStatus); }
     if (sire.status !== undefined) { fields.push(`status = $${idx++}`); params.push(sire.status); }
 
     fields.push(`updated_at = CURRENT_TIMESTAMP`);
@@ -170,6 +264,10 @@ export class HerdbookRepository {
       breederName: r.breeder_name,
       availability: r.availability,
       status: r.status,
+      tankNumber: r.tank_number || 'CAN-TANK-01',
+      collectionDate: r.collection_date ? new Date(r.collection_date).toISOString().split('T')[0] : undefined,
+      notes: r.notes || '',
+      initialQuantity: r.initial_quantity ? Number(r.initial_quantity) : 100,
       createdAt: r.created_at,
       updatedAt: r.updated_at
     }));
@@ -200,6 +298,10 @@ export class HerdbookRepository {
       breederName: r.breeder_name,
       availability: r.availability,
       status: r.status,
+      tankNumber: r.tank_number || 'CAN-TANK-01',
+      collectionDate: r.collection_date ? new Date(r.collection_date).toISOString().split('T')[0] : undefined,
+      notes: r.notes || '',
+      initialQuantity: r.initial_quantity ? Number(r.initial_quantity) : 100,
       createdAt: r.created_at,
       updatedAt: r.updated_at
     };
@@ -210,9 +312,9 @@ export class HerdbookRepository {
       INSERT INTO stock_insemination (
         id, sire_id, stock_available, price_usd, price_khr, currency,
         owner_name, farm_location, breeder_name, availability, status,
-        breeder_id, sourcing_company_id
+        breeder_id, sourcing_company_id, tank_number, collection_date, notes, initial_quantity
       )
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)
       RETURNING *
     `;
     const params = [
@@ -228,7 +330,11 @@ export class HerdbookRepository {
       item.availability || 'Available',
       item.status || 'Active',
       item.breederId || null,
-      item.sourcingCompanyId || null
+      item.sourcingCompanyId || null,
+      item.tankNumber || 'CAN-TANK-01',
+      item.collectionDate || null,
+      item.notes || null,
+      item.initialQuantity || item.stockAvailable || 100
     ];
     await query(sql, params);
     return item;
@@ -245,12 +351,81 @@ export class HerdbookRepository {
     if (updates.currency !== undefined) { fields.push(`currency = $${idx++}`); params.push(updates.currency); }
     if (updates.availability !== undefined) { fields.push(`availability = $${idx++}`); params.push(updates.availability); }
     if (updates.status !== undefined) { fields.push(`status = $${idx++}`); params.push(updates.status); }
+    if (updates.ownerName !== undefined) { fields.push(`owner_name = $${idx++}`); params.push(updates.ownerName); }
+    if (updates.farmLocation !== undefined) { fields.push(`farm_location = $${idx++}`); params.push(updates.farmLocation); }
+    if (updates.breederName !== undefined) { fields.push(`breeder_name = $${idx++}`); params.push(updates.breederName); }
+    if (updates.tankNumber !== undefined) { fields.push(`tank_number = $${idx++}`); params.push(updates.tankNumber); }
+    if (updates.collectionDate !== undefined) { fields.push(`collection_date = $${idx++}`); params.push(updates.collectionDate || null); }
+    if (updates.notes !== undefined) { fields.push(`notes = $${idx++}`); params.push(updates.notes); }
+    if (updates.initialQuantity !== undefined) { fields.push(`initial_quantity = $${idx++}`); params.push(updates.initialQuantity); }
 
     fields.push(`updated_at = CURRENT_TIMESTAMP`);
     params.push(id);
 
     const sql = `UPDATE stock_insemination SET ${fields.join(', ')} WHERE id = $${idx}`;
     await query(sql, params);
+  }
+
+  async deleteStockInsemination(id: string): Promise<void> {
+    await query(`DELETE FROM stock_insemination WHERE id = $1`, [id]);
+  }
+
+  async getStockTransactions(stockInseminationId: string): Promise<Array<{ id: string; date: string; type: string; qty: number; balance: number; ref: string; recipient?: string; priceUsd?: number; user: string }>> {
+    const sql = `
+      SELECT *
+      FROM stock_transactions
+      WHERE stock_insemination_id = $1
+      ORDER BY created_at DESC
+    `;
+    const res = await query(sql, [stockInseminationId]);
+    return res.rows.map(r => ({
+      id: r.id,
+      date: r.created_at ? new Date(r.created_at).toISOString().split('T')[0] : new Date().toISOString().split('T')[0],
+      type: r.transaction_type,
+      qty: Number(r.quantity),
+      balance: Number(r.balance),
+      ref: r.reference || r.id,
+      recipient: r.recipient || undefined,
+      priceUsd: r.price_usd ? Number(r.price_usd) : undefined,
+      user: r.user_name || 'System Admin',
+    }));
+  }
+
+  async createStockTransaction(tx: {
+    id?: string;
+    stockInseminationId: string;
+    transactionType: string;
+    quantity: number;
+    balance: number;
+    reference?: string;
+    recipient?: string;
+    priceUsd?: number;
+    userName?: string;
+  }): Promise<void> {
+    const txId = tx.id || `TX-${Date.now()}-${Math.floor(100 + Math.random() * 900)}`;
+    const sql = `
+      INSERT INTO stock_transactions (
+        id, stock_insemination_id, transaction_type, quantity, balance, reference, recipient, price_usd, user_name, created_at
+      )
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, CURRENT_TIMESTAMP)
+    `;
+    await query(sql, [
+      txId,
+      tx.stockInseminationId,
+      tx.transactionType,
+      tx.quantity,
+      tx.balance,
+      tx.reference || txId,
+      tx.recipient || null,
+      tx.priceUsd || 0,
+      tx.userName || 'Super Admin',
+    ]);
+
+    // Also update stock_available in stock_insemination table
+    await query(
+      `UPDATE stock_insemination SET stock_available = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2`,
+      [tx.balance, tx.stockInseminationId]
+    );
   }
 
 
@@ -267,10 +442,12 @@ export class HerdbookRepository {
       : '';
     const sql = `
       SELECT d.*,
-             cu.name as customer_name,
+             bc.name as breed_master_name,
+             f.name as farm_station_name,
              COALESCE(c.status, 'NOT_APPLIED') as certification_status
       FROM dams d
-      LEFT JOIN customers cu ON cu.id = d.customer_id
+      LEFT JOIN breed_configurations bc ON bc.id = d.breed_id
+      LEFT JOIN farms f ON f.id = d.farm_id
       LEFT JOIN (
         SELECT DISTINCT ON (COALESCE(animal_id, calf_id)) COALESCE(animal_id, calf_id) as target_id, status
         FROM certificates
@@ -283,12 +460,16 @@ export class HerdbookRepository {
     return res.rows.map(r => ({
       id: r.id,
       name: r.name,
-      breed: r.breed,
+      breed: r.breed_master_name || r.breed,
+      breedId: r.breed_id || null,
       dob: r.dob ? new Date(r.dob).toISOString().split('T')[0] : undefined,
       fatherId: r.father_id,
       motherId: r.mother_id,
+      ownerType: r.owner_type || null,
+      ownerId: r.owner_id || null,
       ownerName: r.owner_name,
-      farmLocation: r.farm_location,
+      farmId: r.farm_id || null,
+      farmLocation: r.farm_station_name || r.farm_location,
       imageUrl: r.image_url,
       availability: r.availability,
       breedingStatus: r.breeding_status,
@@ -296,25 +477,45 @@ export class HerdbookRepository {
       certificationStatus: r.certification_status || 'NOT_APPLIED',
       breederId: r.breeder_id || null,
       customerId: r.customer_id || null,
-      customerName: r.customer_name || r.owner_name || null,
+      customerName: r.owner_name || null,
       createdAt: r.created_at,
       updatedAt: r.updated_at
     }));
   }
 
   async getDamById(id: string): Promise<DamItem | null> {
-    const res = await query('SELECT * FROM dams WHERE id = $1', [id]);
+    const sql = `
+      SELECT d.*,
+             bc.name as breed_master_name,
+             f.name as farm_station_name,
+             COALESCE(c.status, 'NOT_APPLIED') as certification_status
+      FROM dams d
+      LEFT JOIN breed_configurations bc ON bc.id = d.breed_id
+      LEFT JOIN farms f ON f.id = d.farm_id
+      LEFT JOIN (
+        SELECT DISTINCT ON (COALESCE(animal_id, calf_id)) COALESCE(animal_id, calf_id) as target_id, status
+        FROM certificates
+        ORDER BY COALESCE(animal_id, calf_id), created_at DESC
+      ) c ON c.target_id = d.id
+      WHERE d.id = $1
+      LIMIT 1
+    `;
+    const res = await query(sql, [id]);
     if (res.rows.length === 0) return null;
     const r = res.rows[0];
     return {
       id: r.id,
       name: r.name,
-      breed: r.breed,
+      breed: r.breed_master_name || r.breed,
+      breedId: r.breed_id || null,
       dob: r.dob ? new Date(r.dob).toISOString().split('T')[0] : undefined,
       fatherId: r.father_id,
       motherId: r.mother_id,
+      ownerType: r.owner_type || null,
+      ownerId: r.owner_id || null,
       ownerName: r.owner_name,
-      farmLocation: r.farm_location,
+      farmId: r.farm_id || null,
+      farmLocation: r.farm_station_name || r.farm_location,
       imageUrl: r.image_url,
       availability: r.availability,
       breedingStatus: r.breeding_status,
@@ -335,7 +536,10 @@ export class HerdbookRepository {
       dob: r.dob ? new Date(r.dob).toISOString().split('T')[0] : undefined,
       fatherId: r.father_id,
       motherId: r.mother_id,
+      ownerType: r.owner_type || null,
+      ownerId: r.owner_id || null,
       ownerName: r.owner_name,
+      farmId: r.farm_id || null,
       farmLocation: r.farm_location,
       imageUrl: r.image_url,
       availability: r.availability,
@@ -346,18 +550,27 @@ export class HerdbookRepository {
 
   async createDam(dam: DamItem & { breederId?: string; customerId?: string }): Promise<DamItem> {
     const sql = `
-      INSERT INTO dams (id, name, breed, dob, father_id, mother_id, owner_name, farm_location, image_url, availability, breeding_status, pregnancy_status, breeder_id, customer_id)
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
+      INSERT INTO dams (
+        id, name, breed, breed_id, dob, father_id, mother_id,
+        owner_type, owner_id, owner_name, farm_id, farm_location,
+        image_url, availability, breeding_status, pregnancy_status,
+        breeder_id, customer_id
+      )
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18)
       RETURNING *
     `;
     const params = [
       dam.id,
       dam.name || null,
       dam.breed,
+      dam.breedId || null,
       dam.dob ? new Date(dam.dob) : null,
       dam.fatherId || null,
       dam.motherId || null,
+      dam.ownerType || null,
+      dam.ownerId || null,
       dam.ownerName || null,
+      dam.farmId || null,
       dam.farmLocation || null,
       dam.imageUrl || null,
       dam.availability || 'Available',
@@ -393,10 +606,14 @@ export class HerdbookRepository {
 
     if (dam.name !== undefined) { fields.push(`name = $${idx++}`); params.push(dam.name); }
     if (dam.breed !== undefined) { fields.push(`breed = $${idx++}`); params.push(dam.breed); }
+    if (dam.breedId !== undefined) { fields.push(`breed_id = $${idx++}`); params.push(dam.breedId); }
     if (dam.dob !== undefined) { fields.push(`dob = $${idx++}`); params.push(dam.dob ? new Date(dam.dob) : null); }
     if (dam.fatherId !== undefined) { fields.push(`father_id = $${idx++}`); params.push(dam.fatherId); }
     if (dam.motherId !== undefined) { fields.push(`mother_id = $${idx++}`); params.push(dam.motherId); }
+    if (dam.ownerType !== undefined) { fields.push(`owner_type = $${idx++}`); params.push(dam.ownerType); }
+    if (dam.ownerId !== undefined) { fields.push(`owner_id = $${idx++}`); params.push(dam.ownerId); }
     if (dam.ownerName !== undefined) { fields.push(`owner_name = $${idx++}`); params.push(dam.ownerName); }
+    if (dam.farmId !== undefined) { fields.push(`farm_id = $${idx++}`); params.push(dam.farmId); }
     if (dam.farmLocation !== undefined) { fields.push(`farm_location = $${idx++}`); params.push(dam.farmLocation); }
     if (dam.imageUrl !== undefined) { fields.push(`image_url = $${idx++}`); params.push(dam.imageUrl); }
     if (dam.availability !== undefined) { fields.push(`availability = $${idx++}`); params.push(dam.availability); }
@@ -1697,6 +1914,7 @@ export class HerdbookRepository {
       name: r.name,
       description: r.description,
       purpose: r.purpose,
+      levelType: r.level_type || (['LEVEL-01', 'LEVEL-02', 'LEVEL-03', 'LEVEL-04', 'LEVEL-05', 'BREEDER', 'FARM_OWNER', 'CUSTOMER_COW_OWNER', 'SIRE_SOURCING_COMPANY'].includes(r.code) || ['LEVEL-01', 'LEVEL-02', 'LEVEL-03', 'LEVEL-04', 'LEVEL-05'].includes(r.id) ? 'ACCOUNT_MANAGEMENT' : 'SYSTEM_ACCOUNT'),
       status: r.status as 'Draft' | 'Active' | 'Inactive',
       sortOrder: r.sort_order,
       userCount: parseInt(r.user_count || '0', 10),
@@ -1728,6 +1946,7 @@ export class HerdbookRepository {
       name: r.name,
       description: r.description,
       purpose: r.purpose,
+      levelType: r.level_type || (['LEVEL-01', 'LEVEL-02', 'LEVEL-03', 'LEVEL-04', 'LEVEL-05', 'BREEDER', 'FARM_OWNER', 'CUSTOMER_COW_OWNER', 'SIRE_SOURCING_COMPANY'].includes(r.code) || ['LEVEL-01', 'LEVEL-02', 'LEVEL-03', 'LEVEL-04', 'LEVEL-05'].includes(r.id) ? 'ACCOUNT_MANAGEMENT' : 'SYSTEM_ACCOUNT'),
       status: r.status as 'Draft' | 'Active' | 'Inactive',
       sortOrder: r.sort_order,
       userCount: parseInt(r.user_count || '0', 10),
@@ -1763,14 +1982,16 @@ export class HerdbookRepository {
     name: string;
     description?: string;
     purpose?: string;
+    levelType?: string;
     sortOrder?: number;
     defaultModules?: string[];
     permissions?: string[];
   }): Promise<any> {
     const id = `LEVEL-${Date.now().toString().slice(-6)}`;
+    const levelTypeVal = level.levelType || 'ACCOUNT_MANAGEMENT';
     const sql = `
-      INSERT INTO user_levels (id, code, name, description, purpose, sort_order, status)
-      VALUES ($1, $2, $3, $4, $5, $6, 'Draft')
+      INSERT INTO user_levels (id, code, name, description, purpose, sort_order, status, level_type)
+      VALUES ($1, $2, $3, $4, $5, $6, 'Draft', $7)
       RETURNING *
     `;
     const res = await query(sql, [
@@ -1779,7 +2000,8 @@ export class HerdbookRepository {
       level.name,
       level.description || '',
       level.purpose || '',
-      level.sortOrder || 10
+      level.sortOrder || 10,
+      levelTypeVal
     ]);
     const created = res.rows[0];
 
@@ -1912,10 +2134,36 @@ export class HerdbookRepository {
       ORDER BY module_key ASC
     `;
     const res = await query(sql, [userLevelId]);
-    return res.rows.map(r => ({
-      moduleKey: r.module_key,
-      moduleName: r.module_name,
-      isAvailable: r.is_available
+    if (res.rows.length > 0) {
+      return res.rows.map(r => ({
+        moduleKey: r.module_key,
+        moduleName: r.module_name,
+        isAvailable: r.is_available
+      }));
+    }
+
+    const defaultModules = [
+      { moduleKey: 'sire', moduleName: 'Sire Register' },
+      { moduleKey: 'dam', moduleName: 'Dam Register' },
+      { moduleKey: 'calf', moduleName: 'Calf Register' },
+      { moduleKey: 'breeding_program', moduleName: 'Breeding Program' },
+      { moduleKey: 'breeding_cost', moduleName: 'Breeding Cost' },
+      { moduleKey: 'stock_insemination', moduleName: 'Stock Insemination' },
+      { moduleKey: 'farm_station', moduleName: 'Farm Station' },
+      { moduleKey: 'customer', moduleName: 'Customer' },
+      { moduleKey: 'herdbook', moduleName: 'Herdbook' },
+      { moduleKey: 'certificate', moduleName: 'Certificate Center' }
+    ];
+
+    const levelRes = await query(`SELECT code, name FROM user_levels WHERE id = $1`, [userLevelId]);
+    const isSystemAdmin = levelRes.rows.length === 0 ||
+      levelRes.rows[0].name.toLowerCase().includes('admin') ||
+      levelRes.rows[0].code.toLowerCase().includes('admin');
+
+    return defaultModules.map(m => ({
+      moduleKey: m.moduleKey,
+      moduleName: m.moduleName,
+      isAvailable: isSystemAdmin ? true : false
     }));
   }
 
@@ -1986,17 +2234,42 @@ export class HerdbookRepository {
   // ─────────────────────────────────────────────────────────────
 
   async deleteUserLevel(id: string, performedBy?: string): Promise<{ deleted: boolean; reason?: string }> {
-    // Check assigned users
+    const levelRes = await query(`SELECT id, name, code FROM user_levels WHERE id = $1`, [id]);
+    if (levelRes.rows.length === 0) {
+      return { deleted: false, reason: 'User Level not found' };
+    }
+    const levelName = levelRes.rows[0].name;
+    const levelCode = levelRes.rows[0].code;
+
+    // 1. Check assigned users
     const countRes = await query(
-      `SELECT COUNT(*) as cnt FROM users WHERE user_level_id = $1 OR user_level = (SELECT name FROM user_levels WHERE id = $1)`,
-      [id]
+      `SELECT COUNT(*) as cnt FROM users WHERE user_level_id = $1 OR user_level = $2`,
+      [id, levelName]
     );
     const userCount = parseInt(countRes.rows[0]?.cnt || '0', 10);
 
-    if (userCount > 0) {
+    // 2. Check attached business entities
+    let attachedEntityCount = 0;
+    let attachedEntityLabel = '';
+
+    if (levelCode === 'SIRE_SOURCING_CO' || id === 'LEVEL-05' || levelName.toLowerCase().includes('sourcing')) {
+      const scRes = await query(`SELECT COUNT(*) as cnt FROM sourcing_companies`);
+      const scCnt = parseInt(scRes.rows[0]?.cnt || '0', 10);
+      if (scCnt > 0) {
+        attachedEntityCount += scCnt;
+        attachedEntityLabel = `${scCnt} Genetics Sourcing Company record(s)`;
+      }
+    }
+
+    const totalAttached = userCount + attachedEntityCount;
+    if (totalAttached > 0) {
+      const reasons = [];
+      if (userCount > 0) reasons.push(`${userCount} active user account(s)`);
+      if (attachedEntityCount > 0) reasons.push(attachedEntityLabel);
+
       return {
         deleted: false,
-        reason: `This User Level is currently assigned to ${userCount} user${userCount > 1 ? 's' : ''} and cannot be deleted. You can deactivate it instead.`
+        reason: `This Account Level ("${levelName}") is currently attached to ${reasons.join(' and ')}. Permanent deletion is blocked to prevent breaking system data integrity. Please reassign or remove all attached accounts first, or safely deactivate this level instead.`
       };
     }
 
@@ -2095,10 +2368,10 @@ export class HerdbookRepository {
       capacity: r.capacity,
       imageUrl: r.image_url,
       notes: r.notes,
-      status: r.status,
+      status: r.status || 'Active',
       userId: r.user_id,
       accountEmail: r.user_email || r.email || null,
-      accountStatus: r.user_status || 'Inactive',
+      accountStatus: r.status || r.user_status || 'Active',
       userLevel: r.user_level || 'Farm Owner Account',
       animalCount: parseInt(r.animal_count || '0', 10),
       userCount: parseInt(r.user_count || '0', 10),
@@ -2144,10 +2417,10 @@ export class HerdbookRepository {
       capacity: r.capacity,
       imageUrl: r.image_url,
       notes: r.notes,
-      status: r.status,
+      status: r.status || 'Active',
       userId: r.user_id,
       accountEmail: r.user_email || r.email || null,
-      accountStatus: r.user_status || 'Inactive',
+      accountStatus: r.status || r.user_status || 'Active',
       userLevel: r.user_level || 'Farm Owner Account',
       animalCount: parseInt(r.animal_count || '0', 10),
       userCount: parseInt(r.user_count || '0', 10),
@@ -2599,9 +2872,18 @@ export class HerdbookRepository {
     customerType?: string;
     notes?: string;
     status?: string;
-  }, breederId: string): Promise<any> {
+  }, breederId?: string): Promise<any> {
     const id = `CUST-${Date.now().toString().slice(-6)}`;
     const code = data.code || id;
+
+    let validBreederId: string | null = null;
+    if (breederId && breederId !== 'ALL' && breederId !== 'ADMIN') {
+      const checkRes = await query(`SELECT id FROM users WHERE id = $1`, [breederId]);
+      if (checkRes.rows.length > 0) {
+        validBreederId = breederId;
+      }
+    }
+
     const sql = `
       INSERT INTO customers (
         id, code, name, phone, email, address, farm_location, province, district, commune, village,
@@ -2629,7 +2911,7 @@ export class HerdbookRepository {
       data.customerType || 'Individual Owner',
       data.notes || null,
       data.status || 'Active',
-      breederId
+      validBreederId
     ]);
     return res.rows[0];
   }
@@ -3078,7 +3360,7 @@ export class HerdbookRepository {
              (SELECT COUNT(*) FROM sires s WHERE s.sourcing_company_id = sc.id) as sire_count,
              (SELECT COUNT(*) FROM stock_insemination si WHERE si.sourcing_company_id = sc.id) as stock_count
       FROM sourcing_companies sc
-      ORDER BY sc.sort_order ASC, sc.name ASC
+      ORDER BY sc.name ASC
     `;
     const res = await query(sql);
     return res.rows.map(r => ({
@@ -3221,7 +3503,19 @@ export class HerdbookRepository {
   // 18. Breed Configurations Repository
   // ─────────────────────────────────────────────────────────────
 
+  // Cache for breed configurations (TTL 5 minutes)
+  private breedConfigCache: { data: any[]; timestamp: number; activeOnly: boolean } | null = null;
+
   async getBreedConfigurations(activeOnly = true): Promise<any[]> {
+    const NOW = Date.now();
+    if (
+      this.breedConfigCache &&
+      this.breedConfigCache.activeOnly === activeOnly &&
+      NOW - this.breedConfigCache.timestamp < 300000 // 5 minutes TTL
+    ) {
+      return this.breedConfigCache.data;
+    }
+
     const where = activeOnly ? `WHERE is_active = true` : '';
     const sql = `
       SELECT * FROM breed_configurations
@@ -3229,17 +3523,21 @@ export class HerdbookRepository {
       ORDER BY sort_order ASC, name ASC
     `;
     const res = await query(sql);
-    return res.rows.map(r => ({
+    const result = res.rows.map(r => ({
       id: r.id,
       code: r.code,
       name: r.name,
       category: r.category || 'Beef',
       origin: r.origin || '',
       description: r.description || '',
+      imageUrl: r.image_url || '',
       isActive: r.is_active,
       sortOrder: r.sort_order || 10,
       createdAt: r.created_at
     }));
+
+    this.breedConfigCache = { data: result, timestamp: NOW, activeOnly };
+    return result;
   }
 
   async createBreedConfiguration(data: {
@@ -3248,14 +3546,24 @@ export class HerdbookRepository {
     category?: string;
     origin?: string;
     description?: string;
+    imageUrl?: string;
     sortOrder?: number;
   }): Promise<any> {
+    this.breedConfigCache = null; // Invalidate cache
     const id = `BRD-${Date.now().toString().slice(-6)}`;
     const code = (data.code || data.name.trim().toUpperCase().replace(/[^A-Z0-9]+/g, '_')).slice(0, 50);
     const sql = `
-      INSERT INTO breed_configurations (id, code, name, category, origin, description, sort_order, is_active)
-      VALUES ($1, $2, $3, $4, $5, $6, $7, true)
-      ON CONFLICT (code) DO UPDATE SET name = EXCLUDED.name, category = EXCLUDED.category
+      INSERT INTO breed_configurations (id, code, name, category, origin, description, image_url, sort_order, is_active, updated_at)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, true, CURRENT_TIMESTAMP)
+      ON CONFLICT (code) DO UPDATE SET
+        name = EXCLUDED.name,
+        category = EXCLUDED.category,
+        origin = COALESCE(EXCLUDED.origin, breed_configurations.origin),
+        description = COALESCE(EXCLUDED.description, breed_configurations.description),
+        image_url = COALESCE(EXCLUDED.image_url, breed_configurations.image_url),
+        sort_order = COALESCE(EXCLUDED.sort_order, breed_configurations.sort_order),
+        is_active = true,
+        updated_at = CURRENT_TIMESTAMP
       RETURNING *
     `;
     const res = await query(sql, [
@@ -3263,12 +3571,14 @@ export class HerdbookRepository {
       data.category || 'Beef',
       data.origin || null,
       data.description || null,
+      data.imageUrl || null,
       data.sortOrder || 10
     ]);
     return res.rows[0];
   }
 
   async toggleBreedConfigStatus(id: string, isActive: boolean): Promise<any> {
+    this.breedConfigCache = null; // Invalidate cache
     const res = await query(
       `UPDATE breed_configurations SET is_active = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2 RETURNING *`,
       [isActive, id]
@@ -3282,9 +3592,11 @@ export class HerdbookRepository {
     category?: string;
     origin?: string;
     description?: string;
+    imageUrl?: string;
     sortOrder?: number;
     isActive?: boolean;
   }): Promise<any> {
+    this.breedConfigCache = null; // Invalidate cache
     const res = await query(
       `UPDATE breed_configurations SET
          name = COALESCE($1, name),
@@ -3292,12 +3604,13 @@ export class HerdbookRepository {
          category = COALESCE($3, category),
          origin = COALESCE($4, origin),
          description = COALESCE($5, description),
-         sort_order = COALESCE($6, sort_order),
-         is_active = COALESCE($7, is_active),
+         image_url = COALESCE($6, image_url),
+         sort_order = COALESCE($7, sort_order),
+         is_active = COALESCE($8, is_active),
          updated_at = CURRENT_TIMESTAMP
-       WHERE id = $8
+       WHERE id = $9
        RETURNING *`,
-      [data.name?.trim() || null, data.code?.trim().toUpperCase() || null, data.category || null, data.origin || null, data.description || null, data.sortOrder ?? null, data.isActive ?? null, id]
+      [data.name?.trim() || null, data.code?.trim().toUpperCase() || null, data.category || null, data.origin || null, data.description || null, data.imageUrl || null, data.sortOrder ?? null, data.isActive ?? null, id]
     );
     return res.rows[0];
   }

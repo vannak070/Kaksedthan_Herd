@@ -11,6 +11,7 @@ import {
 } from 'lucide-react';
 import { createBreederAction, updateBreederAction } from '@/app/actions';
 import { DynamicUpload } from '@/components/common/DynamicUpload';
+import ImageUploadContainer from '@/components/common/ImageUploadContainer';
 
 interface BreederItem {
   id: string;
@@ -532,11 +533,12 @@ export default function BreedersListClient({ initialBreeders }: Props) {
                   <h4 className="font-black text-slate-900 uppercase text-[11px] tracking-wider">SECTION 2 — BREEDER IMAGE</h4>
                 </div>
 
-                <DynamicUpload
-                  label="Breeder Profile Image (Up to 200 MB)"
+                <ImageUploadContainer
                   value={imageUrl}
                   onChange={(url) => setImageUrl(url)}
-                  targetSizeText="Supports up to 200 MB (Auto-optimized & compressed)"
+                  aspectRatio="1:1"
+                  placeholder="Upload or Capture Breeder Photo"
+                  label="Breeder Profile Image (1:1 Standardized HD)"
                 />
               </div>
 

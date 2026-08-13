@@ -1,24 +1,34 @@
 import React, { Suspense } from 'react';
 import { Metadata } from 'next';
-import { getUserLevelsAction } from '@/app/actions';
-import AdminUserLevelsClient from '@/components/admin/user-levels/AdminUserLevelsClient';
+import { getUserLevelsAction, getUsersAction } from '@/app/actions';
+import UnifiedAccessControlClient from '@/components/settings/UnifiedAccessControlClient';
+
+export const dynamic = 'force-dynamic';
 
 export const metadata: Metadata = {
-  title: 'User Level Management | Kaksedthan Herdbook',
-  description: 'Manage business account types, module access, and associated roles. User Levels define who a user is in the system.',
+  title: 'Account & User Levels | Kaksedthan Herdbook',
+  description: 'Manage business account types and system access levels.',
 };
 
 export default async function AdminUserLevelsPage() {
-  const result = await getUserLevelsAction();
-  const initialLevels = (result.success && Array.isArray(result.data)) ? result.data : [];
+  const [levelsRes, usersRes] = await Promise.all([
+    getUserLevelsAction(),
+    getUsersAction()
+  ]);
+  const initialLevels = (levelsRes.success && Array.isArray(levelsRes.data)) ? levelsRes.data : [];
+  const initialUsers = (usersRes.success && Array.isArray(usersRes.data)) ? usersRes.data : [];
 
   return (
     <Suspense fallback={
       <div className="flex items-center justify-center min-h-[400px]">
-        <div className="text-slate-500 font-bold text-sm">Loading User Level Management...</div>
+        <div className="text-slate-500 font-bold text-sm">Loading User Levels...</div>
       </div>
     }>
-      <AdminUserLevelsClient initialLevels={initialLevels} />
+      <UnifiedAccessControlClient
+        initialLevels={initialLevels as any}
+        initialUsers={initialUsers as any}
+        initialTab="levels"
+      />
     </Suspense>
   );
 }

@@ -16,6 +16,9 @@ import {
   toggleCustomerStatusAction
 } from '@/app/actions';
 import { DynamicUpload } from '@/components/common/DynamicUpload';
+import ImageUploadContainer from '@/components/common/ImageUploadContainer';
+import GlobalPagination from '@/components/common/GlobalPagination';
+import GlobalExport from '@/components/common/GlobalExport';
 
 interface CustomerItem {
   id: string;
@@ -54,6 +57,10 @@ export default function CustomersListClient({ initialCustomers }: Props) {
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('All');
   const [typeFilter, setTypeFilter] = useState<string>('All');
+
+  // Pagination State
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState(20);
 
   // Modal State
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -203,6 +210,11 @@ export default function CustomersListClient({ initialCustomers }: Props) {
 
   const availableTypes = Array.from(new Set(customers.map(c => c.customerType || 'Individual Owner')));
 
+  const totalCount = filteredCustomers.length;
+  const paginatedCustomers = useMemo(() => {
+    return filteredCustomers.slice((currentPage - 1) * pageSize, currentPage * pageSize);
+  }, [filteredCustomers, currentPage, pageSize]);
+
   return (
     <div className="space-y-6">
 
@@ -223,7 +235,7 @@ export default function CustomersListClient({ initialCustomers }: Props) {
         subtitle="Manage cattle owner profiles, contact records, National ID verification, and animal ownership rights."
         breadcrumbs={[{ label: 'Customers' }]}
         searchQuery={search}
-        onSearchChange={setSearch}
+        onSearchChange={(q) => { setSearch(q); setCurrentPage(1); }}
         searchPlaceholder="Search Owner Name, Code, Phone, Province..."
         onActionClick={openCreateModal}
         actionLabel="+ Add New Customer"
@@ -232,7 +244,7 @@ export default function CustomersListClient({ initialCustomers }: Props) {
           {/* Type Filter */}
           <select
             value={typeFilter}
-            onChange={(e) => setTypeFilter(e.target.value)}
+            onChange={(e) => { setTypeFilter(e.target.value); setCurrentPage(1); }}
             className="bg-slate-50 border border-slate-200 text-xs font-semibold rounded-xl px-3 py-2 text-slate-700 focus:outline-none focus:ring-2 focus:ring-purple-600 cursor-pointer"
           >
             <option value="All">All Customer Types</option>
@@ -244,7 +256,7 @@ export default function CustomersListClient({ initialCustomers }: Props) {
           {/* Status Filter */}
           <select
             value={statusFilter}
-            onChange={(e) => setStatusFilter(e.target.value)}
+            onChange={(e) => { setStatusFilter(e.target.value); setCurrentPage(1); }}
             className="bg-slate-50 border border-slate-200 text-xs font-semibold rounded-xl px-3 py-2 text-slate-700 focus:outline-none focus:ring-2 focus:ring-purple-600 cursor-pointer"
           >
             <option value="All">All Statuses</option>
@@ -271,77 +283,87 @@ export default function CustomersListClient({ initialCustomers }: Props) {
           </button>
         </div>
       ) : (
-        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
-          {filteredCustomers.map((cust) => {
-            const ownerName = cust.name;
-            const typeLabel = cust.customerType || 'Individual Owner';
-            const photoUrl = cust.imageUrl;
-            const animalCount = cust.animalCount || 0;
+        <>
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
+            {paginatedCustomers.map((cust) => {
+              const ownerName = cust.name;
+              const typeLabel = cust.customerType || 'Individual Owner';
+              const photoUrl = cust.imageUrl;
+              const animalCount = cust.animalCount || 0;
 
-            return (
-              <Link
-                key={cust.id}
-                href={`/customers/${cust.id}`}
-                className="group bg-white rounded-3xl border border-slate-200/90 shadow-2xs hover:shadow-xl hover:border-purple-500 transition-all duration-200 overflow-hidden flex flex-col justify-between cursor-pointer p-3.5"
-              >
-                <div>
-                  {/* Standard Image Container with Status Badge */}
-                  <div className="relative mb-3">
-                    <StandardAnimalImage
-                      src={photoUrl}
-                      alt={ownerName}
-                      fallbackText="Cow Owner"
-                    />
-                    <span className={`absolute top-2.5 right-2.5 font-black text-[9px] px-2 py-0.5 rounded-full uppercase tracking-wider shadow-xs ${
-                      cust.status === 'Active' ? 'bg-emerald-600 text-white' : 'bg-slate-500 text-white'
-                    }`}>
-                      {cust.status}
-                    </span>
-                    {cust.nationalId && (
-                      <span className="absolute top-2.5 left-2.5 bg-purple-600 text-white font-black text-[8.5px] px-2 py-0.5 rounded-full uppercase tracking-wider shadow-xs flex items-center gap-1">
-                        <ShieldCheck className="h-2.5 w-2.5" /> ID Verified
+              return (
+                <Link
+                  key={cust.id}
+                  href={`/customers/${cust.id}`}
+                  className="group bg-white rounded-3xl border border-slate-200/90 shadow-2xs hover:shadow-xl hover:border-purple-500 transition-all duration-200 overflow-hidden flex flex-col justify-between cursor-pointer p-3.5"
+                >
+                  <div>
+                    {/* Standard Image Container with Status Badge */}
+                    <div className="relative mb-3">
+                      <StandardAnimalImage
+                        src={photoUrl}
+                        alt={ownerName}
+                        fallbackText="Cow Owner"
+                      />
+                      <span className={`absolute top-2.5 right-2.5 font-black text-[9px] px-2 py-0.5 rounded-full uppercase tracking-wider shadow-xs ${
+                        cust.status === 'Active' ? 'bg-emerald-600 text-white' : 'bg-slate-500 text-white'
+                      }`}>
+                        {cust.status}
                       </span>
-                    )}
-                  </div>
+                      {cust.nationalId && (
+                        <span className="absolute top-2.5 left-2.5 bg-purple-600 text-white font-black text-[8.5px] px-2 py-0.5 rounded-full uppercase tracking-wider shadow-xs flex items-center gap-1">
+                          <ShieldCheck className="h-2.5 w-2.5" /> ID Verified
+                        </span>
+                      )}
+                    </div>
 
-                  {/* Title & Metadata Hierarchy */}
-                  <div className="space-y-1">
-                    <h3 className="text-sm font-black text-slate-900 group-hover:text-purple-600 transition-colors truncate">
-                      {ownerName}
-                    </h3>
-                    <p className="text-xs font-extrabold text-[#dc5c15] truncate">{typeLabel}</p>
+                    {/* Title & Metadata Hierarchy */}
+                    <div className="space-y-1">
+                      <h3 className="text-sm font-black text-slate-900 group-hover:text-purple-600 transition-colors truncate">
+                        {ownerName}
+                      </h3>
+                      <p className="text-xs font-extrabold text-[#dc5c15] truncate">{typeLabel}</p>
 
-                    {/* Specs Box */}
-                    <div className="mt-2.5 space-y-1 text-[11px] bg-slate-50 p-2.5 rounded-xl border border-slate-100 text-slate-600">
-                      <div className="flex justify-between">
-                        <span className="text-slate-400 font-medium">Code:</span>
-                        <span className="font-mono font-bold text-purple-700">{cust.code || cust.id}</span>
-                      </div>
-                      <div className="flex justify-between border-t border-slate-200/60 pt-1 mt-1">
-                        <span className="font-extrabold text-slate-500">Phone:</span>
-                        <span className="font-bold text-slate-900 truncate max-w-[110px]">{cust.phone || 'N/A'}</span>
-                      </div>
-                      <div className="flex justify-between">
-                        <span className="font-extrabold text-slate-500">Location:</span>
-                        <span className="font-bold text-slate-800 truncate max-w-[110px]">{cust.province || cust.address || 'N/A'}</span>
-                      </div>
-                      <div className="flex justify-between">
-                        <span className="font-extrabold text-slate-500">Owned Cattle:</span>
-                        <span className="font-black text-amber-700">{animalCount} heads</span>
+                      {/* Specs Box */}
+                      <div className="mt-2.5 space-y-1 text-[11px] bg-slate-50 p-2.5 rounded-xl border border-slate-100 text-slate-600">
+                        <div className="flex justify-between">
+                          <span className="text-slate-400 font-medium">Code:</span>
+                          <span className="font-mono font-bold text-purple-700">{cust.code || cust.id}</span>
+                        </div>
+                        <div className="flex justify-between border-t border-slate-200/60 pt-1 mt-1">
+                          <span className="font-extrabold text-slate-500">Phone:</span>
+                          <span className="font-bold text-slate-900 truncate max-w-[110px]">{cust.phone || 'N/A'}</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="font-extrabold text-slate-500">Location:</span>
+                          <span className="font-bold text-slate-800 truncate max-w-[110px]">{cust.province || cust.address || 'N/A'}</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="font-extrabold text-slate-500">Owned Cattle:</span>
+                          <span className="font-black text-amber-700">{animalCount} heads</span>
+                        </div>
                       </div>
                     </div>
                   </div>
-                </div>
 
-                {/* Card Footer Action */}
-                <div className="mt-3 pt-2.5 border-t border-slate-100 flex items-center justify-between text-xs font-bold text-purple-600">
-                  <span>View Customer Profile</span>
-                  <span className="group-hover:translate-x-0.5 transition-transform">→</span>
-                </div>
-              </Link>
-            );
-          })}
-        </div>
+                  {/* Card Footer Action */}
+                  <div className="mt-3 pt-2.5 border-t border-slate-100 flex items-center justify-between text-xs font-bold text-purple-600">
+                    <span>View Customer Profile</span>
+                    <span className="group-hover:translate-x-0.5 transition-transform">→</span>
+                  </div>
+                </Link>
+              );
+            })}
+          </div>
+
+          <GlobalPagination
+            currentPage={currentPage}
+            pageSize={pageSize}
+            totalCount={totalCount}
+            onPageChange={setCurrentPage}
+            onPageSizeChange={(newSize) => { setPageSize(newSize); setCurrentPage(1); }}
+          />
+        </>
       )}
 
       {/* ── 3-Section Create / Edit Modal (NO LOGIN ACCOUNT) ───────────────────────── */}
@@ -531,11 +553,12 @@ export default function CustomersListClient({ initialCustomers }: Props) {
                   <h4 className="font-black text-slate-900 uppercase text-[11px] tracking-wider">SECTION 3 — CUSTOMER IMAGE</h4>
                 </div>
 
-                <DynamicUpload
-                  label="Customer Profile Image (Up to 200 MB)"
+                <ImageUploadContainer
                   value={imageUrl}
                   onChange={(url) => setImageUrl(url)}
-                  targetSizeText="Supports up to 200 MB (Auto-optimized & compressed)"
+                  aspectRatio="1:1"
+                  placeholder="Upload or Capture Cow Owner Photo"
+                  label="Customer Profile Image (1:1 Standardized HD)"
                 />
               </div>
 

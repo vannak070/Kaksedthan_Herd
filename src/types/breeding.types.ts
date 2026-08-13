@@ -3,15 +3,25 @@ export interface SireItem {
   id: string; // SIR-001
   name: string;
   breed: string;
+  breedId?: string;
+  registrationNumber?: string;
   dob?: string;
   bloodline?: string;
   sourcingCompany?: string;
   sourcingCompanyId?: string;
+  sourcingCompanyCountry?: string;
+  sourcingCompanyImage?: string;
+  breederId?: string;
   fatherId?: string;
   motherId?: string;
   imageUrl?: string;
+  ownerType?: 'Farm Station' | 'Breeder' | 'Cow Owner' | 'Sire Sourcing Company' | 'Internal Company';
+  ownerId?: string;
   ownerName?: string;
+  farmId?: string;
   farmLocation?: string;
+  ownershipStatus?: string;
+  ownershipStartDate?: string;
   status: 'Active' | 'Retired' | 'Sold' | 'Deceased' | 'Archived';
   certificationStatus?: 'NOT_APPLIED' | 'PENDING_APPROVAL' | 'APPROVED' | 'REJECTED';
   createdAt?: string;
@@ -35,6 +45,10 @@ export interface StockInseminationItem {
   breederName?: string;
   availability: 'Available' | 'Out of Stock' | 'Reserved' | 'Discontinued';
   status: 'Active' | 'Archived';
+  tankNumber?: string;
+  collectionDate?: string;
+  notes?: string;
+  initialQuantity?: number;
   createdAt?: string;
   updatedAt?: string;
 }
@@ -44,11 +58,15 @@ export interface DamItem {
   id: string; // DAM-001
   name?: string;
   breed: string;
+  breedId?: string;
   dob?: string;
   fatherId?: string;
   motherId?: string;
+  ownerType?: string;
   ownerName?: string;
   ownerId?: string;
+  customerId?: string;
+  customerName?: string;
   farmLocation?: string;
   farmId?: string;
   imageUrl?: string;

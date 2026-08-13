@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import {
@@ -66,50 +66,70 @@ const SPECIAL_PERMISSIONS = {
 
 type TabId = 'details' | 'permissions' | 'users';
 
-function ImpactWarningModal({
-  open, userCount, onConfirm, onCancel, loading
-}: {
-  open: boolean; userCount: number; onConfirm: () => void; onCancel: () => void; loading: boolean;
-}) {
-  if (!open) return null;
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/60 backdrop-blur-sm p-4">
-      <div className="bg-white rounded-3xl shadow-2xl max-w-md w-full p-6 space-y-4 border border-slate-200">
-        <div className="flex items-start gap-3">
-          <div className="h-10 w-10 rounded-2xl bg-rose-50 flex items-center justify-center flex-shrink-0 border border-rose-200">
-            <AlertTriangle className="h-5 w-5 text-rose-600" />
-          </div>
-          <div>
-            <h3 className="font-black text-slate-900 text-sm">Change Impact Warning</h3>
-            <p className="text-xs text-slate-600 mt-1 font-medium leading-relaxed">
-              This User Level is currently assigned to <strong className="font-black text-slate-900">{userCount} users</strong>. 
-              Changing permissions will immediately update access for all assigned accounts.
-            </p>
-          </div>
-        </div>
-        <div className="flex gap-3 justify-end pt-2">
-          <button
-            disabled={loading}
-            onClick={onCancel}
-            className="px-4 py-2 rounded-xl border border-slate-200 text-xs font-bold text-slate-700 hover:bg-slate-50 transition-all cursor-pointer"
-          >
-            Cancel
-          </button>
-          <button
-            disabled={loading}
-            onClick={onConfirm}
-            className="px-4 py-2 rounded-xl text-xs font-bold text-white bg-rose-600 hover:bg-rose-700 transition-all cursor-pointer disabled:opacity-50"
-          >
-            {loading ? 'Saving...' : 'Yes, Update Permissions'}
-          </button>
-        </div>
-      </div>
-    </div>
-  );
+
+// ─── Pure helpers — build permission maps from a modules array ───
+function buildCrudPermsFromModules(
+  modules: any[],
+  levelName: string,
+  levelCode: string
+): Record<string, { view: boolean; create: boolean; update: boolean; delete: boolean }> {
+  const initial: Record<string, { view: boolean; create: boolean; update: boolean; delete: boolean }> = {};
+  const modMap: Record<string, boolean> = {};
+  modules.forEach((m: any) => { modMap[m.moduleKey] = m.isAvailable; });
+
+  const isSystemAdmin =
+    levelName.toLowerCase().includes('admin') || levelCode.toLowerCase().includes('admin');
+
+  CRUD_MODULES.forEach(m => {
+    // Check if granular CRUD keys exist in database modules
+    const hasView = modMap.hasOwnProperty(`${m.key}_view`);
+    const hasCreate = modMap.hasOwnProperty(`${m.key}_create`);
+    const hasUpdate = modMap.hasOwnProperty(`${m.key}_update`);
+    const hasDelete = modMap.hasOwnProperty(`${m.key}_delete`);
+
+    if (hasView || hasCreate || hasUpdate || hasDelete) {
+      initial[m.key] = {
+        view: modMap[`${m.key}_view`] ?? false,
+        create: modMap[`${m.key}_create`] ?? false,
+        update: modMap[`${m.key}_update`] ?? false,
+        delete: modMap[`${m.key}_delete`] ?? false,
+      };
+    } else {
+      let active = isSystemAdmin;
+      if (modules.length > 0) {
+        const foundKey = modMap.hasOwnProperty(m.key)
+          ? m.key
+          : modMap.hasOwnProperty(`${m.key}s`)
+          ? `${m.key}s`
+          : undefined;
+        if (foundKey !== undefined) {
+          active = modMap[foundKey];
+        }
+      }
+      initial[m.key] = { view: active, create: active, update: active, delete: active };
+    }
+  });
+  return initial;
 }
 
+function buildSpecialPermsFromModules(
+  modules: any[],
+  levelName: string,
+  levelCode: string
+): Record<string, boolean> {
+  const initial: Record<string, boolean> = {};
+  const modMap: Record<string, boolean> = {};
+  modules.forEach((m: any) => { modMap[m.moduleKey] = m.isAvailable; });
+  const isSystemAdmin =
+    levelName.toLowerCase().includes('admin') || levelCode.toLowerCase().includes('admin');
 
-export default function AdminUserLevelDetailClient({ initialLevel, initialUsers }: Props) {
+  Object.values(SPECIAL_PERMISSIONS).flat().forEach((p: { key: string; label: string }) => {
+    initial[p.key] = modMap.hasOwnProperty(p.key) ? modMap[p.key] : isSystemAdmin;
+  });
+  return initial;
+}
+
+export default function AdminUserLevelDetailClient({ initialLevel, initialUsers, initialModules }: Props) {
   const router = useRouter();
   const [level, setLevel] = useState(initialLevel);
   const [users] = useState<AssignedUser[]>(initialUsers);
@@ -125,21 +145,24 @@ export default function AdminUserLevelDetailClient({ initialLevel, initialUsers 
   const [sortOrder, setSortOrder] = useState(level.sortOrder || 10);
   const [status, setStatus] = useState(level.status);
 
-  // Form state for Permissions
-  const [crudPerms, setCrudPerms] = useState<Record<string, { view: boolean; create: boolean; update: boolean; delete: boolean }>>(() => {
-    const initial: any = {};
-    CRUD_MODULES.forEach(m => {
-      initial[m.key] = { view: false, create: false, update: false, delete: false };
-    });
-    return initial;
-  });
-  
-  const [specialPerms, setSpecialPerms] = useState<Record<string, boolean>>({});
+  // Form state for Permissions — initialized from DB modules
+  const [crudPerms, setCrudPerms] = useState<Record<string, { view: boolean; create: boolean; update: boolean; delete: boolean }>>(
+    () => buildCrudPermsFromModules(initialModules || [], initialLevel?.name || '', initialLevel?.code || '')
+  );
+
+  const [specialPerms, setSpecialPerms] = useState<Record<string, boolean>>(
+    () => buildSpecialPermsFromModules(initialModules || [], initialLevel?.name || '', initialLevel?.code || '')
+  );
+
+  // Re-sync permissions whenever initialModules prop updates (after router.refresh())
+  useEffect(() => {
+    setCrudPerms(buildCrudPermsFromModules(initialModules || [], initialLevel?.name || '', initialLevel?.code || ''));
+    setSpecialPerms(buildSpecialPermsFromModules(initialModules || [], initialLevel?.name || '', initialLevel?.code || ''));
+  }, [initialModules]);
+
 
   const [saving, setSaving] = useState(false);
   const [toast, setToast] = useState<{ type: 'success' | 'error' | 'warning'; message: string } | null>(null);
-
-  const [impactModalOpen, setImpactModalOpen] = useState(false);
 
   const showToast = (type: 'success' | 'error' | 'warning', message: string) => {
     setToast({ type, message });
@@ -169,23 +192,45 @@ export default function AdminUserLevelDetailClient({ initialLevel, initialUsers 
   const executeSavePermissions = async () => {
     setSaving(true);
     try {
-      // Mocking save permissions since we don't have the action yet
-      await new Promise(r => setTimeout(r, 800));
-      showToast('success', 'Permissions saved successfully.');
-      setImpactModalOpen(false);
-    } catch {
-      showToast('error', 'Failed to save permissions.');
+      const modulesPayload: any[] = [];
+      // 1. Save CRUD permissions (overall module + granular view/create/update/delete)
+      CRUD_MODULES.forEach(m => {
+        const p = crudPerms[m.key] || { view: false, create: false, update: false, delete: false };
+        const isAvailable = p.view || p.create || p.update || p.delete;
+        
+        // Save overall module status
+        modulesPayload.push({ moduleKey: m.key, moduleName: m.name, isAvailable });
+        modulesPayload.push({ moduleKey: `${m.key}s`, moduleName: m.name, isAvailable });
+
+        // Save granular CRUD actions
+        modulesPayload.push({ moduleKey: `${m.key}_view`, moduleName: `${m.name} (View)`, isAvailable: p.view });
+        modulesPayload.push({ moduleKey: `${m.key}_create`, moduleName: `${m.name} (Create)`, isAvailable: p.create });
+        modulesPayload.push({ moduleKey: `${m.key}_update`, moduleName: `${m.name} (Update)`, isAvailable: p.update });
+        modulesPayload.push({ moduleKey: `${m.key}_delete`, moduleName: `${m.name} (Delete)`, isAvailable: p.delete });
+      });
+
+      // 2. Save Special permissions
+      Object.entries(specialPerms).forEach(([key, isAvailable]) => {
+        modulesPayload.push({ moduleKey: key, moduleName: key, isAvailable: !!isAvailable });
+      });
+
+      const res = await updateUserLevelModulesAction(level.id, modulesPayload);
+      if (res.success) {
+        showToast('success', `Permissions for ${level.name} saved successfully to PostgreSQL database.`);
+        router.refresh();
+      } else {
+        showToast('error', res.error || 'Failed to save permissions.');
+      }
+    } catch (err: any) {
+      showToast('error', err.message || 'Failed to save permissions.');
     } finally {
       setSaving(false);
     }
   };
 
   const handleSavePermissionsClick = () => {
-    if (level.userCount > 0) {
-      setImpactModalOpen(true);
-    } else {
-      executeSavePermissions();
-    }
+    // Save directly — no blocking confirmation dialog
+    executeSavePermissions();
   };
 
   const handleCrudToggle = (moduleKey: string, action: 'view' | 'create' | 'update' | 'delete', val: boolean) => {
@@ -244,20 +289,15 @@ export default function AdminUserLevelDetailClient({ initialLevel, initialUsers 
         </div>
       )}
 
-      <ImpactWarningModal 
-        open={impactModalOpen} 
-        userCount={level.userCount} 
-        onCancel={() => setImpactModalOpen(false)} 
-        onConfirm={executeSavePermissions} 
-        loading={saving} 
-      />
+
 
       <div className="bg-white rounded-3xl border border-slate-200 shadow-sm overflow-hidden">
         <div className="bg-gradient-to-r from-purple-700 to-purple-500 px-6 py-5">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
             <div className="flex items-center gap-3">
-              <Link href="/admin/user-levels" className="p-2.5 rounded-xl bg-white/15 hover:bg-white/25 transition-colors border border-white/20 cursor-pointer">
+              <Link href="/settings/users" className="p-2.5 rounded-xl bg-white/15 hover:bg-white/25 transition-colors border border-white/20 cursor-pointer flex items-center gap-1.5 text-white font-bold text-xs" title="Back to Users & Access Control">
                 <ArrowLeft className="h-4 w-4 text-white" />
+                <span>Back to Users & Access Control</span>
               </Link>
               <div className="h-11 w-11 bg-white/20 rounded-xl flex items-center justify-center border border-white/30 flex-shrink-0">
                 <Layers className="h-5 w-5 text-white" />

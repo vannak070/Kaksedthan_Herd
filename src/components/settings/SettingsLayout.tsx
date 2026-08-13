@@ -4,7 +4,7 @@ import React from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import PageHeader from '@/components/common/PageHeader';
-import { SETTINGS_MENU_ITEMS } from '@/constants/settings-menu';
+import { Settings, BookOpen, Sliders, Hash, Heart, Award, LayoutGrid } from 'lucide-react';
 
 interface SettingsLayoutProps {
   children: React.ReactNode;
@@ -13,58 +13,83 @@ interface SettingsLayoutProps {
 export default function SettingsLayout({ children }: SettingsLayoutProps) {
   const pathname = usePathname();
 
-  const activeItem = SETTINGS_MENU_ITEMS.find(item => item.href === pathname) || SETTINGS_MENU_ITEMS[0];
-
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 max-w-7xl mx-auto">
       <PageHeader
-        title="System Setup & Configuration"
-        subtitle="Centralized administration, master parameters, business rules, and security control."
+        title="System Configuration"
+        subtitle="Centralized master lookups, organization parameters, numbering schemes, and domain rules."
         breadcrumbs={[
-          { label: 'System Setup', href: '/settings' },
-          { label: activeItem.label }
+          { label: 'Administration & Setup', href: '/settings/general' },
+          { label: 'System Configuration' }
         ]}
       />
 
-      <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
-        {/* Settings Navigation Sidebar */}
-        <div className="lg:col-span-1 bg-white rounded-2xl border border-slate-200 p-4 shadow-sm h-fit space-y-1">
-          <p className="text-[10px] font-black uppercase tracking-wider text-slate-400 px-3 py-2">
-            Configuration Modules
-          </p>
+      {/* ── UNIFIED SYSTEM CONFIGURATION SUB-TABS ── */}
+      <div className="bg-white border border-slate-200 shadow-xs rounded-2xl p-2 flex flex-wrap gap-2 text-xs">
+        <Link
+          href="/settings/general"
+          className={`px-4 py-2 rounded-xl font-bold transition-all flex items-center gap-1.5 cursor-pointer ${
+            pathname.startsWith('/settings/general')
+              ? 'bg-slate-900 text-white shadow-xs'
+              : 'text-slate-700 hover:bg-slate-100'
+          }`}
+        >
+          <Sliders className="h-3.5 w-3.5" />
+          <span>General & Organization</span>
+        </Link>
 
-          <nav className="space-y-1">
-            {SETTINGS_MENU_ITEMS.map((item) => {
-              const Icon = item.icon;
-              const isActive = item.href === '/settings' ? pathname === '/settings' : pathname.startsWith(item.href);
+        <Link
+          href="/settings/master-data"
+          className={`px-4 py-2 rounded-xl font-bold transition-all flex items-center gap-1.5 cursor-pointer ${
+            pathname.startsWith('/settings/master-data')
+              ? 'bg-slate-900 text-white shadow-xs'
+              : 'text-slate-700 hover:bg-slate-100'
+          }`}
+        >
+          <BookOpen className="h-3.5 w-3.5 text-[#dc5c15]" />
+          <span>Master Data Lookups</span>
+        </Link>
 
-              return (
-                <Link
-                  key={item.href}
-                  href={item.href}
-                  className={`flex items-start gap-3 p-3 rounded-xl transition-all ${
-                    isActive
-                      ? 'bg-[#dc5c15] text-white font-bold shadow-sm'
-                      : 'text-slate-700 hover:bg-slate-50 hover:text-slate-900'
-                  }`}
-                >
-                  <Icon className={`h-4 w-4 mt-0.5 shrink-0 ${isActive ? 'text-white' : 'text-[#dc5c15]'}`} />
-                  <div>
-                    <p className="text-xs font-bold leading-tight">{item.label}</p>
-                    <p className={`text-[10px] mt-0.5 leading-tight ${isActive ? 'text-orange-100' : 'text-slate-400 font-medium'}`}>
-                      {item.description}
-                    </p>
-                  </div>
-                </Link>
-              );
-            })}
-          </nav>
-        </div>
+        <Link
+          href="/settings/numbering"
+          className={`px-4 py-2 rounded-xl font-bold transition-all flex items-center gap-1.5 cursor-pointer ${
+            pathname.startsWith('/settings/numbering')
+              ? 'bg-slate-900 text-white shadow-xs'
+              : 'text-slate-700 hover:bg-slate-100'
+          }`}
+        >
+          <Hash className="h-3.5 w-3.5" />
+          <span>Auto Numbering Schemes</span>
+        </Link>
 
-        {/* Main Settings Content */}
-        <div className="lg:col-span-3">
-          {children}
-        </div>
+        <Link
+          href="/settings/breeding"
+          className={`px-4 py-2 rounded-xl font-bold transition-all flex items-center gap-1.5 cursor-pointer ${
+            pathname.startsWith('/settings/breeding')
+              ? 'bg-slate-900 text-white shadow-xs'
+              : 'text-slate-700 hover:bg-slate-100'
+          }`}
+        >
+          <Heart className="h-3.5 w-3.5 text-rose-500" />
+          <span>Breeding & Gestation Rules</span>
+        </Link>
+
+        <Link
+          href="/settings/certificate"
+          className={`px-4 py-2 rounded-xl font-bold transition-all flex items-center gap-1.5 cursor-pointer ${
+            pathname.startsWith('/settings/certificate')
+              ? 'bg-slate-900 text-white shadow-xs'
+              : 'text-slate-700 hover:bg-slate-100'
+          }`}
+        >
+          <Award className="h-3.5 w-3.5 text-indigo-500" />
+          <span>Certificate & Dynamic QR</span>
+        </Link>
+      </div>
+
+      {/* ── FULL-WIDTH WORKSPACE CONTENT AREA ── */}
+      <div className="w-full">
+        {children}
       </div>
     </div>
   );

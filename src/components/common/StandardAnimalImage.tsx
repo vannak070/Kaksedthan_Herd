@@ -25,7 +25,7 @@ export default function StandardAnimalImage({
   fallbackText = 'No Image',
   size = 'full',
   animalType = 'animal',
-  allowZoom = true,
+  allowZoom = false,
 }: StandardAnimalImageProps) {
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<boolean>(false);
@@ -79,7 +79,15 @@ export default function StandardAnimalImage({
 
         {/* Main Image */}
         {hasImage && !error ? (
-          <div className="relative w-full h-full cursor-pointer overflow-hidden" onClick={() => allowZoom && setIsZoomed(true)}>
+          <div
+            className="relative w-full h-full cursor-pointer overflow-hidden"
+            onClick={(e) => {
+              if (allowZoom) {
+                e.stopPropagation();
+                setIsZoomed(true);
+              }
+            }}
+          >
             <img
               ref={imgRef}
               src={resolvedSrc!}

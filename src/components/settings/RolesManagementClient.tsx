@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useMemo } from 'react';
+import Link from 'next/link';
 import { CRUD_MODULES, SPECIAL_PERMISSION_GROUPS, CustomRoleDefinition, PermissionKey } from '@/types/settings.types';
 import { getRolesAction, createRoleAction, updateRoleAction, toggleRoleStatusAction, cloneRoleAction, deleteRoleAction } from '@/app/actions';
 import { useAccessControl } from '@/hooks/useAccessControl';
@@ -167,6 +168,29 @@ export default function RolesManagementClient({ initialRoles, callerPermissions 
 
   return (
     <div className="w-full min-h-screen bg-slate-50 p-6 md:p-10 relative">
+      {/* Unified Architecture Notice Banner */}
+      <div className="mb-6 bg-gradient-to-r from-purple-50 to-indigo-50 border border-purple-200/80 rounded-3xl p-5 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 shadow-xs">
+        <div className="flex items-start gap-3">
+          <div className="h-10 w-10 rounded-2xl bg-purple-600 text-white flex items-center justify-center font-black flex-shrink-0">
+            🛡️
+          </div>
+          <div>
+            <span className="text-[10px] font-black uppercase text-purple-700 tracking-wider">Unified Access Architecture</span>
+            <h3 className="text-sm font-black text-slate-900">User Levels & Roles Consolidated</h3>
+            <p className="text-xs text-slate-600 font-medium mt-0.5">
+              User Levels and Roles are merged into single Unified Access Profiles. Managing an Access Profile configures both sidebar navigation visibility and CRUD action rights without double work.
+            </p>
+          </div>
+        </div>
+
+        <Link
+          href="/settings/users"
+          className="px-4 py-2.5 rounded-xl bg-purple-600 hover:bg-purple-700 text-white text-xs font-black shadow-md transition-all whitespace-nowrap cursor-pointer shrink-0"
+        >
+          ⚡ Open Unified Access Profiles
+        </Link>
+      </div>
+
       {/* Header */}
       <div className="mb-8 bg-gradient-to-r from-purple-700 to-indigo-700 rounded-3xl p-8 text-white shadow-lg flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
         <div>

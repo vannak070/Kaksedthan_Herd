@@ -62,6 +62,8 @@ export default function NewStockInseminationPage() {
         breed: sire.breed || 'Brahman',
         stockName: `${sire.name} Semen Straw Batch`,
         imageUrl: sire.imageUrl || prev.imageUrl,
+        ownerName: sire.ownerName || prev.ownerName,
+        farmLocation: sire.farmLocation || prev.farmLocation,
       }));
     }
   };

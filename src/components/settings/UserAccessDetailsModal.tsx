@@ -2,11 +2,11 @@
 
 import React, { useState, useEffect } from 'react';
 import {
-  X, Shield, User, Lock, Database, Layers, CheckCircle2, XCircle,
-  ChevronDown, ChevronRight, Crown, AlertTriangle, RefreshCw
+  Shield, User, Database, CheckCircle2, XCircle,
+  ChevronDown, ChevronRight, Crown, RefreshCw, Edit3
 } from 'lucide-react';
-import { getUserEffectivePermissionsAction, assignRoleToUserAction, removeRoleFromUserAction, getRolesAction } from '@/app/actions';
-import { CRUD_MODULES, SPECIAL_PERMISSION_GROUPS, UserRoleItem, CustomRoleDefinition } from '@/types/settings.types';
+import { getUserEffectivePermissionsAction } from '@/app/actions';
+import { CRUD_MODULES, SPECIAL_PERMISSION_GROUPS, UserRoleItem } from '@/types/settings.types';
 
 interface Props {
   user: UserRoleItem;
@@ -15,6 +15,7 @@ interface Props {
   isOpen: boolean;
   onClose: () => void;
   onRefresh?: () => void;
+  onEdit?: (user: UserRoleItem) => void;
 }
 
 const CATEGORY_COLOR: Record<string, string> = {
@@ -28,15 +29,11 @@ const CATEGORY_COLOR: Record<string, string> = {
   'Sourcing Company': 'bg-sky-100 text-sky-800 border-sky-200',
 };
 
-export default function UserAccessDetailsModal({ user, callerUserId, isSuperAdmin, isOpen, onClose, onRefresh }: Props) {
+export default function UserAccessDetailsModal({ user, callerUserId, isSuperAdmin, isOpen, onClose, onEdit }: Props) {
   const [effectivePermissions, setEffectivePermissions] = useState<string[]>([]);
   const [assignedRoles, setAssignedRoles] = useState<{ id: string; name: string; category: string; status: string }[]>([]);
-  const [allRoles, setAllRoles] = useState<CustomRoleDefinition[]>([]);
   const [loading, setLoading] = useState(true);
-  const [expandedModules, setExpandedModules] = useState<Set<string>>(new Set(['sire', 'breeding_program', 'herdbook']));
-  const [assigningRole, setAssigningRole] = useState(false);
-  const [selectedNewRole, setSelectedNewRole] = useState('');
-  const [toast, setToast] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
+  const [expandedModules, setExpandedModules] = useState<Set<string>>(new Set());
 
   useEffect(() => {
     if (!isOpen) return;
@@ -46,53 +43,18 @@ export default function UserAccessDetailsModal({ user, callerUserId, isSuperAdmi
   async function loadData() {
     setLoading(true);
     try {
-      const [permsResult, rolesResult] = await Promise.all([
-        getUserEffectivePermissionsAction(user.id, callerUserId),
-        getRolesAction(),
-      ]);
+      const permsResult = await getUserEffectivePermissionsAction(user.id, callerUserId);
       if (permsResult.success && permsResult.data) {
-        setEffectivePermissions((permsResult.data as any).permissions || []);
-        setAssignedRoles((permsResult.data as any).roles || []);
-      }
-      if (rolesResult.success && rolesResult.data) {
-        setAllRoles(rolesResult.data as CustomRoleDefinition[]);
+        const rawPerms = (permsResult.data as any).permissions;
+        setEffectivePermissions(Array.isArray(rawPerms) ? rawPerms : []);
+        setAssignedRoles(Array.isArray((permsResult.data as any).roles) ? (permsResult.data as any).roles : []);
       }
     } catch {}
     setLoading(false);
   }
 
-  function showToast(type: 'success' | 'error', message: string) {
-    setToast({ type, message });
-    setTimeout(() => setToast(null), 3500);
-  }
-
-  async function handleAssignRole() {
-    if (!selectedNewRole) return;
-    setAssigningRole(true);
-    const result = await assignRoleToUserAction(user.id, selectedNewRole, callerUserId);
-    if (result.success) {
-      showToast('success', 'Role assigned successfully.');
-      setSelectedNewRole('');
-      await loadData();
-      onRefresh?.();
-    } else {
-      showToast('error', result.error || 'Failed to assign role.');
-    }
-    setAssigningRole(false);
-  }
-
-  async function handleRemoveRole(roleId: string) {
-    const result = await removeRoleFromUserAction(user.id, roleId, callerUserId);
-    if (result.success) {
-      showToast('success', 'Role removed.');
-      await loadData();
-      onRefresh?.();
-    } else {
-      showToast('error', result.error || 'Failed to remove role.');
-    }
-  }
-
-  const permSet = new Set(effectivePermissions.map(p => p.toLowerCase()));
+  const safePermissions = Array.isArray(effectivePermissions) ? effectivePermissions : [];
+  const permSet = new Set(safePermissions.map(p => typeof p === 'string' ? p.toLowerCase() : ''));
   const hasPerm = (key: string) => permSet.has(key.toLowerCase());
 
   function toggleModule(id: string) {
@@ -104,13 +66,15 @@ export default function UserAccessDetailsModal({ user, callerUserId, isSuperAdmi
     });
   }
 
-  const unassignedRoles = allRoles.filter(
-    r => r.status === 'Active' && !assignedRoles.some(ar => ar.id === r.id || ar.name === r.name)
+  const totalCount = safePermissions.length;
+  const crudPerms = safePermissions.filter(p =>
+    typeof p === 'string' && !p.includes('certification') && !p.includes('user.') &&
+    !p.includes('role.') && !p.includes('permission.') && !p.includes('report') &&
+    !p.includes('export') && !p.includes('system')
   );
-
-  const totalCount = effectivePermissions.length;
-  const crudPerms = effectivePermissions.filter(p => !p.includes('certification') && !p.includes('user.') && !p.includes('role.') && !p.includes('permission.') && !p.includes('report') && !p.includes('export') && !p.includes('system'));
-  const specialPerms = effectivePermissions.filter(p => p.includes('user.') || p.includes('role.') || p.includes('permission.') || p.includes('certification'));
+  const specialPerms = safePermissions.filter(p =>
+    typeof p === 'string' && (p.includes('user.') || p.includes('role.') || p.includes('permission.') || p.includes('certification'))
+  );
 
   if (!isOpen) return null;
 
@@ -132,20 +96,21 @@ export default function UserAccessDetailsModal({ user, callerUserId, isSuperAdmi
               <h2 className="text-white font-black text-lg leading-tight">{user.name}</h2>
             </div>
           </div>
-          <button onClick={onClose} className="h-9 w-9 rounded-xl bg-white/10 hover:bg-white/20 transition flex items-center justify-center">
-            <X className="h-4 w-4 text-white" />
-          </button>
-        </div>
-
-        {/* Toast */}
-        {toast && (
-          <div className={`mx-6 mt-4 px-4 py-2.5 rounded-xl text-xs font-bold flex items-center gap-2 ${
-            toast.type === 'success' ? 'bg-emerald-50 text-emerald-800 border border-emerald-200' : 'bg-red-50 text-red-800 border border-red-200'
-          }`}>
-            {toast.type === 'success' ? <CheckCircle2 className="h-4 w-4" /> : <AlertTriangle className="h-4 w-4" />}
-            {toast.message}
+          <div className="flex items-center gap-2">
+            {onEdit && (
+              <button
+                onClick={() => { onClose(); onEdit(user); }}
+                className="px-3.5 py-1.5 rounded-xl bg-purple-600 hover:bg-purple-700 text-white font-black text-xs transition flex items-center gap-1.5 shadow-md cursor-pointer"
+              >
+                <Edit3 className="h-3.5 w-3.5" />
+                <span>Edit User Account</span>
+              </button>
+            )}
+            <button onClick={onClose} className="h-9 w-9 rounded-xl bg-white/10 hover:bg-white/20 transition flex items-center justify-center cursor-pointer">
+              <XCircle className="h-4 w-4 text-white" />
+            </button>
           </div>
-        )}
+        </div>
 
         {/* Scrollable Body */}
         <div className="overflow-y-auto flex-1 p-6 space-y-5">
@@ -158,63 +123,30 @@ export default function UserAccessDetailsModal({ user, callerUserId, isSuperAdmi
               {/* User Identity Panel */}
               <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
                 <InfoCard icon={<User className="h-4 w-4 text-slate-500" />} label="User Level" value={user.userLevel || user.role || 'N/A'} />
-                <InfoCard icon={<Layers className="h-4 w-4 text-indigo-500" />} label="Role" value={assignedRoles.length > 0 ? assignedRoles.map(r => r.name).join(', ') : (user.role || 'No Role')} />
+                <InfoCard icon={<Shield className="h-4 w-4 text-indigo-500" />} label="Role" value={user.role || 'No Role'} />
                 <InfoCard icon={<Database className="h-4 w-4 text-amber-500" />} label="Data Scope" value={user.dataScope || 'ASSIGNED_RECORD'} />
                 <InfoCard icon={<Shield className="h-4 w-4 text-emerald-500" />} label="Status" value={user.status || 'Active'} highlight={user.status === 'Active'} />
               </div>
 
-              {/* Assigned Roles + Role Assignment */}
-              <div className="bg-white border border-slate-200 rounded-2xl p-5 space-y-3">
-                <div className="flex items-center justify-between">
-                  <h3 className="text-xs font-black text-slate-900 uppercase tracking-wider flex items-center gap-1.5">
-                    <Crown className="h-3.5 w-3.5 text-amber-500" /> Assigned Roles
-                  </h3>
-                  <span className="text-[10px] font-bold text-slate-400 bg-slate-100 px-2 py-0.5 rounded-md">{assignedRoles.length} Role{assignedRoles.length !== 1 ? 's' : ''}</span>
-                </div>
-                {assignedRoles.length === 0 ? (
-                  <p className="text-xs text-slate-400 font-medium italic">No roles assigned via role management. Using legacy role field: <span className="font-bold text-slate-600">{user.role}</span></p>
-                ) : (
+              {/* Assigned Roles (read-only) */}
+              {assignedRoles.length > 0 && (
+                <div className="bg-white border border-slate-200 rounded-2xl p-5 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <h3 className="text-xs font-black text-slate-900 uppercase tracking-wider flex items-center gap-1.5">
+                      <Crown className="h-3.5 w-3.5 text-amber-500" /> Assigned Roles
+                    </h3>
+                    <span className="text-[10px] font-bold text-slate-400 bg-slate-100 px-2 py-0.5 rounded-md">{assignedRoles.length} Role{assignedRoles.length !== 1 ? 's' : ''}</span>
+                  </div>
                   <div className="flex flex-wrap gap-2">
                     {assignedRoles.map(role => (
                       <div key={role.id} className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold border ${CATEGORY_COLOR[role.category] || CATEGORY_COLOR.System}`}>
                         <Shield className="h-3 w-3" />
                         {role.name}
-                        {isSuperAdmin && (
-                          <button
-                            onClick={() => handleRemoveRole(role.id)}
-                            className="ml-1 h-4 w-4 rounded-full bg-black/10 hover:bg-black/20 flex items-center justify-center transition"
-                          >
-                            <X className="h-2.5 w-2.5" />
-                          </button>
-                        )}
                       </div>
                     ))}
                   </div>
-                )}
-
-                {/* Assign New Role (Super Admin only) */}
-                {isSuperAdmin && unassignedRoles.length > 0 && (
-                  <div className="flex items-center gap-2 pt-2 border-t border-slate-100">
-                    <select
-                      value={selectedNewRole}
-                      onChange={e => setSelectedNewRole(e.target.value)}
-                      className="flex-1 text-xs font-medium border border-slate-200 rounded-xl px-3 py-2 focus:outline-none focus:border-indigo-500 bg-white"
-                    >
-                      <option value="">— Assign a role —</option>
-                      {unassignedRoles.map(r => (
-                        <option key={r.id} value={r.id}>{r.name} ({r.category})</option>
-                      ))}
-                    </select>
-                    <button
-                      onClick={handleAssignRole}
-                      disabled={!selectedNewRole || assigningRole}
-                      className="px-4 py-2 rounded-xl text-xs font-bold bg-indigo-600 text-white hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed transition"
-                    >
-                      {assigningRole ? 'Assigning...' : 'Assign'}
-                    </button>
-                  </div>
-                )}
-              </div>
+                </div>
+              )}
 
               {/* Effective Permissions Stats */}
               <div className="grid grid-cols-3 gap-3">
@@ -244,21 +176,21 @@ export default function UserAccessDetailsModal({ user, callerUserId, isSuperAdmi
                       {CRUD_MODULES.map(mod => {
                         const hasAny = Object.values(mod.permissions).some(k => k && hasPerm(k as string));
                         return (
-                          <tr key={mod.id} className={`border-b border-slate-50 transition ${hasAny ? '' : 'opacity-50'}`}>
+                          <tr key={mod.id} className={`border-b border-slate-50 transition ${hasAny ? '' : 'opacity-40'}`}>
                             <td className="px-5 py-2.5">
                               <span className="font-bold text-slate-800">{mod.icon} {mod.label}</span>
                             </td>
                             <td className="text-center px-3 py-2.5">
-                              {mod.permissions.view ? (hasPerm(mod.permissions.view) ? <CheckCircle2 className="h-4 w-4 text-emerald-500 mx-auto" /> : <XCircle className="h-4 w-4 text-slate-200 mx-auto" />) : <span className="text-slate-200">—</span>}
+                              {mod.permissions.view ? (hasPerm(mod.permissions.view) ? <CheckCircle2 className="h-4 w-4 text-emerald-500 mx-auto" /> : <span className="text-slate-200 text-base mx-auto block text-center">—</span>) : <span className="text-slate-200">—</span>}
                             </td>
                             <td className="text-center px-3 py-2.5">
-                              {mod.permissions.create ? (hasPerm(mod.permissions.create) ? <CheckCircle2 className="h-4 w-4 text-emerald-500 mx-auto" /> : <XCircle className="h-4 w-4 text-slate-200 mx-auto" />) : <span className="text-slate-200">—</span>}
+                              {mod.permissions.create ? (hasPerm(mod.permissions.create) ? <CheckCircle2 className="h-4 w-4 text-emerald-500 mx-auto" /> : <span className="text-slate-200 text-base mx-auto block text-center">—</span>) : <span className="text-slate-200">—</span>}
                             </td>
                             <td className="text-center px-3 py-2.5">
-                              {mod.permissions.update ? (hasPerm(mod.permissions.update) ? <CheckCircle2 className="h-4 w-4 text-emerald-500 mx-auto" /> : <XCircle className="h-4 w-4 text-slate-200 mx-auto" />) : <span className="text-slate-200">—</span>}
+                              {mod.permissions.update ? (hasPerm(mod.permissions.update) ? <CheckCircle2 className="h-4 w-4 text-emerald-500 mx-auto" /> : <span className="text-slate-200 text-base mx-auto block text-center">—</span>) : <span className="text-slate-200">—</span>}
                             </td>
                             <td className="text-center px-3 py-2.5">
-                              {mod.permissions.delete ? (hasPerm(mod.permissions.delete) ? <CheckCircle2 className="h-4 w-4 text-emerald-500 mx-auto" /> : <XCircle className="h-4 w-4 text-slate-200 mx-auto" />) : <span className="text-slate-200">—</span>}
+                              {mod.permissions.delete ? (hasPerm(mod.permissions.delete) ? <CheckCircle2 className="h-4 w-4 text-emerald-500 mx-auto" /> : <span className="text-slate-200 text-base mx-auto block text-center">—</span>) : <span className="text-slate-200">—</span>}
                             </td>
                             <td className="px-3 py-2.5">
                               <div className="flex flex-wrap gap-1">
@@ -306,7 +238,7 @@ export default function UserAccessDetailsModal({ user, callerUserId, isSuperAdmi
                             }`}>
                               {hasPerm(item.key)
                                 ? <CheckCircle2 className="h-3.5 w-3.5 shrink-0" />
-                                : <XCircle className="h-3.5 w-3.5 shrink-0" />}
+                                : <span className="h-3.5 w-3.5 shrink-0 inline-flex items-center justify-center text-slate-200">—</span>}
                               <span className="leading-tight">{item.label}</span>
                             </div>
                           ))}
@@ -318,19 +250,21 @@ export default function UserAccessDetailsModal({ user, callerUserId, isSuperAdmi
               </div>
 
               {/* Raw Permission List (collapsed) */}
-              <details className="group">
-                <summary className="cursor-pointer text-xs font-bold text-slate-500 hover:text-slate-700 transition flex items-center gap-1 select-none list-none">
-                  <ChevronRight className="h-3.5 w-3.5 group-open:rotate-90 transition-transform" />
-                  Raw Permission Keys ({totalCount})
-                </summary>
-                <div className="mt-3 flex flex-wrap gap-1.5">
-                  {effectivePermissions.sort().map(p => (
-                    <code key={p} className="text-[9px] font-mono font-bold px-2 py-1 bg-slate-100 text-slate-700 rounded-lg border border-slate-200">
-                      {p}
-                    </code>
-                  ))}
-                </div>
-              </details>
+              {totalCount > 0 && (
+                <details className="group">
+                  <summary className="cursor-pointer text-xs font-bold text-slate-500 hover:text-slate-700 transition flex items-center gap-1 select-none list-none">
+                    <ChevronRight className="h-3.5 w-3.5 group-open:rotate-90 transition-transform" />
+                    Raw Permission Keys ({totalCount})
+                  </summary>
+                  <div className="mt-3 flex flex-wrap gap-1.5">
+                    {safePermissions.sort().map(p => (
+                      <code key={p} className="text-[9px] font-mono font-bold px-2 py-1 bg-slate-100 text-slate-700 rounded-lg border border-slate-200">
+                        {p}
+                      </code>
+                    ))}
+                  </div>
+                </details>
+              )}
             </>
           )}
         </div>
@@ -340,7 +274,7 @@ export default function UserAccessDetailsModal({ user, callerUserId, isSuperAdmi
           <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wide">
             Effective permissions are the union of all active assigned roles
           </p>
-          <button onClick={onClose} className="px-5 py-2 text-xs font-bold rounded-xl bg-slate-800 text-white hover:bg-slate-700 transition">
+          <button onClick={onClose} className="px-5 py-2 text-xs font-bold rounded-xl bg-slate-800 text-white hover:bg-slate-700 transition cursor-pointer">
             Close
           </button>
         </div>

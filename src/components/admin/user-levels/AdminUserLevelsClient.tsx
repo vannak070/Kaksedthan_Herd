@@ -6,7 +6,7 @@ import { useRouter } from 'next/navigation';
 import {
   Layers, Plus, Users, CheckCircle2, XCircle, AlertTriangle, ArrowRight,
   ToggleLeft, ToggleRight, Trash2, Search, RefreshCw, FileEdit,
-  Activity
+  Activity, ShieldAlert
 } from 'lucide-react';
 import { setUserLevelStatusAction, deleteUserLevelAction } from '@/app/actions';
 
@@ -33,31 +33,103 @@ const STATUS_BADGE = {
   Draft: 'bg-amber-50 text-amber-700 border-amber-200',
 };
 
-function ConfirmDialog({
-  open, title, message, confirmLabel, confirmClass, onConfirm, onCancel
+// ── Enhanced Warning & Confirmation Dialog ──────────────────────────────
+function LevelActionDialog({
+  open,
+  type,
+  level,
+  onConfirm,
+  onDeactivateInstead,
+  onCancel
 }: {
   open: boolean;
-  title: string;
-  message: string;
-  confirmLabel: string;
-  confirmClass: string;
+  type: 'toggle' | 'delete' | 'warning_delete';
+  level?: UserLevelItem;
   onConfirm: () => void;
+  onDeactivateInstead?: () => void;
   onCancel: () => void;
 }) {
-  if (!open) return null;
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/60 backdrop-blur-sm p-4">
-      <div className="bg-white rounded-3xl shadow-2xl max-w-md w-full p-6 space-y-4 border border-slate-200">
-        <div className="flex items-start gap-3">
-          <div className="h-10 w-10 rounded-2xl bg-amber-50 flex items-center justify-center flex-shrink-0 border border-amber-200">
-            <AlertTriangle className="h-5 w-5 text-amber-600" />
+  if (!open || !level) return null;
+
+  if (type === 'warning_delete') {
+    return (
+      <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/65 backdrop-blur-sm p-4 animate-in fade-in duration-150">
+        <div className="bg-white rounded-3xl shadow-2xl max-w-lg w-full p-6 space-y-5 border border-slate-200">
+          <div className="flex items-start gap-4">
+            <div className="h-12 w-12 rounded-2xl bg-rose-50 flex items-center justify-center flex-shrink-0 border border-rose-200 text-rose-600">
+              <ShieldAlert className="h-6 w-6" />
+            </div>
+            <div className="space-y-1.5 flex-1">
+              <span className="text-[10px] font-black text-rose-600 uppercase tracking-widest block">Deletion Blocked • Active Dependencies</span>
+              <h3 className="font-black text-slate-900 text-base">Cannot Delete "{level.name}"</h3>
+              <p className="text-xs text-slate-600 leading-relaxed font-medium">
+                This Account Level is currently assigned to <strong className="text-slate-900 font-black">{level.userCount} active user account(s)</strong> or business records.
+              </p>
+              <div className="bg-amber-50/80 border border-amber-200 p-3 rounded-2xl text-[11.5px] text-amber-900 font-medium space-y-1">
+                <p className="font-bold flex items-center gap-1 text-amber-800">
+                  <AlertTriangle className="h-3.5 w-3.5 flex-shrink-0 text-amber-600" /> Safe Alternative Available:
+                </p>
+                <p>
+                  To protect database integrity, hard deletion is restricted. You can <strong>Safely Deactivate</strong> this level instead. Deactivation hides its dynamic navigation menu (e.g. Genetics Sourcing Companies) without deleting any historical records or stock transactions.
+                </p>
+              </div>
+            </div>
           </div>
-          <div>
-            <h3 className="font-black text-slate-900 text-sm">{title}</h3>
-            <p className="text-xs text-slate-600 mt-1 font-medium leading-relaxed">{message}</p>
+
+          <div className="flex flex-col sm:flex-row gap-2.5 justify-end pt-2 border-t border-slate-100">
+            <button
+              onClick={onCancel}
+              className="px-4 py-2.5 rounded-xl border border-slate-200 text-xs font-bold text-slate-700 hover:bg-slate-50 transition-all cursor-pointer"
+            >
+              I Understand
+            </button>
+            {onDeactivateInstead && level.status === 'Active' && (
+              <button
+                onClick={onDeactivateInstead}
+                className="px-4 py-2.5 rounded-xl bg-amber-600 hover:bg-amber-700 text-xs font-black text-white transition-all cursor-pointer shadow-md flex items-center justify-center gap-1.5"
+              >
+                <ToggleRight className="h-4 w-4" />
+                <span>Safely Deactivate Level</span>
+              </button>
+            )}
           </div>
         </div>
-        <div className="flex gap-3 justify-end pt-2">
+      </div>
+    );
+  }
+
+  const isDeactivating = type === 'toggle' && level.status === 'Active';
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/60 backdrop-blur-sm p-4 animate-in fade-in duration-150">
+      <div className="bg-white rounded-3xl shadow-2xl max-w-md w-full p-6 space-y-4 border border-slate-200">
+        <div className="flex items-start gap-3">
+          <div className={`h-10 w-10 rounded-2xl flex items-center justify-center flex-shrink-0 border ${
+            type === 'delete' ? 'bg-rose-50 border-rose-200 text-rose-600' : 'bg-amber-50 border-amber-200 text-amber-600'
+          }`}>
+            <AlertTriangle className="h-5 w-5" />
+          </div>
+          <div>
+            <h3 className="font-black text-slate-900 text-sm">
+              {type === 'delete'
+                ? `Delete "${level.name}"?`
+                : (isDeactivating ? `Deactivate "${level.name}"?` : `Activate "${level.name}"?`)}
+            </h3>
+            <p className="text-xs text-slate-600 mt-1 font-medium leading-relaxed">
+              {type === 'delete' ? (
+                `Are you sure you want to permanently delete "${level.name}"? This action cannot be undone.`
+              ) : isDeactivating ? (
+                `Deactivating this Account Level will safely hide its corresponding dynamic navigation menu (e.g. Genetics Sourcing Companies) for users without deleting historical records or stock transactions.${
+                  level.userCount > 0 ? ` Currently assigned to ${level.userCount} active users.` : ''
+                }`
+              ) : (
+                `Activating "${level.name}" will restore its corresponding dynamic navigation menu and feature permissions.`
+              )}
+            </p>
+          </div>
+        </div>
+
+        <div className="flex gap-3 justify-end pt-2 border-t border-slate-100">
           <button
             onClick={onCancel}
             className="px-4 py-2 rounded-xl border border-slate-200 text-xs font-bold text-slate-700 hover:bg-slate-50 transition-all cursor-pointer"
@@ -66,9 +138,11 @@ function ConfirmDialog({
           </button>
           <button
             onClick={onConfirm}
-            className={`px-4 py-2 rounded-xl text-xs font-bold text-white transition-all cursor-pointer ${confirmClass}`}
+            className={`px-4 py-2 rounded-xl text-xs font-bold text-white transition-all cursor-pointer ${
+              type === 'delete' ? 'bg-rose-600 hover:bg-rose-700' : isDeactivating ? 'bg-amber-600 hover:bg-amber-700' : 'bg-purple-600 hover:bg-purple-700'
+            }`}
           >
-            {confirmLabel}
+            {type === 'delete' ? 'Delete Level' : (isDeactivating ? 'Yes, Deactivate' : 'Yes, Activate')}
           </button>
         </div>
       </div>
@@ -78,7 +152,6 @@ function ConfirmDialog({
 
 export default function AdminUserLevelsClient({ initialLevels }: Props) {
   const router = useRouter();
-  // Ensure default is mapped if it was old data
   const [levels, setLevels] = useState<UserLevelItem[]>(initialLevels);
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<'All' | 'Active' | 'Inactive' | 'Draft'>('All');
@@ -87,7 +160,7 @@ export default function AdminUserLevelsClient({ initialLevels }: Props) {
 
   const [confirmState, setConfirmState] = useState<{
     open: boolean;
-    type: 'toggle' | 'delete';
+    type: 'toggle' | 'delete' | 'warning_delete';
     level?: UserLevelItem;
   }>({ open: false, type: 'toggle' });
 
@@ -98,12 +171,20 @@ export default function AdminUserLevelsClient({ initialLevels }: Props) {
 
   const [categoryTab, setCategoryTab] = useState<'ACCOUNT_MANAGEMENT' | 'SYSTEM_ACCOUNT'>('ACCOUNT_MANAGEMENT');
 
-  const accountLevelsCount = levels.filter(l => (l as any).levelType === 'ACCOUNT_MANAGEMENT' || ['LEVEL-01', 'LEVEL-02', 'LEVEL-03', 'LEVEL-04'].includes(l.id)).length;
-  const systemLevelsCount = levels.filter(l => (l as any).levelType === 'SYSTEM_ACCOUNT' || !['LEVEL-01', 'LEVEL-02', 'LEVEL-03', 'LEVEL-04'].includes(l.id)).length;
+  const accountLevelsCount = levels.filter(l => 
+    (l as any).levelType === 'ACCOUNT_MANAGEMENT' || 
+    ['LEVEL-01', 'LEVEL-02', 'LEVEL-03', 'LEVEL-04', 'LEVEL-05'].includes(l.id) ||
+    ['BREEDER', 'FARM_OWNER', 'CUSTOMER_COW_OWNER', 'SIRE_SOURCING_COMPANY', 'COW_OWNER', 'SIRE_SOURCING_CO'].includes(l.code)
+  ).length;
+
+  const systemLevelsCount = levels.length - accountLevelsCount;
 
   const categoryLevels = useMemo(() => {
     return levels.filter(l => {
-      const isAccountMgmt = (l as any).levelType === 'ACCOUNT_MANAGEMENT' || ['LEVEL-01', 'LEVEL-02', 'LEVEL-03', 'LEVEL-04'].includes(l.id);
+      const isAccountMgmt = 
+        (l as any).levelType === 'ACCOUNT_MANAGEMENT' || 
+        ['LEVEL-01', 'LEVEL-02', 'LEVEL-03', 'LEVEL-04', 'LEVEL-05'].includes(l.id) ||
+        ['BREEDER', 'FARM_OWNER', 'CUSTOMER_COW_OWNER', 'SIRE_SOURCING_COMPANY', 'COW_OWNER', 'SIRE_SOURCING_CO'].includes(l.code);
       return categoryTab === 'ACCOUNT_MANAGEMENT' ? isAccountMgmt : !isAccountMgmt;
     });
   }, [levels, categoryTab]);
@@ -133,7 +214,7 @@ export default function AdminUserLevelsClient({ initialLevels }: Props) {
       const res = await setUserLevelStatusAction(level.id, newStatus);
       if (res.success) {
         setLevels(prev => prev.map(l => l.id === level.id ? { ...l, status: newStatus } : l));
-        showToast('success', `"${level.name}" has been ${newStatus === 'Active' ? 'activated' : 'deactivated'}.`);
+        showToast('success', `"${level.name}" status updated to ${newStatus}. ${newStatus === 'Inactive' ? 'Navigation menu safely hidden.' : 'Navigation menu restored.'}`);
       } else {
         showToast('error', res.error || 'Failed to update status');
       }
@@ -151,7 +232,7 @@ export default function AdminUserLevelsClient({ initialLevels }: Props) {
       const res = await deleteUserLevelAction(level.id);
       if (res.success) {
         setLevels(prev => prev.filter(l => l.id !== level.id));
-        showToast('success', `"${level.name}" has been deleted.`);
+        showToast('success', `"${level.name}" has been permanently deleted.`);
       } else {
         showToast('error', res.error || 'Cannot delete this User Level.');
       }
@@ -162,20 +243,12 @@ export default function AdminUserLevelsClient({ initialLevels }: Props) {
     }
   };
 
-  const getToggleMessage = (level: UserLevelItem) => {
+  const handleDeleteIconClick = (level: UserLevelItem) => {
     if (level.userCount > 0) {
-      return `This User Level is currently assigned to ${level.userCount} active users. Changing status may immediately affect their access. Are you sure you want to proceed?`;
+      setConfirmState({ open: true, type: 'warning_delete', level });
+    } else {
+      setConfirmState({ open: true, type: 'delete', level });
     }
-    return level.status === 'Active'
-      ? `Are you sure you want to deactivate "${level.name}"?`
-      : `Are you sure you want to activate "${level.name}"?`;
-  };
-
-  const getDeleteMessage = (level: UserLevelItem) => {
-    if (level.userCount > 0) {
-      return `This User Level is currently assigned to ${level.userCount} active users. You cannot delete it until all users are reassigned.`;
-    }
-    return `Are you sure you want to permanently delete "${level.name}"? This action cannot be undone.`;
   };
 
   return (
@@ -194,20 +267,18 @@ export default function AdminUserLevelsClient({ initialLevels }: Props) {
         </div>
       )}
 
-      <ConfirmDialog
+      <LevelActionDialog
         open={confirmState.open}
-        title={confirmState.type === 'toggle'
-          ? (confirmState.level?.status === 'Active' ? 'Deactivate User Level?' : 'Activate User Level?')
-          : 'Delete User Level?'}
-        message={confirmState.level ? (confirmState.type === 'toggle' ? getToggleMessage(confirmState.level) : getDeleteMessage(confirmState.level)) : ''}
-        confirmLabel={confirmState.type === 'toggle'
-          ? (confirmState.level?.status === 'Active' ? 'Yes, Deactivate' : 'Yes, Activate')
-          : 'Delete User Level'}
-        confirmClass={confirmState.type === 'delete' ? 'bg-rose-600 hover:bg-rose-700' : 'bg-purple-600 hover:bg-purple-700'}
+        type={confirmState.type}
+        level={confirmState.level}
         onConfirm={() => {
           if (!confirmState.level) return;
           if (confirmState.type === 'toggle') handleToggleStatus(confirmState.level);
-          else handleDeleteLevel(confirmState.level);
+          else if (confirmState.type === 'delete') handleDeleteLevel(confirmState.level);
+        }}
+        onDeactivateInstead={() => {
+          if (!confirmState.level) return;
+          handleToggleStatus(confirmState.level);
         }}
         onCancel={() => setConfirmState({ open: false, type: 'toggle' })}
       />
@@ -355,15 +426,18 @@ export default function AdminUserLevelsClient({ initialLevels }: Props) {
                   </div>
                 )}
               </div>
+
+              {/* ACTION BUTTONS — FULLY WIRED */}
               <div className="bg-slate-50 border-t border-slate-100 p-4 flex items-center justify-between gap-2">
                 <Link
                   href={`/admin/user-levels/${level.id}`}
-                  className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-purple-600 text-white text-[11px] font-bold hover:bg-purple-700 transition-all shadow-xs flex-1 justify-center"
+                  className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-purple-600 text-white text-[11px] font-bold hover:bg-purple-700 transition-all shadow-xs flex-1 justify-center cursor-pointer"
                 >
                   <span>Configure Permissions / Details</span>
                   <ArrowRight className="h-3 w-3" />
                 </Link>
                 <div className="flex items-center gap-2">
+                  {/* Status Toggle (Activate / Deactivate) */}
                   <button
                     disabled={loading === level.id}
                     onClick={() => setConfirmState({ open: true, type: 'toggle', level })}
@@ -372,21 +446,23 @@ export default function AdminUserLevelsClient({ initialLevels }: Props) {
                         ? 'bg-emerald-50 border-emerald-200 text-emerald-700 hover:bg-emerald-100'
                         : 'bg-slate-100 border-slate-200 text-slate-500 hover:bg-slate-200'
                     }`}
-                    title={level.status === 'Active' ? 'Deactivate' : 'Activate'}
+                    title={level.status === 'Active' ? 'Deactivate Level' : 'Activate Level'}
                   >
                     {level.status === 'Active'
-                      ? <ToggleRight className="h-4 w-4" />
-                      : <ToggleLeft className="h-4 w-4" />}
+                      ? <ToggleRight className="h-4 w-4 text-emerald-600" />
+                      : <ToggleLeft className="h-4 w-4 text-slate-400" />}
                   </button>
+
+                  {/* Delete Button (Triggers Warning Modal if dependencies exist) */}
                   <button
-                    disabled={loading === level.id || level.userCount > 0}
-                    onClick={() => setConfirmState({ open: true, type: 'delete', level })}
+                    disabled={loading === level.id}
+                    onClick={() => handleDeleteIconClick(level)}
                     className={`p-2 rounded-xl border transition-all cursor-pointer disabled:opacity-40 ${
                       level.userCount > 0 
-                        ? 'bg-slate-50 border-slate-200 text-slate-300 cursor-not-allowed'
+                        ? 'border-amber-200 bg-amber-50 text-amber-600 hover:bg-amber-100'
                         : 'border-rose-200 bg-rose-50 text-rose-600 hover:bg-rose-100'
                     }`}
-                    title="Delete"
+                    title={level.userCount > 0 ? 'Cannot Delete (Active Dependencies)' : 'Delete User Level'}
                   >
                     <Trash2 className="h-4 w-4" />
                   </button>

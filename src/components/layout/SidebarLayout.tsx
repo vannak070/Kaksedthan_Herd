@@ -23,12 +23,18 @@ import {
   UserCheck,
   ClipboardList,
   Layers,
-  Globe2
+  Globe2,
+  Shield,
+  KeyRound,
+  BookOpen,
+  Sliders,
+  Hash
 } from 'lucide-react';
 import { UserRoleItem } from '@/lib/types';
 import { useLanguage } from '@/context/LanguageContext';
 import LanguageSwitcher from '../LanguageSwitcher';
 import { useAccessControl } from '@/hooks/useAccessControl';
+import { getUserLevelsAction } from '@/app/actions';
 
 interface SidebarLayoutProps {
   children: React.ReactNode;
@@ -89,7 +95,9 @@ export default function SidebarLayout({
   const { t } = useLanguage();
   const { can } = useAccessControl();
 
-  // Load persisted user & role from localStorage
+  const [inactiveLevelCodes, setInactiveLevelCodes] = useState<Set<string>>(new Set());
+
+  // Load persisted user & role from localStorage + dynamic inactive user levels
   React.useEffect(() => {
     try {
       const rawUser = localStorage.getItem('kaksedthan_user');
@@ -102,7 +110,39 @@ export default function SidebarLayout({
         if (savedRole) setSelectedRole(savedRole);
       }
     } catch {}
-  }, []);
+
+    // Check deactivated user levels to hide corresponding nav menus
+    getUserLevelsAction().then(res => {
+      if (res.success && Array.isArray(res.data)) {
+        const inactive = new Set<string>();
+        res.data.forEach((lvl: any) => {
+          if (lvl.status === 'Inactive') {
+            inactive.add(lvl.code);
+            inactive.add(lvl.id);
+            if (lvl.name.toLowerCase().includes('sourcing') || lvl.code.includes('SOURCING')) {
+              inactive.add('SIRE_SOURCING_CO');
+              inactive.add('SIRE_SOURCING_COMPANY');
+              inactive.add('LEVEL-05');
+            }
+            if (lvl.name.toLowerCase().includes('breeder') || lvl.code === 'BREEDER') {
+              inactive.add('BREEDER');
+              inactive.add('LEVEL-01');
+            }
+            if (lvl.name.toLowerCase().includes('farm') || lvl.code === 'FARM_OWNER') {
+              inactive.add('FARM_OWNER');
+              inactive.add('LEVEL-02');
+            }
+            if (lvl.name.toLowerCase().includes('customer') || lvl.name.toLowerCase().includes('owner') || lvl.code.includes('COW_OWNER')) {
+              inactive.add('COW_OWNER');
+              inactive.add('CUSTOMER_COW_OWNER');
+              inactive.add('LEVEL-04');
+            }
+          }
+        });
+        setInactiveLevelCodes(inactive);
+      }
+    }).catch(() => {});
+  }, [pathname]);
 
   const currentUser = activeUser || initialUser || { id: '0', name: 'User Account', role: selectedRole || 'Guest', email: '', status: 'Active' };
   const userRole = currentUser.role || selectedRole;
@@ -123,8 +163,7 @@ export default function SidebarLayout({
       pathname.startsWith('/settings/users') ||
       pathname.startsWith('/settings/user-levels') ||
       pathname.startsWith('/settings/roles') ||
-      pathname.startsWith('/settings/permissions') ||
-      pathname.startsWith('/settings/audit-logs')
+      pathname.startsWith('/settings/permissions')
     ) {
       return true;
     }
@@ -404,12 +443,6 @@ export default function SidebarLayout({
                 href="/stock-insemination"
                 isActive={pathname.startsWith('/stock-insemination')}
               />
-              <NavItem
-                icon={<Globe2 className="h-4 w-4 text-blue-500" />}
-                label="Sourcing Companies"
-                href="/sourcing-companies"
-                isActive={pathname.startsWith('/sourcing-companies')}
-              />
             </NavSection>
             <NavSection label="Herdbook System">
               {can('sire.view') && (
@@ -446,7 +479,15 @@ export default function SidebarLayout({
               )}
             </NavSection>
             <NavSection label="Account Management">
-              {!isSourcingCompany && (
+              {!inactiveLevelCodes.has('SIRE_SOURCING_CO') && !inactiveLevelCodes.has('SIRE_SOURCING_COMPANY') && !inactiveLevelCodes.has('LEVEL-05') && (
+                <NavItem
+                  icon={<Globe2 className="h-4 w-4 text-blue-500" />}
+                  label="Genetics Sourcing Companies"
+                  href="/sourcing-companies"
+                  isActive={pathname.startsWith('/sourcing-companies')}
+                />
+              )}
+              {!isSourcingCompany && !inactiveLevelCodes.has('BREEDER') && !inactiveLevelCodes.has('LEVEL-01') && (
                 <NavItem
                   icon={<UserCheck className="h-4 w-4 text-emerald-600" />}
                   label="Breeder Management"
@@ -454,7 +495,7 @@ export default function SidebarLayout({
                   isActive={pathname.startsWith('/breeders')}
                 />
               )}
-              {!isSourcingCompany && (
+              {!isSourcingCompany && !inactiveLevelCodes.has('FARM_OWNER') && !inactiveLevelCodes.has('LEVEL-02') && (
                 <NavItem
                   icon={<Building className="h-4 w-4 text-amber-600" />}
                   label="Farm Stations"
@@ -462,7 +503,7 @@ export default function SidebarLayout({
                   isActive={pathname.startsWith('/farms')}
                 />
               )}
-              {!isSourcingCompany && (
+              {!isSourcingCompany && !inactiveLevelCodes.has('COW_OWNER') && !inactiveLevelCodes.has('LEVEL-04') && (
                 <NavItem
                   icon={<Users className="h-4 w-4 text-purple-600" />}
                   label="Customers / Cow Owners"
@@ -472,59 +513,41 @@ export default function SidebarLayout({
               )}
             </NavSection>
             {isAdmin && (
-              <NavSection label="Administration">
+              <NavSection label="Administration & Setup">
                 <NavItem
-                  icon={<Layers className="h-4 w-4 text-[#047857]" />}
-                  label="User Level Management"
-                  href="/admin/user-levels"
-                  isActive={pathname.startsWith('/admin/user-levels')}
-                />
-                <NavItem
-                  icon={<Users className="h-4 w-4 text-indigo-600" />}
+                  icon={<Shield className="h-4 w-4 text-purple-600" />}
                   label="Users & Access Control"
                   href="/settings/users"
-                  isActive={pathname.startsWith('/settings/users')}
+                  isActive={
+                    pathname.startsWith('/settings/users') ||
+                    pathname.startsWith('/settings/access-control') ||
+                    pathname.startsWith('/admin/user-levels') ||
+                    pathname.startsWith('/settings/roles') ||
+                    pathname.startsWith('/settings/permissions')
+                  }
                 />
                 <NavItem
-                  icon={<ClipboardList className="h-4 w-4 text-slate-500" />}
-                  label="Audit Logs"
-                  href="/settings/audit-logs"
-                  isActive={pathname.startsWith('/settings/audit-logs')}
+                  icon={<Settings className="h-4 w-4 text-slate-700" />}
+                  label="System Configuration"
+                  href="/settings/general"
+                  isActive={
+                    pathname === '/settings' ||
+                    pathname.startsWith('/settings/general') ||
+                    pathname.startsWith('/settings/master-data') ||
+                    pathname.startsWith('/settings/numbering') ||
+                    pathname.startsWith('/settings/breeding') ||
+                    pathname.startsWith('/settings/certificate')
+                  }
                 />
               </NavSection>
             )}
-            <NavSection label="System">
-              <NavItem
-                icon={<Settings className="h-4 w-4 text-slate-600" />}
-                label="System Setup"
-                href="/settings"
-                isActive={pathname === '/settings' || (pathname.startsWith('/settings/') && !pathname.startsWith('/settings/users') && !pathname.startsWith('/settings/audit-logs'))}
-              />
-            </NavSection>
           </>
         )}
       </nav>
 
-      {/* User Profile Footer & Operational Role Switcher */}
+      {/* User Profile Footer */}
       {currentUser && (
-        <div className="flex-shrink-0 mx-3 mb-3.5 mt-1 border-t border-slate-200/80 pt-3 space-y-2">
-          {/* Operational Role Switcher */}
-          <div className="px-1">
-            <label className="block text-[9px] font-black uppercase tracking-wider text-slate-400 mb-1">
-              Active Account Role
-            </label>
-            <select
-              value={selectedRole}
-              onChange={(e) => handleRoleChange(e.target.value)}
-              className="w-full bg-slate-50 border border-slate-200 rounded-xl px-2.5 py-1.5 text-xs font-bold text-slate-800 focus:ring-2 focus:ring-[#dc5c15] focus:outline-none cursor-pointer"
-            >
-              <option value="Super Admin">🛡️ Super Admin</option>
-              <option value="Breeder">🧬 Breeder Account</option>
-              <option value="Farm Owner">🏡 Farm Owner Account</option>
-              <option value="Farmer / Farm Manager Account">🚜 Farm Manager Account</option>
-              <option value="Sire Sourcing Company">🏢 Sire Sourcing Co.</option>
-            </select>
-          </div>
+        <div className="flex-shrink-0 mx-3 mb-3.5 mt-1 border-t border-slate-200/80 pt-3">
 
           <div className="flex items-center gap-3 bg-slate-50 rounded-2xl p-2.5 border border-slate-200/80 transition-all">
             <div className="relative flex-shrink-0">

@@ -5,7 +5,7 @@ import UnifiedAccessControlClient from '@/components/settings/UnifiedAccessContr
 
 export const dynamic = 'force-dynamic';
 
-export default async function UsersSettingsPage() {
+export default async function AccessControlSettingsPage() {
   const data = await getDbData();
   const [levelsRes, usersRes] = await Promise.all([
     getUserLevelsAction(),
