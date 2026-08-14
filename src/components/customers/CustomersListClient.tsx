@@ -57,6 +57,8 @@ export default function CustomersListClient({ initialCustomers }: Props) {
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('All');
   const [typeFilter, setTypeFilter] = useState<string>('All');
+  const [breederFilter, setBreederFilter] = useState<string>('All');
+  const [idVerificationFilter, setIdVerificationFilter] = useState<string>('All');
 
   // Pagination State
   const [currentPage, setCurrentPage] = useState(1);
@@ -200,15 +202,21 @@ export default function CustomersListClient({ initialCustomers }: Props) {
         (c.code || '').toLowerCase().includes(search.toLowerCase()) ||
         (c.phone || '').toLowerCase().includes(search.toLowerCase()) ||
         (c.email || '').toLowerCase().includes(search.toLowerCase()) ||
-        (c.address || '').toLowerCase().includes(search.toLowerCase());
+        (c.address || '').toLowerCase().includes(search.toLowerCase()) ||
+        (c.province || '').toLowerCase().includes(search.toLowerCase()) ||
+        (c.managedByBreederName || '').toLowerCase().includes(search.toLowerCase());
 
       const matchesStatus = statusFilter === 'All' || c.status === statusFilter;
       const matchesType = typeFilter === 'All' || c.customerType === typeFilter;
-      return matchesSearch && matchesStatus && matchesType;
+      const matchesBreeder = breederFilter === 'All' || (c.managedByBreederName || 'System Breeder') === breederFilter;
+      const matchesIdVerif = idVerificationFilter === 'All' || (c.idVerificationStatus || 'Pending') === idVerificationFilter;
+
+      return matchesSearch && matchesStatus && matchesType && matchesBreeder && matchesIdVerif;
     });
-  }, [customers, search, statusFilter, typeFilter]);
+  }, [customers, search, statusFilter, typeFilter, breederFilter, idVerificationFilter]);
 
   const availableTypes = Array.from(new Set(customers.map(c => c.customerType || 'Individual Owner')));
+  const availableBreeders = Array.from(new Set(customers.map(c => c.managedByBreederName || 'System Breeder')));
 
   const totalCount = filteredCustomers.length;
   const paginatedCustomers = useMemo(() => {
@@ -236,11 +244,23 @@ export default function CustomersListClient({ initialCustomers }: Props) {
         breadcrumbs={[{ label: 'Customers' }]}
         searchQuery={search}
         onSearchChange={(q) => { setSearch(q); setCurrentPage(1); }}
-        searchPlaceholder="Search Owner Name, Code, Phone, Province..."
+        searchPlaceholder="Search Owner Name, Code, Phone, Province, Breeder..."
         onActionClick={openCreateModal}
         actionLabel="+ Add New Customer"
       >
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
+          {/* Breeder Filter */}
+          <select
+            value={breederFilter}
+            onChange={(e) => { setBreederFilter(e.target.value); setCurrentPage(1); }}
+            className="bg-slate-50 border border-slate-200 text-xs font-semibold rounded-xl px-3 py-2 text-slate-700 focus:outline-none focus:ring-2 focus:ring-purple-600 cursor-pointer"
+          >
+            <option value="All">All Breeders / Creators</option>
+            {availableBreeders.map(b => (
+              <option key={b} value={b}>{b}</option>
+            ))}
+          </select>
+
           {/* Type Filter */}
           <select
             value={typeFilter}
@@ -253,15 +273,25 @@ export default function CustomersListClient({ initialCustomers }: Props) {
             ))}
           </select>
 
+          {/* ID Verification Filter */}
+          <select
+            value={idVerificationFilter}
+            onChange={(e) => { setIdVerificationFilter(e.target.value); setCurrentPage(1); }}
+            className="bg-slate-50 border border-slate-200 text-xs font-semibold rounded-xl px-3 py-2 text-slate-700 focus:outline-none focus:ring-2 focus:ring-purple-600 cursor-pointer"
+          >
+            <option value="All">All ID Statuses</option>
+            <option value="Verified">Verified ID</option>
+            <option value="Pending">Pending Verification</option>
+          </select>
+
           {/* Status Filter */}
           <select
             value={statusFilter}
             onChange={(e) => { setStatusFilter(e.target.value); setCurrentPage(1); }}
             className="bg-slate-50 border border-slate-200 text-xs font-semibold rounded-xl px-3 py-2 text-slate-700 focus:outline-none focus:ring-2 focus:ring-purple-600 cursor-pointer"
           >
-            <option value="All">All Statuses</option>
+            <option value="All">All Account Statuses</option>
             <option value="Active">Active</option>
-            <option value="Inactive">Inactive</option>
           </select>
         </div>
       </PageHeader>
@@ -341,6 +371,12 @@ export default function CustomersListClient({ initialCustomers }: Props) {
                         <div className="flex justify-between">
                           <span className="font-extrabold text-slate-500">Owned Cattle:</span>
                           <span className="font-black text-amber-700">{animalCount} heads</span>
+                        </div>
+                        <div className="flex justify-between items-center border-t border-slate-200/60 pt-1 mt-1">
+                          <span className="font-extrabold text-purple-700">Managed By:</span>
+                          <span className="font-bold text-purple-900 truncate max-w-[110px] bg-purple-50 px-1.5 py-0.5 rounded border border-purple-100/80 text-[10px]" title={`${cust.managedByBreederName || 'System Breeder'} (${cust.managedByAccountLevel || 'Internal Staff'})`}>
+                            {cust.managedByBreederName || 'System Breeder'}
+                          </span>
                         </div>
                       </div>
                     </div>

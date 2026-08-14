@@ -31,40 +31,39 @@ export default function A4CertificateGenerator({
   const certType = certificate.animalType || (certificate.calfId ? 'Calf' : certificate.sireId ? 'Sire' : 'Dam');
   const certNumber = certificate.certificateNumber || registration?.registrationNumber || 'KC-2026-8891';
   
-  const animalId = certificate.animalId || calf?.id || registration?.animalId || (certType === 'Sire' ? certificate.sireId : certType === 'Dam' ? certificate.damId : certificate.calfId) || 'ANM-2026-001';
-  const animalName = (certType === 'Sire' ? (sire?.name || certificate.sireName) : certType === 'Dam' ? (dam?.name || certificate.damName) : (calf?.name || certificate.calfName)) || 'Master Animal';
-  const animalBreed = (certType === 'Sire' ? (sire?.breed || certificate.sireBreed) : certType === 'Dam' ? (dam?.breed || certificate.damBreed) : (calf?.breed || certificate.calfBreed)) || 'Wagyu';
+  const animalId = certificate.animalId || calf?.id || registration?.animalId || (certType === 'Sire' ? certificate.sireId : certType === 'Dam' ? certificate.damId : certificate.calfId) || 'ANM-2026';
+  const animalName = (certType === 'Sire' ? (sire?.name || certificate.sireName) : certType === 'Dam' ? (dam?.name || certificate.damName) : (calf?.name || certificate.calfName)) || 'Registered Animal';
+  const animalBreed = (certType === 'Sire' ? (sire?.breed || certificate.sireBreed) : certType === 'Dam' ? (dam?.breed || certificate.damBreed) : (calf?.breed || certificate.calfBreed)) || 'Brahman';
   const animalStatus = (certType === 'Sire' ? (sire?.status || certificate.sireStatus) : certType === 'Dam' ? (dam?.availability || certificate.damStatus) : (calf?.status)) || 'Herdbook Verified';
-  const birthDate = calf?.birthDate || certificate.birthDate || '2026-01-15';
-  const birthWeight = calf?.birthWeight ? `${calf.birthWeight} kg` : (certType === 'Calf' ? '28.5 kg' : null);
-  const coatColor = calf?.color || 'Black & White Markings';
+  const birthDate = calf?.birthDate || certificate.birthDate || registration?.registrationDate || '';
+  const birthWeight = calf?.birthWeight ? `${calf.birthWeight} kg` : null;
+  const coatColor = calf?.color || 'Natural Marking';
   
   // Ownership & Station Data
-  const farmName = registration?.farmLocation || calf?.farmLocation || certificate.farmLocation || 'Kaksedthan Station (រទាំង)';
-  const ownerName = registration?.ownerName || calf?.ownerName || 'Kaksedthan Station Farm';
-  const cowOwner = calf?.cowOwner || 'SNR Livestock Owner';
+  const farmName = registration?.farmLocation || calf?.farmLocation || certificate.farmLocation || 'Kaksedthan Station';
+  const ownerName = registration?.ownerName || calf?.ownerName || certificate.ownerName || 'Registered Owner';
+  const cowOwner = calf?.cowOwner || ownerName;
 
   // Breeding & Inseminator Data
-  const breederName = registration?.breederName || calf?.breederName || 'Dr. Vannak (Senior Inseminator)';
+  const breederName = certificate.appliedBy || registration?.breederName || calf?.breederName || 'Registered Breeder';
   const breedingMethod = 'Artificial Insemination (AI)';
-  const programNumber = certificate.programNumber || calf?.breedingProgramId || 'BP-2026-001';
+  const programNumber = certificate.programNumber || calf?.breedingProgramId || 'N/A';
   const breedingDate = String(birthDate);
 
   // Relational Sire Data
-  const sireId = sire?.id || registration?.sireId || certificate.sireId || 'SIR-001';
-  const sireName = sire?.name || registration?.sireName || certificate.sireName || 'Master Sire Bull';
+  const sireId = sire?.id || (certificate.parentSireId && certificate.parentSireId !== certificate.parentSireName ? certificate.parentSireId : undefined);
+  const sireName = sire?.name || certificate.parentSireName || certificate.sireName || 'Information not available';
   const sireBreed = sire?.breed || certificate.sireBreed || 'Brahman';
-  const sireSupplier = sire?.sourcingCompany || 'ABS Global Inc.';
-  const sirePhotoUrl = sire?.imageUrl || certificate.sireImageUrl;
+  const sirePhotoUrl = sire?.imageUrl || null;
 
   // Relational Dam Data
-  const damId = dam?.id || registration?.damId || certificate.damId || 'DAM-001';
-  const damName = dam?.name || registration?.damName || certificate.damName || 'Master Dam Cow';
-  const damBreed = dam?.breed || certificate.damBreed || 'Wagyu';
-  const damPhotoUrl = dam?.imageUrl || certificate.damImageUrl;
+  const damId = dam?.id || (certificate.parentDamId && certificate.parentDamId !== certificate.parentDamName ? certificate.parentDamId : undefined);
+  const damName = dam?.name || certificate.parentDamName || certificate.damName || 'Information not available';
+  const damBreed = dam?.breed || certificate.damBreed || 'Brahman';
+  const damPhotoUrl = dam?.imageUrl || null;
 
   // Main Animal Photo — Standard System Image Upload Standard
-  const mainPhotoUrl = calf?.imageUrl || certificate.calfImageUrl || certificate.imageUrl || (certType === 'Sire' ? sirePhotoUrl : certType === 'Dam' ? damPhotoUrl : null) || sirePhotoUrl || damPhotoUrl;
+  const mainPhotoUrl = calf?.imageUrl || (certType === 'Sire' ? sirePhotoUrl : certType === 'Dam' ? (dam?.imageUrl || certificate.damImageUrl || certificate.imageUrl) : certificate.imageUrl);
 
   const pngFileName = `Kaksedthan_A4_Certificate_${certType}_${animalId.replace(/\s+/g, '_')}.png`;
 
@@ -208,7 +207,7 @@ export default function A4CertificateGenerator({
                       <span className="font-black text-slate-800">{birthWeight}</span>
                     </div>
                   )}
-                  {coatColor && (
+                  {coatColor && coatColor !== 'Natural Marking' && (
                     <div className="flex justify-between border-b border-slate-200/50 pb-1">
                       <span className="text-slate-600 font-bold">Coat / Markings:</span>
                       <span className="font-black text-slate-800 truncate max-w-[170px]">{coatColor}</span>
@@ -230,9 +229,11 @@ export default function A4CertificateGenerator({
                     <div className="space-y-0.5 flex-1 min-w-0">
                       <span className="text-[9px] font-black text-sky-700 uppercase tracking-wider block">♂ SIRE (FATHER)</span>
                       <p className="font-black text-slate-900 truncate text-xs">{sireName}</p>
-                      <p className="text-[9.5px] text-slate-600 font-bold truncate">ID: {sireId} • {sireBreed}</p>
+                      <p className="text-[9.5px] text-slate-600 font-bold truncate">
+                        {sire ? `ID: ${sire.id} • ${sire.breed}` : sireId ? `Lineage Sire: ${sireId}` : 'Lineage Input (Sire)'}
+                      </p>
                     </div>
-                    <div className="h-12 w-12 rounded-lg border border-sky-300 bg-white overflow-hidden shrink-0">
+                    <div className="h-12 w-12 rounded-lg border border-sky-300 bg-white overflow-hidden shrink-0 flex items-center justify-center">
                       <StandardAnimalImage src={sirePhotoUrl} alt={sireName} />
                     </div>
                   </div>
@@ -242,20 +243,24 @@ export default function A4CertificateGenerator({
                     <div className="space-y-0.5 flex-1 min-w-0">
                       <span className="text-[9px] font-black text-rose-700 uppercase tracking-wider block">♀ DAM (MOTHER)</span>
                       <p className="font-black text-purple-800 truncate text-xs">{damName}</p>
-                      <p className="text-[9.5px] text-slate-600 font-bold truncate">ID: {damId} • {damBreed}</p>
+                      <p className="text-[9.5px] text-slate-600 font-bold truncate">
+                        {dam ? `ID: ${dam.id} • ${dam.breed}` : damId ? `Lineage Dam: ${damId}` : 'Lineage Input (Dam)'}
+                      </p>
                     </div>
-                    <div className="h-12 w-12 rounded-lg border border-rose-300 bg-white overflow-hidden shrink-0">
+                    <div className="h-12 w-12 rounded-lg border border-rose-300 bg-white overflow-hidden shrink-0 flex items-center justify-center">
                       <StandardAnimalImage src={damPhotoUrl} alt={damName} />
                     </div>
                   </div>
                 </div>
               </div>
 
-              {/* C. Breeding & Inseminator Metadata (INCREASED INTERNAL PADDING) */}
+              {/* C. Breeding & Registration Metadata */}
               <div className="bg-slate-50/90 p-4 rounded-2xl border border-slate-200/90 space-y-2 text-xs">
                 <div className="flex items-center gap-1.5 border-b border-slate-200/80 pb-1.5">
                   <UserCheck className="h-4 w-4 text-[#047857]" />
-                  <h4 className="font-black text-[#047857] uppercase text-xs tracking-wider">BREEDING & INSEMINATOR METADATA</h4>
+                  <h4 className="font-black text-[#047857] uppercase text-xs tracking-wider">
+                    {certType === 'Calf' ? 'BREEDING & INSEMINATOR METADATA' : 'HERDBOOK REGISTRATION METADATA'}
+                  </h4>
                 </div>
 
                 <div className="grid grid-cols-2 gap-x-6 gap-y-1.5 text-xs">
@@ -264,16 +269,16 @@ export default function A4CertificateGenerator({
                     <span className="font-black text-[#047857]">{programNumber}</span>
                   </div>
                   <div className="flex justify-between border-b border-slate-200/50 pb-1">
-                    <span className="text-slate-600 font-bold">Service Method:</span>
-                    <span className="font-black text-slate-800 truncate max-w-[130px]">{breedingMethod}</span>
+                    <span className="text-slate-600 font-bold">{certType === 'Calf' ? 'Service Method:' : 'Entry Type:'}</span>
+                    <span className="font-black text-slate-800 truncate max-w-[130px]">{certType === 'Calf' ? 'Artificial Insemination (AI)' : 'Direct Registration'}</span>
                   </div>
                   <div className="flex justify-between border-b border-slate-200/50 pb-1">
-                    <span className="text-slate-600 font-bold">Inseminator:</span>
+                    <span className="text-slate-600 font-bold">Applicant / Breeder:</span>
                     <span className="font-black text-slate-800 truncate max-w-[130px]">{breederName}</span>
                   </div>
                   <div className="flex justify-between border-b border-slate-200/50 pb-1">
-                    <span className="text-slate-600 font-bold">Insemination Date:</span>
-                    <span className="font-black text-slate-800">{String(breedingDate).substring(0, 10)}</span>
+                    <span className="text-slate-600 font-bold">Registration Date:</span>
+                    <span className="font-black text-slate-800">{String(birthDate).substring(0, 10)}</span>
                   </div>
                 </div>
               </div>

@@ -48,7 +48,7 @@ export default function ApplyCertificateButton({
     setLoading(true);
     try {
       // Current Breeder session context
-      const currentUser = { id: 'BREEDER-01', name: 'Sokha Breeder', role: 'Breeder', userType: 'Breeder' };
+      const currentUser = { id: 'BRD-484516', name: 'ATH Vannak', role: 'Breeder', userType: 'Breeder' };
       const res = await applyCertificateAction({ animalType, animalId }, currentUser);
 
       if (res.success && res.data) {

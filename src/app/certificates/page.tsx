@@ -32,7 +32,8 @@ import {
   User,
   Beef,
   ChevronRight,
-  AlertTriangle
+  AlertTriangle,
+  ExternalLink
 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 
@@ -106,7 +107,7 @@ export default function CertificatesListPage() {
 
     try {
       setSubmitting(true);
-      const currentUser = { id: 'BREEDER-01', name: 'Sokha Breeder', role: 'Breeder', userType: 'Breeder' };
+      const currentUser = { id: 'BRD-484516', name: 'ATH Vannak', role: 'Breeder', userType: 'Breeder' };
       const res = await applyCertificateAction({ animalType: selectedType, animalId: selectedId }, currentUser);
       setSubmitting(false);
       setModalOpen(false);
@@ -167,11 +168,11 @@ export default function CertificatesListPage() {
   };
 
   const pendingCount = certs.filter(c => (c as any).status === 'PENDING_APPROVAL').length;
-  const approvedCount = certs.filter(c => (c as any).status === 'APPROVED' || !(c as any).status).length;
+  const approvedCount = certs.filter(c => (c as any).status === 'APPROVED').length;
   const rejectedCount = certs.filter(c => (c as any).status === 'REJECTED').length;
 
   const filtered = certs.filter((c) => {
-    const status = (c as any).status || 'APPROVED';
+    const status = (c as any).status || 'PENDING_APPROVAL';
     const animalType = c.animalType || (c.calfId ? 'Calf' : c.sireId ? 'Sire' : 'Dam');
     const animalName = c.sireName || c.damName || c.calfName || '';
 
@@ -456,28 +457,43 @@ export default function CertificatesListPage() {
             {/* Modal Content Sections */}
             <div className="space-y-4 text-xs">
               
-              {/* Section 1: Subject Animal Summary */}
-              <div className="bg-slate-50/80 p-4 rounded-2xl border border-slate-200/80 flex items-center gap-4">
-                <div className="h-20 w-20 flex-shrink-0 rounded-2xl overflow-hidden border border-slate-200">
-                  <StandardAnimalImage src={reviewCert.imageUrl} alt="Animal" />
-                </div>
-                <div className="space-y-1 flex-1">
-                  <div className="flex items-center justify-between">
-                    <span className="text-[10px] font-black uppercase text-amber-700 bg-amber-100 px-2 py-0.5 rounded-md">
-                      {reviewCert.animalType || (reviewCert.calfId ? 'Calf' : reviewCert.sireId ? 'Sire' : 'Dam')} RECORD
-                    </span>
-                    <span className="font-extrabold text-slate-500">ID: {reviewCert.animalId || reviewCert.calfId || reviewCert.sireId || reviewCert.damId}</span>
+              {(() => {
+                const animalType = reviewCert.animalType || (reviewCert.calfId ? 'Calf' : reviewCert.sireId ? 'Sire' : 'Dam');
+                const animalId = reviewCert.animalId || reviewCert.calfId || reviewCert.sireId || reviewCert.damId;
+                const animalHref = animalType === 'Sire' ? `/sires/${animalId}` : animalType === 'Dam' ? `/dams/${animalId}` : `/calves/${animalId}`;
+                const resolvedName = animalType === 'Sire' ? (reviewCert.sireName && reviewCert.sireName !== 'Sire information unavailable' ? reviewCert.sireName : animalId) :
+                                     animalType === 'Dam' ? (reviewCert.damName && reviewCert.damName !== 'Dam information unavailable' ? reviewCert.damName : animalId) :
+                                     (reviewCert.calfName || animalId);
+                const resolvedImage = reviewCert.imageUrl || (animalType === 'Sire' ? reviewCert.sireImageUrl : animalType === 'Dam' ? reviewCert.damImageUrl : reviewCert.calfImageUrl);
+                return (
+                  <div className="bg-slate-50/80 p-4 rounded-2xl border border-slate-200/80 flex items-center gap-4">
+                    <div className="h-20 w-20 flex-shrink-0 rounded-2xl overflow-hidden border border-slate-200">
+                      <StandardAnimalImage src={resolvedImage} alt={resolvedName} animalType={animalType.toLowerCase() as any} />
+                    </div>
+                    <div className="space-y-1 flex-1">
+                      <div className="flex items-center justify-between">
+                        <span className="text-[10px] font-black uppercase text-amber-700 bg-amber-100 px-2 py-0.5 rounded-md">
+                          {animalType} RECORD
+                        </span>
+                        <Link href={animalHref} className="font-extrabold text-purple-700 hover:underline flex items-center gap-1">
+                          <span>ID: {animalId}</span>
+                          <ExternalLink className="h-3 w-3" />
+                        </Link>
+                      </div>
+                      <h4 className="text-base font-black text-slate-900">
+                        <Link href={animalHref} className="hover:text-purple-700 transition-colors">
+                          {resolvedName}
+                        </Link>
+                      </h4>
+                      <p className="text-slate-600 font-bold">
+                        Breed: <span className="text-slate-900">{reviewCert.calfBreed || reviewCert.sireBreed || reviewCert.damBreed || 'Brahman'}</span>
+                      </p>
+                    </div>
                   </div>
-                  <h4 className="text-base font-black text-slate-900">
-                    {reviewCert.sireName || reviewCert.damName || reviewCert.calfName || 'Subject Animal'}
-                  </h4>
-                  <p className="text-slate-600 font-bold">
-                    Breed: <span className="text-slate-900">{reviewCert.calfBreed || reviewCert.sireBreed || reviewCert.damBreed || 'Master Breed'}</span>
-                  </p>
-                </div>
-              </div>
+                );
+              })()}
 
-              {/* Section 2: Detailed Specifications Grid */}
+              {/* Section 2: Detailed Specifications Grid with Navigation Links */}
               <div className="grid grid-cols-2 gap-3">
                 <div className="bg-slate-50 p-3.5 rounded-2xl border border-slate-100 space-y-1.5">
                   <p className="text-[10px] font-black uppercase tracking-wider text-slate-400">Ownership & Location</p>
@@ -491,25 +507,61 @@ export default function CertificatesListPage() {
                   </div>
                   <div className="flex justify-between">
                     <span className="text-slate-500 font-medium">Applicant:</span>
-                    <span className="font-bold text-amber-800">{reviewCert.appliedBy || 'Sokha Breeder'}</span>
+                    <span className="font-bold text-amber-800">{reviewCert.appliedBy || 'Registered Breeder'}</span>
                   </div>
                 </div>
 
                 <div className="bg-slate-50 p-3.5 rounded-2xl border border-slate-100 space-y-1.5">
                   <p className="text-[10px] font-black uppercase tracking-wider text-slate-400">Herdbook & Lineage</p>
-                  <div className="flex justify-between">
+                  <div className="flex justify-between items-center">
                     <span className="text-slate-500 font-medium">Registration No:</span>
-                    <span className="font-bold text-slate-900">{reviewCert.registrationNumber || reviewCert.registrationId}</span>
+                    <Link href={`/certificates/${reviewCert.id}`} className="font-bold text-purple-700 hover:underline flex items-center gap-1 truncate max-w-[130px]" title={reviewCert.registrationNumber || reviewCert.registrationId}>
+                      <span>{reviewCert.registrationNumber || reviewCert.registrationId}</span>
+                      <ExternalLink className="h-2.5 w-2.5 flex-shrink-0" />
+                    </Link>
                   </div>
-                  <div className="flex justify-between">
-                    <span className="text-slate-500 font-medium">Sire ID:</span>
-                    <span className="font-bold text-slate-900">{reviewCert.sireId || 'SIR-001'}</span>
+                  <div className="flex justify-between items-center">
+                    <span className="text-slate-500 font-medium">Sire Name:</span>
+                    {reviewCert.parentSireName && reviewCert.parentSireName !== 'Information not available' ? (
+                      reviewCert.sireId && reviewCert.sireId !== reviewCert.parentSireName ? (
+                        <Link href={`/sires/${reviewCert.sireId}`} className="font-bold text-sky-700 hover:underline flex items-center gap-1 truncate max-w-[160px]" title={reviewCert.parentSireName}>
+                          <span>{reviewCert.parentSireName} ({reviewCert.sireId})</span>
+                          <ExternalLink className="h-2.5 w-2.5 flex-shrink-0" />
+                        </Link>
+                      ) : (
+                        <span className="font-bold text-slate-800">{reviewCert.parentSireName}</span>
+                      )
+                    ) : (
+                      <span className="font-bold text-slate-400">Information not available</span>
+                    )}
                   </div>
-                  <div className="flex justify-between">
-                    <span className="text-slate-500 font-medium">Dam ID:</span>
-                    <span className="font-bold text-slate-900">{reviewCert.damId || 'DAM-001'}</span>
+                  <div className="flex justify-between items-center">
+                    <span className="text-slate-500 font-medium">Dam Name:</span>
+                    {reviewCert.parentDamName && reviewCert.parentDamName !== 'Information not available' ? (
+                      reviewCert.damId && reviewCert.damId !== reviewCert.parentDamName ? (
+                        <Link href={`/dams/${reviewCert.damId}`} className="font-bold text-rose-700 hover:underline flex items-center gap-1 truncate max-w-[160px]" title={reviewCert.parentDamName}>
+                          <span>{reviewCert.parentDamName} ({reviewCert.damId})</span>
+                          <ExternalLink className="h-2.5 w-2.5 flex-shrink-0" />
+                        </Link>
+                      ) : (
+                        <span className="font-bold text-slate-800">{reviewCert.parentDamName}</span>
+                      )
+                    ) : (
+                      <span className="font-bold text-slate-400">Information not available</span>
+                    )}
                   </div>
                 </div>
+              </div>
+
+              {/* Direct Full Record & Audit Navigation Link */}
+              <div className="pt-1">
+                <Link
+                  href={`/certificates/${reviewCert.id}`}
+                  className="w-full bg-purple-50 hover:bg-purple-100 text-purple-900 border border-purple-200 rounded-xl py-2 px-3 text-xs font-black flex items-center justify-center gap-1.5 transition-colors"
+                >
+                  <Eye className="h-3.5 w-3.5 text-purple-700" />
+                  <span>Inspect Full Certificate Record & Audit Trail →</span>
+                </Link>
               </div>
 
               {/* Rejection Form Input */}

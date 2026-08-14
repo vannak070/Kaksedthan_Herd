@@ -49,8 +49,14 @@ const DamCard = memo(function DamCard({ dam }: { dam: DamItem }) {
               <span className="font-bold text-slate-800">{dam.breedingStatus || 'Open'}</span>
             </div>
             <div className="flex justify-between">
-              <span className="text-slate-400 font-medium">Owner:</span>
-              <span className="font-bold text-slate-800 truncate max-w-[110px]">{dam.ownerName || 'SNR Farm'}</span>
+              <span className="text-slate-400 font-medium">Owner / Customer:</span>
+              <span className="font-bold text-slate-800 truncate max-w-[110px]">{dam.ownerName || 'N/A'}</span>
+            </div>
+            <div className="flex justify-between items-center border-t border-slate-200/60 pt-1 mt-1">
+              <span className="font-extrabold text-purple-700">Breeder:</span>
+              <span className="font-bold text-purple-900 truncate max-w-[110px] bg-purple-50 px-1.5 py-0.5 rounded border border-purple-100/80 text-[10px]" title={`${(dam as any).breederName || 'System Operation'} (${(dam as any).accountLevel || 'Professional Breeder Account'})`}>
+                {(dam as any).breederName || 'System Operation'}
+              </span>
             </div>
             <div className="flex justify-between border-t border-slate-200/60 pt-1 mt-1">
               <span className="font-extrabold text-slate-500">Certification:</span>
@@ -83,6 +89,9 @@ export default function DamsListPage() {
   const debouncedSearch = useDebounce(search, 300);
 
   const [availabilityFilter, setAvailabilityFilter] = useState('All');
+  const [breederFilter, setBreederFilter] = useState('All');
+  const [breedFilter, setBreedFilter] = useState('All');
+  const [breedingStatusFilter, setBreedingStatusFilter] = useState('All');
 
   // Global Pagination State
   const [currentPage, setCurrentPage] = useState(1);
@@ -100,9 +109,17 @@ export default function DamsListPage() {
   // Reset to page 1 on filter/debounced search change
   useEffect(() => {
     setCurrentPage(1);
-  }, [debouncedSearch, availabilityFilter]);
+  }, [debouncedSearch, availabilityFilter, breederFilter, breedFilter, breedingStatusFilter]);
 
-  // Memoized Filtered Dataset (Only recalculates when debounced search, availability, or dams change)
+  const availableBreeders = useMemo(() => {
+    return Array.from(new Set(dams.map(d => (d as any).breederName || 'System Operation')));
+  }, [dams]);
+
+  const availableBreeds = useMemo(() => {
+    return Array.from(new Set(dams.map(d => d.breed).filter(Boolean)));
+  }, [dams]);
+
+  // Memoized Filtered Dataset
   const filtered = useMemo(() => {
     const q = debouncedSearch.toLowerCase().trim();
     return dams.filter((d) => {
@@ -111,11 +128,17 @@ export default function DamsListPage() {
         (d.name || '').toLowerCase().includes(q) ||
         d.id.toLowerCase().includes(q) ||
         d.breed.toLowerCase().includes(q) ||
-        (d.ownerName || '').toLowerCase().includes(q);
+        (d.ownerName || '').toLowerCase().includes(q) ||
+        ((d as any).breederName || '').toLowerCase().includes(q);
+
       const matchesAvail = availabilityFilter === 'All' || d.availability === availabilityFilter;
-      return matchesSearch && matchesAvail;
+      const matchesBreeder = breederFilter === 'All' || ((d as any).breederName || 'System Operation') === breederFilter;
+      const matchesBreed = breedFilter === 'All' || d.breed === breedFilter;
+      const matchesBreedingStatus = breedingStatusFilter === 'All' || d.breedingStatus === breedingStatusFilter;
+
+      return matchesSearch && matchesAvail && matchesBreeder && matchesBreed && matchesBreedingStatus;
     });
-  }, [dams, debouncedSearch, availabilityFilter]);
+  }, [dams, debouncedSearch, availabilityFilter, breederFilter, breedFilter, breedingStatusFilter]);
 
   const totalCount = filtered.length;
 
@@ -144,20 +167,58 @@ export default function DamsListPage() {
         breadcrumbs={[{ label: 'Dam Register' }]}
         searchQuery={search}
         onSearchChange={setSearch}
-        searchPlaceholder="Search Dam ID, name, breed, or owner..."
+        searchPlaceholder="Search Dam ID, name, breed, owner, or breeder..."
         actionHref="/dams/new"
         actionLabel="Register Dam"
       >
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
+          {/* Breeder Filter */}
+          <select
+            value={breederFilter}
+            onChange={(e) => setBreederFilter(e.target.value)}
+            className="bg-slate-50 border border-slate-200 text-xs font-semibold rounded-xl px-3 py-2 text-slate-700 focus:outline-none focus:ring-2 focus:ring-purple-600 cursor-pointer"
+          >
+            <option value="All">All Breeders</option>
+            {availableBreeders.map(b => (
+              <option key={b} value={b}>{b}</option>
+            ))}
+          </select>
+
+          {/* Breed Filter */}
+          <select
+            value={breedFilter}
+            onChange={(e) => setBreedFilter(e.target.value)}
+            className="bg-slate-50 border border-slate-200 text-xs font-semibold rounded-xl px-3 py-2 text-slate-700 focus:outline-none focus:ring-2 focus:ring-purple-600 cursor-pointer"
+          >
+            <option value="All">All Breeds</option>
+            {availableBreeds.map(b => (
+              <option key={b} value={b}>{b}</option>
+            ))}
+          </select>
+
+          {/* Availability Filter */}
           <select
             value={availabilityFilter}
             onChange={(e) => setAvailabilityFilter(e.target.value)}
-            className="bg-slate-50 border border-slate-200 text-xs sm:text-sm font-semibold rounded-xl px-3 py-2 text-slate-700 focus:outline-none focus:ring-2 focus:ring-purple-600"
+            className="bg-slate-50 border border-slate-200 text-xs font-semibold rounded-xl px-3 py-2 text-slate-700 focus:outline-none focus:ring-2 focus:ring-purple-600 cursor-pointer"
           >
             <option value="All">All Availability</option>
             <option value="Available">Available</option>
             <option value="In Breeding">In Breeding</option>
             <option value="Pregnant">Pregnant</option>
+          </select>
+
+          {/* Reproductive / Breeding Status Filter */}
+          <select
+            value={breedingStatusFilter}
+            onChange={(e) => setBreedingStatusFilter(e.target.value)}
+            className="bg-slate-50 border border-slate-200 text-xs font-semibold rounded-xl px-3 py-2 text-slate-700 focus:outline-none focus:ring-2 focus:ring-purple-600 cursor-pointer"
+          >
+            <option value="All">All Reproductive Statuses</option>
+            <option value="Open">Open</option>
+            <option value="Inseminated">Inseminated</option>
+            <option value="Lactating">Lactating</option>
+            <option value="Resting">Resting</option>
           </select>
 
           <GlobalExport

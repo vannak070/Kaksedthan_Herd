@@ -147,6 +147,12 @@ export default function CalvesListPage() {
                         <span className="text-slate-400 font-medium">Dam ID:</span>
                         <span className="font-bold text-slate-800">{calf.damId}</span>
                       </div>
+                      <div className="flex justify-between items-center border-t border-slate-200/60 pt-1 mt-1">
+                        <span className="font-extrabold text-indigo-600">Managed Breeder:</span>
+                        <span className="font-bold text-indigo-900 truncate max-w-[110px] bg-indigo-50 px-1.5 py-0.5 rounded border border-indigo-100/80 text-[10px]" title={`${(calf as any).breederName || (calf as any).resolvedBreederName || 'System Operation'} (${(calf as any).accountLevel || (calf as any).resolvedAccountLevel || 'Internal Staff'})`}>
+                          {(calf as any).breederName || (calf as any).resolvedBreederName || 'System Operation'}
+                        </span>
+                      </div>
                       <div className="flex justify-between border-t border-slate-200/60 pt-1 mt-1">
                         <span className="font-extrabold text-slate-500">Certification:</span>
                         <span className={`font-black text-[10.5px] ${

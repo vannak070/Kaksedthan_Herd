@@ -160,7 +160,38 @@ async function safeMigrate() {
         created_at     TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
       );
     `);
-    console.log('[✓] health_logs');
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS breed_configurations (
+        id           VARCHAR(50) PRIMARY KEY,
+        name         VARCHAR(100) NOT NULL,
+        code         VARCHAR(50),
+        species      VARCHAR(50) DEFAULT 'Cattle',
+        description  TEXT,
+        status       VARCHAR(20) DEFAULT 'Active',
+        created_at   TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+      );
+
+      CREATE TABLE IF NOT EXISTS sourcing_companies (
+        id           VARCHAR(50) PRIMARY KEY,
+        code         VARCHAR(50),
+        name         VARCHAR(100) NOT NULL,
+        country      VARCHAR(100),
+        contact_person VARCHAR(100),
+        phone        VARCHAR(50),
+        email        VARCHAR(100),
+        image_url    TEXT,
+        notes        TEXT,
+        status       VARCHAR(20) DEFAULT 'Active',
+        created_at   TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+      );
+      ALTER TABLE sourcing_companies ADD COLUMN IF NOT EXISTS country VARCHAR(100);
+      ALTER TABLE sourcing_companies ADD COLUMN IF NOT EXISTS image_url TEXT;
+      ALTER TABLE sourcing_companies ADD COLUMN IF NOT EXISTS status VARCHAR(20) DEFAULT 'Active';
+      ALTER TABLE sourcing_companies ADD COLUMN IF NOT EXISTS contact_person VARCHAR(100);
+      ALTER TABLE sourcing_companies ADD COLUMN IF NOT EXISTS phone VARCHAR(50);
+      ALTER TABLE sourcing_companies ADD COLUMN IF NOT EXISTS email VARCHAR(100);
+    `);
+    console.log('[✓] breed_configurations & sourcing_companies');
 
     // ── 9. expenses ──────────────────────────────────────────────────────────
     await client.query(`
@@ -328,6 +359,29 @@ async function safeMigrate() {
         current_status       VARCHAR(50) DEFAULT 'Healthy (Nursing)',
         created_at           TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
       );
+      ALTER TABLE calves ADD COLUMN IF NOT EXISTS customer_id VARCHAR(50);
+      ALTER TABLE calves ADD COLUMN IF NOT EXISTS breeder_id VARCHAR(50);
+      ALTER TABLE calves ADD COLUMN IF NOT EXISTS breed_id VARCHAR(50);
+      ALTER TABLE calves ADD COLUMN IF NOT EXISTS registration_number VARCHAR(50);
+
+      ALTER TABLE dams ADD COLUMN IF NOT EXISTS customer_id VARCHAR(50);
+      ALTER TABLE dams ADD COLUMN IF NOT EXISTS breeder_id VARCHAR(50);
+      ALTER TABLE dams ADD COLUMN IF NOT EXISTS breed_id VARCHAR(50);
+      ALTER TABLE dams ADD COLUMN IF NOT EXISTS registration_number VARCHAR(50);
+      ALTER TABLE dams ADD COLUMN IF NOT EXISTS father_id VARCHAR(50);
+      ALTER TABLE dams ADD COLUMN IF NOT EXISTS mother_id VARCHAR(50);
+      ALTER TABLE dams ADD COLUMN IF NOT EXISTS owner_type VARCHAR(50);
+      ALTER TABLE dams ADD COLUMN IF NOT EXISTS ownership_status VARCHAR(50) DEFAULT 'Active';
+      ALTER TABLE dams ADD COLUMN IF NOT EXISTS ownership_start_date TIMESTAMP WITH TIME ZONE;
+
+      ALTER TABLE sires ADD COLUMN IF NOT EXISTS breeder_id VARCHAR(50);
+      ALTER TABLE sires ADD COLUMN IF NOT EXISTS breed_id VARCHAR(50);
+      ALTER TABLE sires ADD COLUMN IF NOT EXISTS registration_number VARCHAR(50);
+      ALTER TABLE sires ADD COLUMN IF NOT EXISTS father_id VARCHAR(50);
+      ALTER TABLE sires ADD COLUMN IF NOT EXISTS mother_id VARCHAR(50);
+      ALTER TABLE sires ADD COLUMN IF NOT EXISTS owner_type VARCHAR(50);
+
+      ALTER TABLE breeding_programs ADD COLUMN IF NOT EXISTS customer_id VARCHAR(50);
     `);
     console.log('[✓] calves_herd');
 

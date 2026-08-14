@@ -15,7 +15,13 @@ export default function NewStockInseminationPage() {
   const [submitting, setSubmitting] = useState(false);
 
   // Requirement 9: Auto-generated unique Stock Code format SEM-2026-XXXXXX
-  const [stockCode] = useState(() => `SEM-2026-${Math.floor(100000 + Math.random() * 900000)}`);
+  const [stockCode, setStockCode] = useState('SEM-2026-000000');
+
+  useEffect(() => {
+    const code = `SEM-2026-${Math.floor(100000 + Math.random() * 900000)}`;
+    setStockCode(code);
+    setFormData(prev => ({ ...prev, id: code }));
+  }, []);
 
   const [formData, setFormData] = useState({
     id: stockCode,

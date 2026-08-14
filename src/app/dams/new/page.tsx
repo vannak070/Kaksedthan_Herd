@@ -25,8 +25,8 @@ export default function NewDamPage() {
     sourcingCompanies: [],
   });
 
-  const [formData, setFormData] = useState<any>(() => ({
-    id: `DAM-${Math.floor(100 + Math.random() * 900)}`,
+  const [formData, setFormData] = useState<any>({
+    id: 'DAM-2026',
     name: '',
     breed: '',
     breedId: '',
@@ -42,7 +42,14 @@ export default function NewDamPage() {
     availability: 'Available' as const,
     breedingStatus: 'Open' as const,
     pregnancyStatus: 'Open' as const,
-  }));
+  });
+
+  React.useEffect(() => {
+    setFormData((prev: any) => ({
+      ...prev,
+      id: prev.id === 'DAM-2026' ? `DAM-${Math.floor(100 + Math.random() * 900)}` : prev.id
+    }));
+  }, []);
 
   React.useEffect(() => {
     fetchDamFormOptionsAction().then((res) => {
@@ -395,7 +402,6 @@ export default function NewDamPage() {
                         <option value="Breeder Account">Breeder Account</option>
                         <option value="Farm Owner Account">Farm Owner Account</option>
                         <option value="Sire Sourcing Company Account">Sire Sourcing Company Account</option>
-                        <option value="Admin">Admin (Internal Company)</option>
                       </>
                     )}
                   </select>

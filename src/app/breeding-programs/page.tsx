@@ -196,7 +196,7 @@ export default function BreedingProgramsListPage() {
                   <div className="space-y-1 text-xs text-slate-600 bg-slate-50/80 p-3 rounded-2xl border border-slate-100">
                     <div className="flex justify-between">
                       <span className="text-slate-400 font-medium">Breeder:</span>
-                      <span className="font-bold text-slate-900">{bp.breederName || 'Sokha Breeder'}</span>
+                      <span className="font-bold text-slate-900">{bp.breederName || 'Registered Breeder'}</span>
                     </div>
                     <div className="flex justify-between">
                       <span className="text-slate-400 font-medium">Expected Calving:</span>

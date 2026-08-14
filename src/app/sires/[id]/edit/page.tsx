@@ -518,7 +518,6 @@ export default function EditSirePage({ params }: PageProps) {
                           <option value="Breeder Account">Breeder Account</option>
                           <option value="Farm Owner Account">Farm Owner Account</option>
                           <option value="Customer / Cow Owner Account">Customer / Cow Owner Account</option>
-                          <option value="Admin">Admin (Internal Company)</option>
                         </>
                       )}
                     </select>

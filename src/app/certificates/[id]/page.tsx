@@ -10,13 +10,30 @@ interface PageProps {
   params: Promise<{ id: string }>;
 }
 
+import CertificateReviewActions from '@/components/certificate/CertificateReviewActions';
+
 export default async function CertificateDetailPage({ params }: PageProps) {
   const { id } = await params;
   const certs = await herdbookRepository.getCertificates();
   const regs = await herdbookRepository.getHerdbookRegistrations();
 
   const cert = certs.find(c => c.id === id || c.registrationId === id || c.certificateNumber === id);
-  const reg = cert ? regs.find(r => r.id === cert.registrationId) : regs.find(r => r.id === id);
+  let reg = cert ? regs.find(r => r.id === cert.registrationId) : regs.find(r => r.id === id);
+
+  if (!reg && cert) {
+    reg = {
+      id: cert.registrationId || `HR-${cert.id}`,
+      registrationNumber: cert.registrationNumber || cert.registrationId,
+      animalType: cert.animalType as any,
+      animalId: cert.animalId,
+      ownerName: cert.ownerName || 'Registered Owner',
+      farmLocation: cert.farmLocation || 'Farm Station',
+      breederName: cert.appliedBy || 'Registered Breeder',
+      registrationDate: cert.issueDate || new Date().toISOString().split('T')[0],
+      status: cert.status,
+      publicToken: `token_${cert.id.toLowerCase().replace(/[^a-z0-9]/g, '')}`
+    };
+  }
 
   if (!reg && !cert) {
     return (
@@ -52,14 +69,14 @@ export default async function CertificateDetailPage({ params }: PageProps) {
     calfBreed: calf?.breed || reg!.breed,
     calfSex: calf?.sex || 'Female',
     calfImageUrl: calf?.imageUrl || reg!.imageUrl,
-    sireId: sireId || 'SIR-001',
-    sireName: sire?.name || reg!.sireName || 'Master Sire',
-    sireBreed: sire?.breed || 'Brahman',
+    sireId: sireId || sire?.id,
+    sireName: sire?.name || reg!.sireName || (sireId ? sireId : 'N/A'),
+    sireBreed: sire?.breed || 'Purebred',
     sireImageUrl: sire?.imageUrl,
     sireStatus: sire?.status || 'Active',
-    damId: damId || 'DAM-001',
-    damName: dam?.name || reg!.damName || 'Master Dam',
-    damBreed: dam?.breed || 'Wagyu',
+    damId: damId || dam?.id,
+    damName: dam?.name || reg!.damName || (damId ? damId : 'N/A'),
+    damBreed: dam?.breed || 'Purebred',
     damImageUrl: dam?.imageUrl,
     damStatus: dam?.status || 'Active',
     breedingProgramId: bpId,
@@ -87,6 +104,9 @@ export default async function CertificateDetailPage({ params }: PageProps) {
         backLabel="Back to Certificate Center"
       />
 
+      {/* Internal System User Review & Approval Banner */}
+      <CertificateReviewActions cert={certItem as any} />
+
       {/* Requirement 19: Structured Navigation Tabs / Sections */}
       <div className="bg-white rounded-3xl border border-slate-200 p-6 shadow-sm space-y-6">
         <div className="border-b border-slate-100 pb-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
@@ -107,87 +127,121 @@ export default async function CertificateDetailPage({ params }: PageProps) {
         {/* 4 Relational Cards with Clickable Direct Links to Master Records */}
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4 text-xs">
           
-          {/* 1. Calf Section */}
-          <div className="bg-slate-50 p-4 rounded-2xl border border-slate-200 space-y-2 flex flex-col justify-between">
+          {/* 1. Target Animal Record Card */}
+          <div className="bg-purple-50/70 p-4 rounded-2xl border border-purple-200 space-y-2 flex flex-col justify-between">
             <div>
-              <h4 className="font-black text-purple-700 uppercase tracking-wider flex items-center gap-1.5 text-[11px] mb-2">
-                <Baby className="h-4 w-4" /> Calf Record
-              </h4>
-              <div className="relative aspect-square mb-2.5">
-                <StandardAnimalImage src={calf?.imageUrl || certItem.calfImageUrl} alt={certItem.calfName || 'Calf'} />
+              <div className="flex items-center justify-between mb-2">
+                <h4 className="font-black text-purple-800 uppercase tracking-wider flex items-center gap-1.5 text-[11px]">
+                  {certItem.animalType === 'Sire' ? <Beef className="h-4 w-4" /> : certItem.animalType === 'Dam' ? <Heart className="h-4 w-4" /> : <Baby className="h-4 w-4" />}
+                  {certItem.animalType || 'Animal'} Record
+                </h4>
+                <span className="text-[8px] font-black bg-purple-100 text-purple-800 px-1.5 py-0.5 rounded-md">
+                  ✓ Registered
+                </span>
               </div>
-              <p className="font-black text-slate-900 text-sm">{certItem.calfName || 'Calf'}</p>
-              <p className="text-slate-500 text-[11px]">Breed: {certItem.calfBreed || 'Brahman'}</p>
-              <p className="text-slate-500 text-[11px]">Sex: {certItem.calfSex || 'Female'}</p>
+              <div className="relative aspect-square mb-2.5">
+                <StandardAnimalImage src={certItem.imageUrl || calf?.imageUrl} alt={certItem.damName || certItem.sireName || certItem.calfName || certItem.animalId || 'Animal'} />
+              </div>
+              <p className="font-black text-slate-900 text-sm">
+                {certItem.animalType === 'Dam' ? certItem.damName : certItem.animalType === 'Sire' ? certItem.sireName : (certItem.calfName || certItem.animalId)}
+              </p>
+              <p className="text-slate-500 text-[11px]">Breed: {certItem.damBreed || certItem.sireBreed || certItem.calfBreed || 'Brahman'}</p>
+              <p className="text-slate-500 text-[11px]">ID: {certItem.animalId}</p>
             </div>
-            {calfId && (
-              <Link href={`/calves/${calfId}`} className="mt-2 text-[11px] font-bold text-purple-700 hover:underline inline-flex items-center gap-1">
-                <span>View Calf Profile</span>
+            {certItem.animalId && (
+              <Link href={certItem.animalType === 'Sire' ? `/sires/${certItem.animalId}` : certItem.animalType === 'Dam' ? `/dams/${certItem.animalId}` : `/calves/${certItem.animalId}`} className="mt-2 text-[11px] font-bold text-purple-800 hover:underline inline-flex items-center gap-1">
+                <span>View {certItem.animalType || 'Animal'} Profile</span>
                 <ExternalLink className="h-3 w-3" />
               </Link>
             )}
           </div>
 
-          {/* 2. Sire Section */}
+          {/* 2. Sire Lineage Section */}
           <div className="bg-sky-50/70 p-4 rounded-2xl border border-sky-200 space-y-2 flex flex-col justify-between">
             <div>
               <div className="flex items-center justify-between mb-2">
                 <h4 className="font-black text-sky-800 uppercase tracking-wider flex items-center gap-1.5 text-[11px]">
-                  <Beef className="h-4 w-4" /> Sire Master
+                  <Beef className="h-4 w-4" /> Sire Lineage
                 </h4>
-                <span className="text-[8px] font-black bg-emerald-100 text-emerald-800 px-1.5 py-0.5 rounded-md">
-                  ✓ Verified
-                </span>
+                {sire ? (
+                  <span className="text-[8px] font-black bg-emerald-100 text-emerald-800 px-1.5 py-0.5 rounded-md">✓ Verified</span>
+                ) : (
+                  <span className="text-[8px] font-black bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded-md">Lineage Info</span>
+                )}
               </div>
-              <div className="relative aspect-square mb-2.5">
-                <StandardAnimalImage src={sire?.imageUrl || certItem.sireImageUrl} alt={certItem.sireName || 'Sire'} />
-              </div>
-              <p className="font-black text-slate-900 text-sm">{certItem.sireName || 'Sire'}</p>
-              <p className="text-slate-500 text-[11px]">Breed: {certItem.sireBreed || 'Brahman'}</p>
-              <p className="text-slate-500 text-[11px]">Sire ID: {sireId || certItem.sireId}</p>
+              {sire ? (
+                <div className="relative aspect-square mb-2.5">
+                  <StandardAnimalImage src={sire.imageUrl || certItem.sireImageUrl} alt={sire.name} />
+                </div>
+              ) : (
+                <div className="p-3 bg-white rounded-xl border border-sky-100 mb-2 space-y-1">
+                  <p className="text-[10px] text-slate-400 font-medium uppercase">Sire (Father Name):</p>
+                  <p className="font-black text-slate-800 text-xs">{certItem.parentSireName || certItem.sireName || 'Information not available'}</p>
+                </div>
+              )}
+              {sire && <p className="font-black text-slate-900 text-sm">{sire.name}</p>}
+              {sire && <p className="text-slate-500 text-[11px]">Breed: {sire.breed}</p>}
+              <p className="text-slate-500 text-[11px]">
+                Sire: {sire?.name || certItem.parentSireName || certItem.sireName || 'Information not available'}
+              </p>
             </div>
-            {sireId && (
-              <Link href={`/sires/${sireId}`} className="mt-2 text-[11px] font-bold text-sky-800 hover:underline inline-flex items-center gap-1">
+            {sire ? (
+              <Link href={`/sires/${sire.id}`} className="mt-2 text-[11px] font-bold text-sky-800 hover:underline inline-flex items-center gap-1">
                 <span>View Sire Master Record</span>
                 <ExternalLink className="h-3 w-3" />
               </Link>
+            ) : (
+              <span className="text-[10px] text-slate-400 font-bold">Master record not registered</span>
             )}
           </div>
 
-          {/* 3. Dam Section */}
+          {/* 3. Dam Lineage Section */}
           <div className="bg-rose-50/70 p-4 rounded-2xl border border-rose-200 space-y-2 flex flex-col justify-between">
             <div>
               <div className="flex items-center justify-between mb-2">
                 <h4 className="font-black text-rose-800 uppercase tracking-wider flex items-center gap-1.5 text-[11px]">
-                  <Heart className="h-4 w-4" /> Dam Master
+                  <Heart className="h-4 w-4" /> Dam Lineage
                 </h4>
-                <span className="text-[8px] font-black bg-purple-100 text-purple-800 px-1.5 py-0.5 rounded-md">
-                  ✓ Verified
-                </span>
+                {dam ? (
+                  <span className="text-[8px] font-black bg-emerald-100 text-emerald-800 px-1.5 py-0.5 rounded-md">✓ Verified</span>
+                ) : (
+                  <span className="text-[8px] font-black bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded-md">Lineage Info</span>
+                )}
               </div>
-              <div className="relative aspect-square mb-2.5">
-                <StandardAnimalImage src={dam?.imageUrl || certItem.damImageUrl} alt={certItem.damName || 'Dam'} />
-              </div>
-              <p className="font-black text-slate-900 text-sm">{certItem.damName || 'Dam'}</p>
-              <p className="text-slate-500 text-[11px]">Breed: {certItem.damBreed || 'Wagyu'}</p>
-              <p className="text-slate-500 text-[11px]">Dam ID: {damId || certItem.damId}</p>
+              {dam ? (
+                <div className="relative aspect-square mb-2.5">
+                  <StandardAnimalImage src={dam.imageUrl || certItem.damImageUrl} alt={dam.name} />
+                </div>
+              ) : (
+                <div className="p-3 bg-white rounded-xl border border-rose-100 mb-2 space-y-1">
+                  <p className="text-[10px] text-slate-400 font-medium uppercase">Dam (Mother Name):</p>
+                  <p className="font-black text-slate-800 text-xs">{certItem.parentDamName || certItem.damName || 'Information not available'}</p>
+                </div>
+              )}
+              {dam && <p className="font-black text-slate-900 text-sm">{dam.name}</p>}
+              {dam && <p className="text-slate-500 text-[11px]">Breed: {dam.breed}</p>}
+              <p className="text-slate-500 text-[11px]">
+                Dam: {dam?.name || certItem.parentDamName || certItem.damName || 'Information not available'}
+              </p>
             </div>
-            {damId && (
-              <Link href={`/dams/${damId}`} className="mt-2 text-[11px] font-bold text-rose-800 hover:underline inline-flex items-center gap-1">
+            {dam ? (
+              <Link href={`/dams/${dam.id}`} className="mt-2 text-[11px] font-bold text-rose-800 hover:underline inline-flex items-center gap-1">
                 <span>View Dam Master Record</span>
                 <ExternalLink className="h-3 w-3" />
               </Link>
+            ) : (
+              <span className="text-[10px] text-slate-400 font-bold">Master record not registered</span>
             )}
           </div>
 
-          {/* 4. Breeding Program Section */}
+          {/* 4. Ownership & Location Section */}
           <div className="bg-slate-50 p-4 rounded-2xl border border-slate-200 space-y-2 flex flex-col justify-between">
             <div>
               <h4 className="font-black text-[#dc5c15] uppercase tracking-wider flex items-center gap-1.5 text-[11px] mb-2">
-                <Award className="h-4 w-4" /> Breeding Operation
+                <Award className="h-4 w-4" /> Ownership & Location
               </h4>
               <p className="text-slate-500 text-[11px] font-medium">Program Number:</p>
-              <p className="font-black text-[#dc5c15] text-sm">{bp?.programNumber || certItem.programNumber || 'BP-2026-0001'}</p>
+              <p className="font-black text-[#dc5c15] text-sm">{bp?.programNumber || certItem.programNumber || 'N/A'}</p>
               <div className="mt-2 space-y-1 text-[11px] text-slate-600 bg-white p-2.5 rounded-xl border border-slate-100">
                 <div className="flex justify-between">
                   <span className="text-slate-400">Owner:</span>
@@ -197,6 +251,10 @@ export default async function CertificateDetailPage({ params }: PageProps) {
                   <span className="text-slate-400">Station:</span>
                   <span className="font-bold text-slate-800">{certItem.farmLocation || 'Kandal'}</span>
                 </div>
+                <div className="flex justify-between">
+                  <span className="text-slate-400">Applicant:</span>
+                  <span className="font-bold text-amber-800">{certItem.appliedBy || 'Registered Breeder'}</span>
+                </div>
               </div>
             </div>
             {bpId ? (
@@ -205,7 +263,7 @@ export default async function CertificateDetailPage({ params }: PageProps) {
                 <ExternalLink className="h-3 w-3" />
               </Link>
             ) : (
-              <span className="text-[10px] text-slate-400 font-bold">Standard Breeding Pair</span>
+              <span className="text-[10px] text-slate-400 font-bold">Standard Herdbook Certificate</span>
             )}
           </div>
 

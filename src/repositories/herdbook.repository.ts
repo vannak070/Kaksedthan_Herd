@@ -243,7 +243,12 @@ export class HerdbookRepository {
   // ─────────────────────────────────────────────────────────────
   async getStockInsemination(): Promise<StockInseminationItem[]> {
     const sql = `
-      SELECT sem.*, s.name as sire_name, s.breed as sire_breed, s.image_url as sire_image_url
+      SELECT sem.*, s.name as sire_name, s.breed as sire_breed, s.image_url as sire_image_url,
+             (
+               SELECT STRING_AGG(COALESCE(st.recipient, '') || '|' || COALESCE(st.breeder_id, ''), ',')
+               FROM stock_transactions st
+               WHERE st.stock_insemination_id = sem.id
+             ) as transfer_recipients
       FROM stock_insemination sem
       LEFT JOIN sires s ON sem.sire_id = s.id
       ORDER BY sem.created_at DESC
@@ -262,12 +267,15 @@ export class HerdbookRepository {
       ownerName: r.owner_name,
       farmLocation: r.farm_location,
       breederName: r.breeder_name,
+      breederId: r.breeder_id,
+      sourcingCompanyId: r.sourcing_company_id,
       availability: r.availability,
       status: r.status,
       tankNumber: r.tank_number || 'CAN-TANK-01',
       collectionDate: r.collection_date ? new Date(r.collection_date).toISOString().split('T')[0] : undefined,
       notes: r.notes || '',
       initialQuantity: r.initial_quantity ? Number(r.initial_quantity) : 100,
+      transferRecipients: r.transfer_recipients || '',
       createdAt: r.created_at,
       updatedAt: r.updated_at
     }));
@@ -391,6 +399,36 @@ export class HerdbookRepository {
     }));
   }
 
+  async getStockTransactionsForBreeder(breederId?: string, breederName?: string): Promise<Array<{ id: string; stockInseminationId: string; date: string; type: string; qty: number; balance: number; ref: string; recipient?: string; priceUsd?: number; user: string }>> {
+    let whereClause = '';
+    const params: any[] = [];
+
+    if (breederId || breederName) {
+      whereClause = `WHERE (breeder_id = $1 OR LOWER(recipient) LIKE LOWER($2))`;
+      params.push(breederId || '', `%${breederName || breederId || ''}%`);
+    }
+
+    const sql = `
+      SELECT *
+      FROM stock_transactions
+      ${whereClause}
+      ORDER BY created_at DESC
+    `;
+    const res = await query(sql, params);
+    return res.rows.map(r => ({
+      id: r.id,
+      stockInseminationId: r.stock_insemination_id,
+      date: r.created_at ? new Date(r.created_at).toISOString().split('T')[0] : new Date().toISOString().split('T')[0],
+      type: r.transaction_type,
+      qty: Number(r.quantity),
+      balance: Number(r.balance),
+      ref: r.reference || r.id,
+      recipient: r.recipient || undefined,
+      priceUsd: r.price_usd ? Number(r.price_usd) : undefined,
+      user: r.user_name || 'System Admin',
+    }));
+  }
+
   async createStockTransaction(tx: {
     id?: string;
     stockInseminationId: string;
@@ -399,15 +437,18 @@ export class HerdbookRepository {
     balance: number;
     reference?: string;
     recipient?: string;
+    breederId?: string;
+    farmId?: string;
+    customerId?: string;
     priceUsd?: number;
     userName?: string;
   }): Promise<void> {
     const txId = tx.id || `TX-${Date.now()}-${Math.floor(100 + Math.random() * 900)}`;
     const sql = `
       INSERT INTO stock_transactions (
-        id, stock_insemination_id, transaction_type, quantity, balance, reference, recipient, price_usd, user_name, created_at
+        id, stock_insemination_id, transaction_type, quantity, balance, reference, recipient, breeder_id, farm_id, customer_id, price_usd, user_name, created_at
       )
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, CURRENT_TIMESTAMP)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, CURRENT_TIMESTAMP)
     `;
     await query(sql, [
       txId,
@@ -417,6 +458,9 @@ export class HerdbookRepository {
       tx.balance,
       tx.reference || txId,
       tx.recipient || null,
+      tx.breederId || null,
+      tx.farmId || null,
+      tx.customerId || null,
       tx.priceUsd || 0,
       tx.userName || 'Super Admin',
     ]);
@@ -444,10 +488,15 @@ export class HerdbookRepository {
       SELECT d.*,
              bc.name as breed_master_name,
              f.name as farm_station_name,
+             COALESCE(b.name, u.name, 'System Operation') as resolved_breeder_name,
+             COALESCE(b.code, u.user_level, u.role, 'Professional Breeder Account') as resolved_account_level,
              COALESCE(c.status, 'NOT_APPLIED') as certification_status
       FROM dams d
       LEFT JOIN breed_configurations bc ON bc.id = d.breed_id
       LEFT JOIN farms f ON f.id = d.farm_id
+      LEFT JOIN customers cu ON (cu.id = COALESCE(d.customer_id, d.owner_id) OR cu.name = d.owner_name)
+      LEFT JOIN users u ON (u.id = d.breeder_id OR u.id = cu.managed_by_breeder_id OR u.breeder_id = d.breeder_id OR u.breeder_id = cu.managed_by_breeder_id)
+      LEFT JOIN breeders b ON (b.id = d.breeder_id OR b.id = cu.managed_by_breeder_id)
       LEFT JOIN (
         SELECT DISTINCT ON (COALESCE(animal_id, calf_id)) COALESCE(animal_id, calf_id) as target_id, status
         FROM certificates
@@ -476,6 +525,8 @@ export class HerdbookRepository {
       pregnancyStatus: r.pregnancy_status,
       certificationStatus: r.certification_status || 'NOT_APPLIED',
       breederId: r.breeder_id || null,
+      breederName: r.resolved_breeder_name || 'System Operation',
+      accountLevel: r.resolved_account_level || 'Professional Breeder Account',
       customerId: r.customer_id || null,
       customerName: r.owner_name || null,
       createdAt: r.created_at,
@@ -917,7 +968,7 @@ export class HerdbookRepository {
       FROM calves c
       LEFT JOIN sires s ON c.sire_id = s.id
       LEFT JOIN dams d ON c.dam_id = d.id
-      LEFT JOIN customers cu ON cu.id = c.customer_id
+      LEFT JOIN customers cu ON cu.id = COALESCE(c.customer_id, c.owner_id)
       LEFT JOIN (
         SELECT DISTINCT ON (COALESCE(animal_id, calf_id)) COALESCE(animal_id, calf_id) as target_id, status
         FROM certificates
@@ -1183,15 +1234,16 @@ export class HerdbookRepository {
     try {
       await query(`
         INSERT INTO herdbook_registrations (
-          id, registration_number, animal_type, animal_id, sire_id,
+          id, registration_number, animal_type, animal_id, sire_id, dam_id,
           owner_name, farm_location, breeder_name, registration_date, status, public_token
         )
         SELECT 
-          'HR-SIR-' || s.id,
-          'KH-2026-SIR-' || regexp_replace(s.id, '[^a-zA-Z0-9]', '', 'g'),
+          'HR-SIRE-' || s.id,
+          'KH-2026-SIRE-' || regexp_replace(s.id, '[^a-zA-Z0-9]', '', 'g'),
           'Sire',
           s.id,
-          s.id,
+          (SELECT sr.id FROM sires sr WHERE sr.id = s.father_id LIMIT 1),
+          (SELECT dm.id FROM dams dm WHERE dm.id = s.mother_id LIMIT 1),
           COALESCE(s.owner_name, 'Kaksedthan Livestock'),
           COALESCE(s.farm_location, 'Kandal'),
           'Kaksedthan Station',
@@ -1199,12 +1251,14 @@ export class HerdbookRepository {
           'Published',
           'token_sire_' || lower(regexp_replace(s.id, '[^a-zA-Z0-9]', '', 'g'))
         FROM sires s
-        ON CONFLICT (id) DO NOTHING;
+        ON CONFLICT (id) DO UPDATE SET
+          sire_id = EXCLUDED.sire_id,
+          dam_id = EXCLUDED.dam_id;
       `);
 
       await query(`
         INSERT INTO herdbook_registrations (
-          id, registration_number, animal_type, animal_id, dam_id,
+          id, registration_number, animal_type, animal_id, sire_id, dam_id,
           owner_name, farm_location, breeder_name, registration_date, status, public_token
         )
         SELECT 
@@ -1212,7 +1266,8 @@ export class HerdbookRepository {
           'KH-2026-DAM-' || regexp_replace(d.id, '[^a-zA-Z0-9]', '', 'g'),
           'Dam',
           d.id,
-          d.id,
+          (SELECT sr.id FROM sires sr WHERE sr.id = d.father_id LIMIT 1),
+          (SELECT dm.id FROM dams dm WHERE dm.id = d.mother_id LIMIT 1),
           COALESCE(d.owner_name, 'Kaksedthan Livestock'),
           COALESCE(d.farm_location, 'Kandal'),
           'Kaksedthan Station',
@@ -1220,7 +1275,9 @@ export class HerdbookRepository {
           'Published',
           'token_dam_' || lower(regexp_replace(d.id, '[^a-zA-Z0-9]', '', 'g'))
         FROM dams d
-        ON CONFLICT (id) DO NOTHING;
+        ON CONFLICT (id) DO UPDATE SET
+          sire_id = EXCLUDED.sire_id,
+          dam_id = EXCLUDED.dam_id;
       `);
     } catch (err) {
       console.error('Failed to sync master animals to herdbook', err);
@@ -1230,59 +1287,78 @@ export class HerdbookRepository {
   async getHerdbookRegistrations(): Promise<HerdbookRegistrationItem[]> {
     await this.syncMasterAnimalsToHerdbook();
     const sql = `
-      SELECT hr.*, 
+      SELECT hr.*,
+             COALESCE(hr.sire_id, c.sire_id, d.father_id, s.father_id) as resolved_sire_id,
+             COALESCE(hr.dam_id, c.dam_id, d.mother_id, s.mother_id) as resolved_dam_id,
              s.name as sire_name, s.breed as sire_breed, s.image_url as sire_image,
              d.name as dam_name, d.breed as dam_breed, d.image_url as dam_image,
-             c.name as calf_name, c.breed as calf_breed, c.image_url as calf_image
+             c.name as calf_name, c.breed as calf_breed, c.image_url as calf_image,
+             ps.name as parent_sire_name, pd.name as parent_dam_name
       FROM herdbook_registrations hr
-      LEFT JOIN sires s ON (hr.sire_id = s.id OR (hr.animal_type = 'Sire' AND hr.animal_id = s.id))
-      LEFT JOIN dams d ON (hr.dam_id = d.id OR (hr.animal_type = 'Dam' AND hr.animal_id = d.id))
+      LEFT JOIN sires s ON (hr.animal_type = 'Sire' AND hr.animal_id = s.id)
+      LEFT JOIN dams d ON (hr.animal_type = 'Dam' AND hr.animal_id = d.id)
       LEFT JOIN calves c ON (hr.calf_id = c.id OR (hr.animal_type = 'Calf' AND hr.animal_id = c.id))
+      LEFT JOIN sires ps ON (ps.id = COALESCE(hr.sire_id, c.sire_id, d.father_id, s.father_id))
+      LEFT JOIN dams pd ON (pd.id = COALESCE(hr.dam_id, c.dam_id, d.mother_id, s.mother_id))
       ORDER BY hr.created_at DESC
     `;
     const res = await query(sql);
-    return res.rows.map(r => ({
-      id: r.id,
-      registrationNumber: r.registration_number,
-      animalType: r.animal_type,
-      animalId: r.animal_id,
-      animalName: r.animal_type === 'Sire' ? (r.sire_name || r.animal_id) : r.animal_type === 'Dam' ? (r.dam_name || r.animal_id) : (r.calf_name || r.animal_id),
-      breed: r.animal_type === 'Sire' ? (r.sire_breed || 'Brahman') : r.animal_type === 'Dam' ? (r.dam_breed || 'Wagyu') : (r.calf_breed || 'Brahman'),
-      imageUrl: r.animal_type === 'Sire' ? r.sire_image : r.animal_type === 'Dam' ? r.dam_image : r.calf_image,
-      sireId: r.sire_id,
-      sireName: r.sire_name,
-      damId: r.dam_id,
-      damName: r.dam_name,
-      calfId: r.calf_id,
-      breedingProgramId: r.breeding_program_id,
-      ownerName: r.owner_name,
-      farmLocation: r.farm_location,
-      breederName: r.breeder_name,
-      registrationDate: r.registration_date ? new Date(r.registration_date).toISOString().split('T')[0] : '',
-      status: r.status,
-      approvedBy: r.approved_by,
-      approvedAt: r.approved_at,
-      publicToken: r.public_token,
-      createdAt: r.created_at,
-      updatedAt: r.updated_at
-    }));
+    return res.rows.map(r => {
+      const animalType = r.animal_type;
+      const animalId = r.animal_id;
+      const sireId = r.resolved_sire_id && r.resolved_sire_id !== animalId ? r.resolved_sire_id : undefined;
+      const damId = r.resolved_dam_id && r.resolved_dam_id !== animalId ? r.resolved_dam_id : undefined;
+      return {
+        id: r.id,
+        registrationNumber: r.registration_number,
+        animalType: r.animal_type,
+        animalId: r.animal_id,
+        animalName: r.animal_type === 'Sire' ? (r.sire_name || r.animal_id) : r.animal_type === 'Dam' ? (r.dam_name || r.animal_id) : (r.calf_name || r.animal_id),
+        breed: r.animal_type === 'Sire' ? (r.sire_breed || 'Brahman') : r.animal_type === 'Dam' ? (r.dam_breed || 'Wagyu') : (r.calf_breed || 'Brahman'),
+        imageUrl: r.animal_type === 'Sire' ? r.sire_image : r.animal_type === 'Dam' ? r.dam_image : r.calf_image,
+        sireId,
+        sireName: r.parent_sire_name || (sireId ? sireId : undefined),
+        damId,
+        damName: r.parent_dam_name || (damId ? damId : undefined),
+        calfId: r.calf_id,
+        breedingProgramId: r.breeding_program_id,
+        ownerName: r.owner_name,
+        farmLocation: r.farm_location,
+        breederName: r.breeder_name,
+        registrationDate: r.registration_date ? new Date(r.registration_date).toISOString().split('T')[0] : '',
+        status: r.status,
+        approvedBy: r.approved_by,
+        approvedAt: r.approved_at,
+        publicToken: r.public_token,
+        createdAt: r.created_at,
+        updatedAt: r.updated_at
+      };
+    });
   }
 
   async getHerdbookRegistrationById(id: string): Promise<HerdbookRegistrationItem | null> {
     const sql = `
       SELECT hr.*, 
+             COALESCE(hr.sire_id, c.sire_id, d.father_id, s.father_id) as resolved_sire_id,
+             COALESCE(hr.dam_id, c.dam_id, d.mother_id, s.mother_id) as resolved_dam_id,
              s.name as sire_name, s.breed as sire_breed, s.image_url as sire_image,
              d.name as dam_name, d.breed as dam_breed, d.image_url as dam_image,
-             c.name as calf_name, c.breed as calf_breed, c.image_url as calf_image
+             c.name as calf_name, c.breed as calf_breed, c.image_url as calf_image,
+             ps.name as parent_sire_name, pd.name as parent_dam_name
       FROM herdbook_registrations hr
-      LEFT JOIN sires s ON (hr.sire_id = s.id OR (hr.animal_type = 'Sire' AND hr.animal_id = s.id))
-      LEFT JOIN dams d ON (hr.dam_id = d.id OR (hr.animal_type = 'Dam' AND hr.animal_id = d.id))
+      LEFT JOIN sires s ON (hr.animal_type = 'Sire' AND hr.animal_id = s.id)
+      LEFT JOIN dams d ON (hr.animal_type = 'Dam' AND hr.animal_id = d.id)
       LEFT JOIN calves c ON (hr.calf_id = c.id OR (hr.animal_type = 'Calf' AND hr.animal_id = c.id))
+      LEFT JOIN sires ps ON (ps.id = COALESCE(hr.sire_id, c.sire_id, d.father_id, s.father_id))
+      LEFT JOIN dams pd ON (pd.id = COALESCE(hr.dam_id, c.dam_id, d.mother_id, s.mother_id))
       WHERE hr.id = $1 OR hr.registration_number = $1 OR hr.animal_id = $1
     `;
     const res = await query(sql, [id]);
     if (res.rows.length === 0) return null;
     const r = res.rows[0];
+    const animalId = r.animal_id;
+    const sireId = r.resolved_sire_id && r.resolved_sire_id !== animalId ? r.resolved_sire_id : undefined;
+    const damId = r.resolved_dam_id && r.resolved_dam_id !== animalId ? r.resolved_dam_id : undefined;
     return {
       id: r.id,
       registrationNumber: r.registration_number,
@@ -1291,10 +1367,10 @@ export class HerdbookRepository {
       animalName: r.animal_type === 'Sire' ? (r.sire_name || r.animal_id) : r.animal_type === 'Dam' ? (r.dam_name || r.animal_id) : (r.calf_name || r.animal_id),
       breed: r.animal_type === 'Sire' ? (r.sire_breed || 'Brahman') : r.animal_type === 'Dam' ? (r.dam_breed || 'Wagyu') : (r.calf_breed || 'Brahman'),
       imageUrl: r.animal_type === 'Sire' ? r.sire_image : r.animal_type === 'Dam' ? r.dam_image : r.calf_image,
-      sireId: r.sire_id,
-      sireName: r.sire_name,
-      damId: r.dam_id,
-      damName: r.dam_name,
+      sireId,
+      sireName: r.parent_sire_name || (sireId ? sireId : undefined),
+      damId,
+      damName: r.parent_dam_name || (damId ? damId : undefined),
       calfId: r.calf_id,
       breedingProgramId: r.breeding_program_id,
       ownerName: r.owner_name,
@@ -1431,24 +1507,42 @@ export class HerdbookRepository {
   async getCertificates(): Promise<HerdbookCertificateItem[]> {
     await this.syncMasterAnimalsToHerdbook();
     const sql = `
-      SELECT cert.*, hr.registration_number, hr.animal_type, hr.animal_id, hr.sire_id, hr.dam_id, hr.breeding_program_id,
+      SELECT cert.*, hr.registration_number, hr.animal_type, hr.animal_id, hr.breeding_program_id,
+             COALESCE(hr.sire_id, c.sire_id, d.father_id, s.father_id) as resolved_sire_id,
+             COALESCE(hr.dam_id, c.dam_id, d.mother_id, s.mother_id) as resolved_dam_id,
              c.name as calf_name, c.breed as calf_breed, c.sex as calf_sex, c.birth_date, c.image_url as calf_image,
              s.name as sire_name, s.breed as sire_breed, s.status as sire_status, s.image_url as sire_image,
              d.name as dam_name, d.breed as dam_breed, d.availability as dam_status, d.image_url as dam_image,
+             ps.name as parent_sire_name, ps.breed as parent_sire_breed, ps.image_url as parent_sire_image,
+             pd.name as parent_dam_name, pd.breed as parent_dam_breed, pd.image_url as parent_dam_image,
              bp.program_number,
-             hr.owner_name, hr.farm_location, hr.public_token
+             hr.owner_name, hr.farm_location, hr.public_token,
+             COALESCE(
+               cert.applied_by,
+               b.name,
+               u.name
+             ) as resolved_applied_by
       FROM certificates cert
       JOIN herdbook_registrations hr ON cert.registration_id = hr.id
       LEFT JOIN calves c ON (cert.calf_id = c.id OR hr.calf_id = c.id OR (hr.animal_type = 'Calf' AND hr.animal_id = c.id))
-      LEFT JOIN sires s ON (hr.sire_id = s.id OR c.sire_id = s.id OR (hr.animal_type = 'Sire' AND hr.animal_id = s.id))
-      LEFT JOIN dams d ON (hr.dam_id = d.id OR c.dam_id = d.id OR (hr.animal_type = 'Dam' AND hr.animal_id = d.id))
+      LEFT JOIN sires s ON (hr.animal_type = 'Sire' AND hr.animal_id = s.id)
+      LEFT JOIN dams d ON (hr.animal_type = 'Dam' AND hr.animal_id = d.id)
+      LEFT JOIN sires ps ON (ps.id = COALESCE(hr.sire_id, c.sire_id, d.father_id, s.father_id))
+      LEFT JOIN dams pd ON (pd.id = COALESCE(hr.dam_id, c.dam_id, d.mother_id, s.mother_id))
       LEFT JOIN breeding_programs bp ON (hr.breeding_program_id = bp.id OR c.breeding_program_id = bp.id)
+      LEFT JOIN customers cu ON (cu.name = hr.owner_name OR cu.id = hr.owner_name)
+      LEFT JOIN users u ON (u.id = cu.managed_by_breeder_id OR u.breeder_id = cu.managed_by_breeder_id)
+      LEFT JOIN breeders b ON (b.id = cu.managed_by_breeder_id)
       ORDER BY cert.created_at DESC
     `;
     const res = await query(sql);
     return res.rows.map(r => {
       const animalType = (r.animal_type as 'Sire' | 'Dam' | 'Calf') || (r.calf_id ? 'Calf' : r.sire_id ? 'Sire' : 'Dam');
       const animalId = r.animal_id || r.calf_id || r.sire_id || r.dam_id;
+      const sireId = r.resolved_sire_id && r.resolved_sire_id !== animalId ? r.resolved_sire_id : undefined;
+      const damId = r.resolved_dam_id && r.resolved_dam_id !== animalId ? r.resolved_dam_id : undefined;
+      const parentSireName = r.parent_sire_name || (sireId ? sireId : 'Information not available');
+      const parentDamName = r.parent_dam_name || (damId ? damId : 'Information not available');
       return {
         id: r.id,
         certificateNumber: r.certificate_number,
@@ -1462,20 +1556,33 @@ export class HerdbookRepository {
         calfSex: r.calf_sex,
         calfImageUrl: r.calf_image,
         birthDate: r.birth_date ? new Date(r.birth_date).toISOString().split('T')[0] : '',
-        sireId: r.sire_id,
-        sireName: r.sire_name || (r.sire_id ? r.sire_id : animalType === 'Sire' ? animalId : 'Sire information unavailable'),
-        sireBreed: r.sire_breed,
+        sireId,
+        sireName: animalType === 'Sire' ? (r.sire_name || animalId) : parentSireName,
+        sireBreed: animalType === 'Sire' ? r.sire_breed : (r.parent_sire_breed || r.sire_breed),
         sireStatus: r.sire_status,
-        sireImageUrl: r.sire_image,
-        damId: r.dam_id,
-        damName: r.dam_name || (r.dam_id ? r.dam_id : animalType === 'Dam' ? animalId : 'Dam information unavailable'),
-        damBreed: r.dam_breed,
+        sireImageUrl: animalType === 'Sire' ? r.sire_image : (r.parent_sire_image || r.sire_image),
+        parentSireId: sireId,
+        parentSireName,
+        damId,
+        damName: animalType === 'Dam' ? (r.dam_name || animalId) : parentDamName,
+        damBreed: animalType === 'Dam' ? r.dam_breed : (r.parent_dam_breed || r.dam_breed),
         damStatus: r.dam_status,
-        damImageUrl: r.dam_image,
+        damImageUrl: animalType === 'Dam' ? r.dam_image : (r.parent_dam_image || r.dam_image),
+        parentDamId: damId,
+        parentDamName,
+        imageUrl: (animalType === 'Sire' ? r.sire_image : animalType === 'Dam' ? r.dam_image : r.calf_image)
+          || r.dam_image || r.sire_image || r.calf_image
+          || 'https://images.unsplash.com/photo-1546445317-29f4545f9d52?q=80&w=800&auto=format&fit=crop',
         breedingProgramId: r.breeding_program_id,
         programNumber: r.program_number || (r.breeding_program_id ? `BP-${r.breeding_program_id}` : undefined),
         ownerName: r.owner_name,
         farmLocation: r.farm_location,
+        status: r.status || 'PENDING_APPROVAL',
+        appliedBy: r.resolved_applied_by || r.applied_by || 'Registered Breeder',
+        appliedDate: r.applied_date,
+        reviewedBy: r.reviewed_by,
+        reviewedDate: r.reviewed_date,
+        rejectionReason: r.rejection_reason,
         issueDate: r.issue_date ? new Date(r.issue_date).toISOString().split('T')[0] : '',
         layoutType: r.layout_type || 'A4 Landscape',
         publicVerificationUrl: `/public/verify/${r.public_token || 'token_kh2026'}`,
@@ -1486,17 +1593,23 @@ export class HerdbookRepository {
 
   async getCertificateById(id: string): Promise<HerdbookCertificateItem | null> {
     const sql = `
-      SELECT cert.*, hr.registration_number, hr.animal_type, hr.animal_id, hr.sire_id, hr.dam_id, hr.breeding_program_id,
+      SELECT cert.*, hr.registration_number, hr.animal_type, hr.animal_id, hr.breeding_program_id,
+             COALESCE(hr.sire_id, c.sire_id, d.father_id, s.father_id) as resolved_sire_id,
+             COALESCE(hr.dam_id, c.dam_id, d.mother_id, s.mother_id) as resolved_dam_id,
              c.name as calf_name, c.breed as calf_breed, c.sex as calf_sex, c.birth_date, c.image_url as calf_image,
              s.name as sire_name, s.breed as sire_breed, s.status as sire_status, s.image_url as sire_image,
              d.name as dam_name, d.breed as dam_breed, d.availability as dam_status, d.image_url as dam_image,
+             ps.name as parent_sire_name, ps.breed as parent_sire_breed, ps.image_url as parent_sire_image,
+             pd.name as parent_dam_name, pd.breed as parent_dam_breed, pd.image_url as parent_dam_image,
              bp.program_number,
              hr.owner_name, hr.farm_location, hr.breeder_name, hr.public_token
       FROM certificates cert
       JOIN herdbook_registrations hr ON cert.registration_id = hr.id
       LEFT JOIN calves c ON (cert.calf_id = c.id OR hr.calf_id = c.id OR (hr.animal_type = 'Calf' AND hr.animal_id = c.id))
-      LEFT JOIN sires s ON (hr.sire_id = s.id OR c.sire_id = s.id OR (hr.animal_type = 'Sire' AND hr.animal_id = s.id))
-      LEFT JOIN dams d ON (hr.dam_id = d.id OR c.dam_id = d.id OR (hr.animal_type = 'Dam' AND hr.animal_id = d.id))
+      LEFT JOIN sires s ON (hr.animal_type = 'Sire' AND hr.animal_id = s.id)
+      LEFT JOIN dams d ON (hr.animal_type = 'Dam' AND hr.animal_id = d.id)
+      LEFT JOIN sires ps ON (ps.id = COALESCE(hr.sire_id, c.sire_id, d.father_id, s.father_id))
+      LEFT JOIN dams pd ON (pd.id = COALESCE(hr.dam_id, c.dam_id, d.mother_id, s.mother_id))
       LEFT JOIN breeding_programs bp ON (hr.breeding_program_id = bp.id OR c.breeding_program_id = bp.id)
       WHERE cert.id = $1 OR cert.certificate_number = $1 OR cert.calf_id = $1 OR hr.registration_number = $1 OR hr.animal_id = $1
     `;
@@ -1505,6 +1618,10 @@ export class HerdbookRepository {
     const r = res.rows[0];
     const animalType = (r.animal_type as 'Sire' | 'Dam' | 'Calf') || (r.calf_id ? 'Calf' : r.sire_id ? 'Sire' : 'Dam');
     const animalId = r.animal_id || r.calf_id || r.sire_id || r.dam_id;
+    const sireId = r.resolved_sire_id && r.resolved_sire_id !== animalId ? r.resolved_sire_id : undefined;
+    const damId = r.resolved_dam_id && r.resolved_dam_id !== animalId ? r.resolved_dam_id : undefined;
+    const parentSireName = r.parent_sire_name || (sireId ? sireId : 'Information not available');
+    const parentDamName = r.parent_dam_name || (damId ? damId : 'Information not available');
     return {
       id: r.id,
       certificateNumber: r.certificate_number,
@@ -1518,20 +1635,33 @@ export class HerdbookRepository {
       calfSex: r.calf_sex,
       calfImageUrl: r.calf_image,
       birthDate: r.birth_date ? new Date(r.birth_date).toISOString().split('T')[0] : '',
-      sireId: r.sire_id,
-      sireName: r.sire_name || (r.sire_id ? r.sire_id : animalType === 'Sire' ? animalId : 'Sire information unavailable'),
-      sireBreed: r.sire_breed,
+      sireId,
+      sireName: animalType === 'Sire' ? (r.sire_name || animalId) : parentSireName,
+      sireBreed: animalType === 'Sire' ? r.sire_breed : (r.parent_sire_breed || r.sire_breed),
       sireStatus: r.sire_status,
-      sireImageUrl: r.sire_image,
-      damId: r.dam_id,
-      damName: r.dam_name || (r.dam_id ? r.dam_id : animalType === 'Dam' ? animalId : 'Dam information unavailable'),
-      damBreed: r.dam_breed,
+      sireImageUrl: animalType === 'Sire' ? r.sire_image : (r.parent_sire_image || r.sire_image),
+      parentSireId: sireId,
+      parentSireName,
+      damId,
+      damName: animalType === 'Dam' ? (r.dam_name || animalId) : parentDamName,
+      damBreed: animalType === 'Dam' ? r.dam_breed : (r.parent_dam_breed || r.dam_breed),
       damStatus: r.dam_status,
-      damImageUrl: r.dam_image,
+      damImageUrl: animalType === 'Dam' ? r.dam_image : (r.parent_dam_image || r.dam_image),
+      parentDamId: damId,
+      parentDamName,
+      imageUrl: (animalType === 'Sire' ? r.sire_image : animalType === 'Dam' ? r.dam_image : r.calf_image)
+        || r.dam_image || r.sire_image || r.calf_image
+        || 'https://images.unsplash.com/photo-1546445317-29f4545f9d52?q=80&w=800&auto=format&fit=crop',
       breedingProgramId: r.breeding_program_id,
       programNumber: r.program_number || (r.breeding_program_id ? `BP-${r.breeding_program_id}` : undefined),
       ownerName: r.owner_name,
       farmLocation: r.farm_location,
+      status: r.status || 'PENDING_APPROVAL',
+      appliedBy: r.applied_by,
+      appliedDate: r.applied_date,
+      reviewedBy: r.reviewed_by,
+      reviewedDate: r.reviewed_date,
+      rejectionReason: r.rejection_reason,
       issueDate: r.issue_date ? new Date(r.issue_date).toISOString().split('T')[0] : '',
       layoutType: r.layout_type || 'A4 Landscape',
       publicVerificationUrl: `/public/verify/${r.public_token || 'token_kh2026'}`,
@@ -2767,13 +2897,15 @@ export class HerdbookRepository {
              c.id_front_url, c.id_back_url, c.id_verification_status, c.customer_type,
              c.notes, c.status, c.managed_by_breeder_id, c.image_url, c.province, c.district, c.commune, c.village,
              c.created_at, c.updated_at,
-             u.name as managed_by_breeder_name,
-             (SELECT COUNT(*) FROM dams d WHERE d.owner_name = c.name OR d.owner_name = c.email) +
-             (SELECT COUNT(*) FROM calves cl WHERE cl.owner_name = c.name OR cl.owner_name = c.email) +
+             COALESCE(b.name, u.name, 'System Operation') as managed_by_breeder_name,
+             COALESCE(b.code, u.user_level, u.role, 'Internal Staff') as managed_by_account_level,
+             (SELECT COUNT(*) FROM dams d WHERE d.owner_name = c.name OR d.owner_name = c.email OR d.customer_id = c.id) +
+             (SELECT COUNT(*) FROM calves cl WHERE cl.owner_name = c.name OR cl.owner_name = c.email OR cl.customer_id = c.id) +
              (SELECT COUNT(*) FROM sires s WHERE s.owner_name = c.name OR s.owner_name = c.email) as animal_count,
-             (SELECT COUNT(*) FROM breeding_programs bp WHERE bp.cow_owner = c.name OR bp.owner_name = c.name) as breeding_count
+             (SELECT COUNT(*) FROM breeding_programs bp WHERE bp.cow_owner = c.name OR bp.owner_name = c.name OR bp.customer_id = c.id) as breeding_count
       FROM customers c
-      LEFT JOIN users u ON u.id = c.managed_by_breeder_id
+      LEFT JOIN users u ON (u.id = c.managed_by_breeder_id OR u.breeder_id = c.managed_by_breeder_id)
+      LEFT JOIN breeders b ON b.id = c.managed_by_breeder_id
       ${whereClause}
       ORDER BY c.created_at DESC, c.name ASC
     `;
@@ -2800,6 +2932,7 @@ export class HerdbookRepository {
       status: r.status || 'Active',
       managedByBreederId: r.managed_by_breeder_id || '',
       managedByBreederName: r.managed_by_breeder_name || 'System Breeder',
+      managedByAccountLevel: r.managed_by_account_level || 'Internal Staff',
       animalCount: parseInt(r.animal_count || '0', 10),
       breedingCount: parseInt(r.breeding_count || '0', 10),
       createdAt: r.created_at,
@@ -2886,9 +3019,16 @@ export class HerdbookRepository {
 
     let validBreederId: string | null = null;
     if (breederId && breederId !== 'ALL' && breederId !== 'ADMIN') {
-      const checkRes = await query(`SELECT id FROM users WHERE id = $1`, [breederId]);
+      const checkRes = await query(`SELECT id FROM users WHERE id = $1 OR breeder_id = $1`, [breederId]);
       if (checkRes.rows.length > 0) {
         validBreederId = breederId;
+      } else {
+        const bCheck = await query(`SELECT id FROM breeders WHERE id = $1`, [breederId]);
+        if (bCheck.rows.length > 0) {
+          validBreederId = breederId;
+        } else {
+          validBreederId = breederId;
+        }
       }
     }
 
@@ -3440,8 +3580,8 @@ export class HerdbookRepository {
     const id = `SC-${Date.now().toString().slice(-6)}`;
     const code = (data.code || data.name.trim().toUpperCase().replace(/[^A-Z0-9]+/g, '_')).slice(0, 50);
     const sql = `
-      INSERT INTO sourcing_companies (id, code, name, country, contact_name, phone, email, address, website, image_url, notes, status)
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+      INSERT INTO sourcing_companies (id, code, name, country, contact_name, contact_person, phone, email, address, website, image_url, notes, status)
+      VALUES ($1, $2, $3, $4, $5, $5, $6, $7, $8, $9, $10, $11, $12)
       RETURNING *
     `;
     await query(sql, [
@@ -3477,7 +3617,11 @@ export class HerdbookRepository {
 
     if (data.name !== undefined) { fields.push(`name = $${idx++}`); params.push(data.name.trim()); }
     if (data.country !== undefined) { fields.push(`country = $${idx++}`); params.push(data.country); }
-    if (data.contactName !== undefined) { fields.push(`contact_name = $${idx++}`); params.push(data.contactName); }
+    if (data.contactName !== undefined) {
+      fields.push(`contact_name = $${idx}`);
+      fields.push(`contact_person = $${idx++}`);
+      params.push(data.contactName);
+    }
     if (data.phone !== undefined) { fields.push(`phone = $${idx++}`); params.push(data.phone); }
     if (data.email !== undefined) { fields.push(`email = $${idx++}`); params.push(data.email); }
     if (data.address !== undefined) { fields.push(`address = $${idx++}`); params.push(data.address); }

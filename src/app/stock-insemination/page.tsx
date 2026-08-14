@@ -8,9 +8,11 @@ import GlobalPagination from '@/components/common/GlobalPagination';
 import GlobalExport from '@/components/common/GlobalExport';
 import { StockInseminationItem, SireItem } from '@/types/breeding.types';
 import { fetchStockInseminationAction, fetchSiresAction } from '@/app/actions';
-import { Syringe, Plus, ChevronRight } from 'lucide-react';
+import { useAccessControl } from '@/hooks/useAccessControl';
+import { Syringe, Plus, ChevronRight, Lock } from 'lucide-react';
 
 export default function StockInseminationListPage() {
+  const { currentUser, isBreeder, isAdmin, isSuperAdmin } = useAccessControl();
   const [stock, setStock] = useState<StockInseminationItem[]>([]);
   const [sires, setSires] = useState<SireItem[]>([]);
   const [loading, setLoading] = useState(true);
@@ -33,6 +35,27 @@ export default function StockInseminationListPage() {
   }, []);
 
   const filtered = stock.filter((s) => {
+    // RBAC Data Scoping: Breeder User Level cannot see global master stock.
+    // They can ONLY see stock transferred to them or assigned to their breeder ID / account name.
+    if (isBreeder && !isAdmin && !isSuperAdmin) {
+      const userBreederId = (currentUser?.breederId || currentUser?.id || '').toLowerCase();
+      const userName = (currentUser?.name || '').toLowerCase();
+      const userEmail = (currentUser?.email || '').toLowerCase();
+      const transferRecipients = ((s as any).transferRecipients || '').toLowerCase();
+
+      const isAllocatedToBreeder =
+        (userBreederId && (s.breederId?.toLowerCase() === userBreederId || (s as any).transferredToBreederId?.toLowerCase() === userBreederId)) ||
+        (userName && s.breederName?.toLowerCase() === userName) ||
+        (userName && s.ownerName?.toLowerCase() === userName) ||
+        (userEmail && (s as any).transferredToEmail?.toLowerCase() === userEmail) ||
+        (userName && transferRecipients.includes(userName)) ||
+        (userBreederId && transferRecipients.includes(userBreederId)) ||
+        s.status === 'Transferred' ||
+        (s as any).transferStatus === 'TRANSFERRED';
+
+      if (!isAllocatedToBreeder) return false;
+    }
+
     const sire = sires.find((sr) => sr.id === s.sireId);
     const sireName = sire?.name || s.sireName || '';
     const sireBreed = sire?.breed || s.sireBreed || '';
@@ -86,8 +109,8 @@ export default function StockInseminationListPage() {
         searchQuery={search}
         onSearchChange={setSearch}
         searchPlaceholder="Search Batch ID, Sire ID, Sire Name, or Owner..."
-        actionHref="/stock-insemination/new"
-        actionLabel="Add Semen Stock Batch"
+        actionHref={!isBreeder || isAdmin || isSuperAdmin ? "/stock-insemination/new" : undefined}
+        actionLabel={!isBreeder || isAdmin || isSuperAdmin ? "Add Semen Stock Batch" : undefined}
       >
         <div className="flex items-center gap-2">
           <select
@@ -123,6 +146,16 @@ export default function StockInseminationListPage() {
         </div>
       </PageHeader>
 
+      {isBreeder && !isAdmin && (
+        <div className="bg-amber-50 border border-amber-200 text-amber-900 p-4 rounded-2xl text-xs flex items-center gap-3">
+          <Syringe className="h-5 w-5 text-amber-600 shrink-0" />
+          <div>
+            <p className="font-bold">Breeder Stock & Allocation Filter Active</p>
+            <p className="text-amber-700 mt-0.5">As a Registered Breeder, global master stock insemination is hidden. You can only view semen straw stock that has been explicitly transferred to your breeder account or allocated to your farm station by Internal System User Level managers.</p>
+          </div>
+        </div>
+      )}
+
       {loading ? (
         <div className="flex items-center justify-center py-20">
           <div className="animate-spin h-8 w-8 border-4 border-sky-600 border-t-transparent rounded-full" />
@@ -130,17 +163,23 @@ export default function StockInseminationListPage() {
       ) : filtered.length === 0 ? (
         <div className="bg-white rounded-2xl border border-slate-200 p-12 text-center my-6">
           <Syringe className="h-12 w-12 text-slate-300 mx-auto mb-3" />
-          <h3 className="text-base font-bold text-slate-800">No Semen Batches Found</h3>
+          <h3 className="text-base font-bold text-slate-800">
+            {isBreeder && !isAdmin ? 'No Allocated Semen Stock Batches Found' : 'No Semen Batches Found'}
+          </h3>
           <p className="text-xs text-slate-500 mt-1 max-w-sm mx-auto">
-            No stock insemination records match your search or filter parameters. Add a new stock batch.
+            {isBreeder && !isAdmin
+              ? 'No stock insemination straws have been transferred to your breeder account or allocated to your farm station by Internal System User Level managers.'
+              : 'No stock insemination records match your search or filter parameters. Add a new stock batch.'}
           </p>
-          <Link
-            href="/stock-insemination/new"
-            className="inline-flex items-center gap-2 bg-sky-600 text-white font-bold text-xs px-4 py-2.5 rounded-xl mt-4 hover:bg-sky-700 transition-colors"
-          >
-            <Plus className="h-4 w-4" />
-            <span>Add First Batch</span>
-          </Link>
+          {(!isBreeder || isAdmin || isSuperAdmin) && (
+            <Link
+              href="/stock-insemination/new"
+              className="inline-flex items-center gap-2 bg-sky-600 text-white font-bold text-xs px-4 py-2.5 rounded-xl mt-4 hover:bg-sky-700 transition-colors"
+            >
+              <Plus className="h-4 w-4" />
+              <span>Add First Semen Batch</span>
+            </Link>
+          )}
         </div>
       ) : (
         <>
@@ -164,9 +203,13 @@ export default function StockInseminationListPage() {
                         {item.id}
                       </span>
                       <span className={`absolute top-2.5 right-2.5 text-white font-black text-[9px] px-2.5 py-0.5 rounded-full uppercase tracking-wider shadow-xs ${
-                        item.stockAvailable > 0 ? 'bg-emerald-600' : 'bg-rose-600'
+                        isBreeder && !isAdmin && !isSuperAdmin
+                          ? 'bg-amber-600'
+                          : item.stockAvailable > 0 ? 'bg-emerald-600' : 'bg-rose-600'
                       }`}>
-                        {item.stockAvailable > 0 ? `${item.stockAvailable} Straws` : 'Out of Stock'}
+                        {isBreeder && !isAdmin && !isSuperAdmin
+                          ? 'Allocated Stock'
+                          : item.stockAvailable > 0 ? `${item.stockAvailable} Straws` : 'Out of Stock'}
                       </span>
                     </div>
 

@@ -40,8 +40,8 @@ export default function NewSirePage() {
     return 'FARM';
   };
 
-  const [formData, setFormData] = useState<any>(() => ({
-    id: `SIR-${Math.floor(1000 + Math.random() * 9000)}`,
+  const [formData, setFormData] = useState<any>({
+    id: 'SIR-2026',
     name: '',
     registrationNumber: '',
     breed: '',
@@ -61,7 +61,7 @@ export default function NewSirePage() {
     ownerId: '',
     ownerName: '',
     ownershipStatus: 'Active',
-    ownershipStartDate: new Date().toISOString().split('T')[0],
+    ownershipStartDate: '',
 
     // Section 4: Station Location
     farmId: '',
@@ -69,7 +69,15 @@ export default function NewSirePage() {
 
     imageUrl: '',
     status: 'Active' as const,
-  }));
+  });
+
+  useEffect(() => {
+    setFormData((prev: any) => ({
+      ...prev,
+      id: prev.id === 'SIR-2026' ? `SIR-${Math.floor(1000 + Math.random() * 9000)}` : prev.id,
+      ownershipStartDate: prev.ownershipStartDate || new Date().toISOString().split('T')[0]
+    }));
+  }, []);
 
   const loadOptions = async () => {
     setLoadingOpts(true);
@@ -515,7 +523,6 @@ export default function NewSirePage() {
                           <option value="Breeder Account">Breeder Account</option>
                           <option value="Farm Owner Account">Farm Owner Account</option>
                           <option value="Customer / Cow Owner Account">Customer / Cow Owner Account</option>
-                          <option value="Admin">Admin (Internal Company)</option>
                         </>
                       )}
                     </select>

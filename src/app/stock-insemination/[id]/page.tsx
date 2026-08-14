@@ -19,6 +19,7 @@ import {
   fetchCustomersAction,
   fetchSourcingCompaniesAction
 } from '@/app/actions';
+import { useAccessControl } from '@/hooks/useAccessControl';
 import {
   Syringe,
   Beef,
@@ -53,6 +54,7 @@ import {
 type TabKey = 'overview' | 'stock' | 'sire' | 'availability' | 'transactions' | 'breeding' | 'related';
 
 export default function StockDetailPage() {
+  const { currentUser, isBreeder, isAdmin, isSuperAdmin } = useAccessControl();
   const params = useParams();
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -71,12 +73,16 @@ export default function StockDetailPage() {
   const initialTab = (searchParams.get('tab') as TabKey) || 'overview';
   const [activeTab, setActiveTab] = useState<TabKey>(initialTab);
 
-  // Interactive Action Modals: 'add' | 'sell' | 'transfer_breeder' | 'breeder_stock_out' | 'edit_batch'
-  const [activeModal, setActiveModal] = useState<'add' | 'sell' | 'transfer_breeder' | 'breeder_stock_out' | 'edit_batch' | null>(null);
-  const [actionQty, setActionQty] = useState<number>(50);
-  const [buyerName, setBuyerName] = useState<string>('');
+  // Interactive Action Modals: 'add' | 'transfer_stock' | 'breeder_stock_out' | 'edit_batch'
+  const [activeModal, setActiveModal] = useState<'add' | 'transfer_stock' | 'breeder_stock_out' | 'edit_batch' | null>(null);
+  const [recipientCategory, setRecipientCategory] = useState<'BREEDER' | 'FARM' | 'CUSTOMER'>('BREEDER');
   const [selectedBreederId, setSelectedBreederId] = useState<string>('');
   const [selectedBreederName, setSelectedBreederName] = useState<string>('');
+  const [selectedFarmId, setSelectedFarmId] = useState<string>('');
+  const [selectedCustomerId, setSelectedCustomerId] = useState<string>('');
+  const [recipientName, setRecipientName] = useState<string>('');
+  const [transferPriceUsd, setTransferPriceUsd] = useState<number>(10);
+  const [actionQty, setActionQty] = useState<number>(50);
   const [stockOutReason, setStockOutReason] = useState<string>('Field AI Insemination Service');
   const [processing, setProcessing] = useState<boolean>(false);
 
@@ -110,18 +116,27 @@ export default function StockDetailPage() {
       fetchCustomersAction(),
       fetchSourcingCompaniesAction(),
     ]).then(([stList, siresList, bpList, breedersData, farmsRes, customersRes, companiesRes]) => {
-      if (Array.isArray(breedersData)) {
-        setBreeders(breedersData);
-        if (breedersData.length > 0) {
-          setSelectedBreederId(breedersData[0].id);
-          setSelectedBreederName(breedersData[0].name);
-        }
+      const bList = breedersData && (breedersData as any).success && Array.isArray((breedersData as any).data)
+        ? (breedersData as any).data
+        : (Array.isArray(breedersData) ? breedersData : []);
+
+      if (Array.isArray(bList) && bList.length > 0) {
+        setBreeders(bList);
+        setSelectedBreederId(bList[0].id);
+        setSelectedBreederName(bList[0].name);
+        setRecipientName(bList[0].name);
       }
       if (farmsRes && farmsRes.success && Array.isArray(farmsRes.data)) {
         setFarmsList(farmsRes.data);
+        if (farmsRes.data.length > 0) {
+          setSelectedFarmId(farmsRes.data[0].id);
+        }
       }
       if (customersRes && customersRes.success && Array.isArray(customersRes.data)) {
         setCustomersList(customersRes.data);
+        if (customersRes.data.length > 0) {
+          setSelectedCustomerId(customersRes.data[0].id);
+        }
       }
       if (companiesRes && companiesRes.success && Array.isArray(companiesRes.data)) {
         setSourcingCompaniesList(companiesRes.data);
@@ -140,6 +155,7 @@ export default function StockDetailPage() {
 
       if (found) {
         setStock(found);
+        setTransferPriceUsd(found.priceUsd || 10);
         const sFound = siresList.find((sr) => sr.id.toLowerCase() === found.sireId.toLowerCase() || sr.name.toLowerCase() === (found.sireName || '').toLowerCase());
         setSire(sFound || null);
         const relBp = bpList.filter((bp) => bp.sireId === found.sireId);
@@ -149,6 +165,8 @@ export default function StockDetailPage() {
       setLoading(false);
     });
   }, [id]);
+
+  const availableCount = Number(stock?.stockAvailable || 0);
 
   const handleTabChange = (tab: TabKey) => {
     setActiveTab(tab);
@@ -179,19 +197,49 @@ export default function StockDetailPage() {
 
   const sireName = sire?.name || stock.sireName || stock.sireId;
   const sireBreed = sire?.breed || stock.sireBreed || 'N/A';
-  const availableCount = stock.stockAvailable;
+
+  const userBreederId = (currentUser?.breederId || currentUser?.id || '').toLowerCase();
+  const userName = (currentUser?.name || '').toLowerCase();
+
+  const breederTxs = transactions.filter(t => {
+    const rec = (t.recipient || '').toLowerCase();
+    const type = (t.type || '').toLowerCase();
+    return (
+      (userName && rec.includes(userName)) ||
+      (userBreederId && rec.includes(userBreederId)) ||
+      type.includes('transfer')
+    );
+  });
+
+  let breederTransferredIn = 0;
+  let breederDispensed = 0;
+
+  for (const t of breederTxs) {
+    const q = Math.abs(t.qty || 0);
+    const type = (t.type || '').toLowerCase();
+    if (type.includes('transfer')) {
+      breederTransferredIn += q;
+    } else if (type.includes('movement') || type.includes('out') || type.includes('dispense')) {
+      breederDispensed += q;
+    }
+  }
+
+  const breederNetAvailable = Math.max(0, breederTransferredIn - breederDispensed);
+  const effectiveAvailableCount = (isBreeder && !isAdmin && !isSuperAdmin)
+    ? (breederTransferredIn > 0 ? breederNetAvailable : 5)
+    : Number(stock.stockAvailable || 0);
   
   // ── CRUD EDIT / DELETE HANDLERS ──────────────────────────────────────
   const openEditModal = () => {
     if (!stock) return;
-    setEditPriceUsd(stock.priceUsd);
-    setEditFarmLocation(stock.farmLocation || (farmsList.length > 0 ? farmsList[0].name : 'Ang Snoul Station'));
-    setEditOwnerName(stock.ownerName || (customersList.length > 0 ? customersList[0].name : 'Kaksedthan Livestock Farm'));
-    setEditBreederName(stock.breederName || (breeders.length > 0 ? breeders[0].name : 'Super Admin (CCEC)'));
-    setEditTankNumber(stock.tankNumber || 'CAN-TANK-01');
+    setEditPriceUsd(stock.priceUsd || 10);
+    setEditFarmLocation(stock.farmLocation || '');
+    setEditOwnerName(stock.ownerName || '');
+    setEditBreederName(stock.breederName || '');
+    setEditTankNumber(stock.tankNumber || '');
     setEditCollectionDate(stock.collectionDate || '');
     setEditNotes(stock.notes || '');
-    setEditAvailability(stock.availability || 'Available');
+    setEditAvailability((stock.availability as any) || 'Available');
     setActiveModal('edit_batch');
   };
 
@@ -205,9 +253,9 @@ export default function StockDetailPage() {
       ownerName: editOwnerName,
       breederName: editBreederName,
       tankNumber: editTankNumber,
-      collectionDate: editCollectionDate || undefined,
+      collectionDate: editCollectionDate,
       notes: editNotes,
-      availability: editAvailability,
+      availability: editAvailability
     };
     await updateStockInseminationAction(stock.id, updates);
     setStock({ ...stock, ...updates });
@@ -226,7 +274,7 @@ export default function StockDetailPage() {
 
   // ── ACTION HANDLERS FOR STOCK MOVEMENTS ──────────────────────────────
   const handleAddStock = async () => {
-    if (actionQty <= 0) return;
+    if (!stock || actionQty <= 0) return;
     setProcessing(true);
     const newQty = availableCount + actionQty;
     await createStockTransactionAction({
@@ -237,58 +285,54 @@ export default function StockDetailPage() {
       reference: `RESTOCK-${Math.floor(1000 + Math.random() * 9000)}`,
       userName: 'Super Admin',
     });
+    await updateStockInseminationAction(stock.id, { stockAvailable: newQty });
     setStock({ ...stock, stockAvailable: newQty });
     await loadTransactions(stock.id);
     setProcessing(false);
     setActiveModal(null);
   };
 
-  const handleSellStock = async () => {
-    if (actionQty <= 0) return;
+  const handleConsolidatedTransfer = async () => {
+    if (!stock || actionQty <= 0) return;
     if (actionQty > availableCount) {
       alert(`Insufficient available stock. Only ${availableCount} straws are available.`);
       return;
     }
     setProcessing(true);
     const newQty = availableCount - actionQty;
-    const totalPrice = actionQty * stock.priceUsd;
+
+    let targetRecipientName = recipientName;
+    if (!targetRecipientName) {
+      if (recipientCategory === 'BREEDER') {
+        const b = breeders.find(br => br.id === selectedBreederId);
+        targetRecipientName = b ? `${b.name} (${b.id})` : (selectedBreederName || 'Breeder Specialist');
+      } else if (recipientCategory === 'FARM') {
+        const f = farmsList.find(fm => fm.id === selectedFarmId);
+        targetRecipientName = f ? `${f.name} (${f.id})` : 'Farm Station';
+      } else {
+        const c = customersList.find(cust => cust.id === selectedCustomerId);
+        targetRecipientName = c ? `${c.name} (${c.id})` : 'Commercial Buyer';
+      }
+    }
+
+    const typeLabel = recipientCategory === 'CUSTOMER' ? 'Commercial Sale' : recipientCategory === 'FARM' ? 'Farm Transfer' : 'Breeder Transfer';
+    const totalPrice = actionQty * transferPriceUsd;
+
     await createStockTransactionAction({
       stockInseminationId: stock.id,
-      transactionType: `Commercial Sale to ${buyerName || 'Buyer Farm'}`,
+      transactionType: `${typeLabel} to ${targetRecipientName}`,
       quantity: -actionQty,
       balance: newQty,
-      reference: `SALE-USD-${Math.floor(1000 + Math.random() * 9000)}`,
-      recipient: buyerName || 'Buyer Farm',
+      reference: `TR-${recipientCategory}-${Math.floor(1000 + Math.random() * 9000)}`,
+      recipient: targetRecipientName,
+      breederId: recipientCategory === 'BREEDER' ? selectedBreederId : undefined,
+      farmId: recipientCategory === 'FARM' ? selectedFarmId : undefined,
+      customerId: recipientCategory === 'CUSTOMER' ? selectedCustomerId : undefined,
       priceUsd: totalPrice,
       userName: 'Super Admin',
     });
-    setStock({ ...stock, stockAvailable: newQty });
-    await loadTransactions(stock.id);
-    setProcessing(false);
-    setActiveModal(null);
-  };
 
-  const handleStockTransferToBreeder = async () => {
-    if (actionQty <= 0) return;
-    if (actionQty > availableCount) {
-      alert(`Insufficient available stock. Only ${availableCount} straws are available in inventory.`);
-      return;
-    }
-    setProcessing(true);
-    const newQty = availableCount - actionQty;
-    const bName = selectedBreederName || (breeders.find(b => b.id === selectedBreederId)?.name) || 'Breeder Specialist';
-    const recipient = `${bName} (${selectedBreederId || 'BRD'})`;
-
-    await createStockTransactionAction({
-      stockInseminationId: stock.id,
-      transactionType: `Stock Transfer to Breeder`,
-      quantity: -actionQty,
-      balance: newQty,
-      reference: `TR-BREEDER-${Math.floor(1000 + Math.random() * 9000)}`,
-      recipient: recipient,
-      priceUsd: 0,
-      userName: 'Super Admin',
-    });
+    await updateStockInseminationAction(stock.id, { stockAvailable: newQty });
 
     setStock({ ...stock, stockAvailable: newQty });
     await loadTransactions(stock.id);
@@ -298,25 +342,28 @@ export default function StockDetailPage() {
 
   const handleBreederStockOut = async () => {
     if (actionQty <= 0) return;
-    if (actionQty > availableCount) {
-      alert(`Insufficient available stock. Only ${availableCount} straws are available.`);
+    if (actionQty > effectiveAvailableCount) {
+      alert(`Insufficient allocated stock. You only have ${effectiveAvailableCount} straws available in your breeder account.`);
       return;
     }
-    setProcessing(true);
+    const bName = currentUser?.name || selectedBreederName || (breeders.find(b => b.id === selectedBreederId)?.name) || 'Breeder Specialist';
+    const bId = currentUser?.breederId || currentUser?.id || selectedBreederId || 'BRD';
+    const recipient = `${bName} (${bId}) • Reason: ${stockOutReason}`;
     const newQty = availableCount - actionQty;
-    const bName = selectedBreederName || (breeders.find(b => b.id === selectedBreederId)?.name) || 'Breeder Specialist';
-    const recipient = `${bName} (${selectedBreederId || 'BRD'}) • Reason: ${stockOutReason}`;
 
     await createStockTransactionAction({
       stockInseminationId: stock.id,
-      transactionType: `Breeder Stock-Out`,
+      transactionType: `Stock Movement - ${stockOutReason}`,
       quantity: -actionQty,
       balance: newQty,
-      reference: `OUT-BREEDER-${Math.floor(1000 + Math.random() * 9000)}`,
+      reference: `SO-BREEDER-${Math.floor(1000 + Math.random() * 9000)}`,
       recipient: recipient,
+      breederId: bId,
       priceUsd: 0,
       userName: bName,
     });
+
+    await updateStockInseminationAction(stock.id, { stockAvailable: newQty });
 
     setStock({ ...stock, stockAvailable: newQty });
     await loadTransactions(stock.id);
@@ -330,7 +377,11 @@ export default function StockDetailPage() {
       {/* Page Header */}
       <PageHeader
         title={`Stock Batch: ${stock.id}`}
-        subtitle={`Sire Bull: ${sireName} (${sireBreed}) • Availability: ${availableCount} Straws`}
+        subtitle={
+          isBreeder && !isAdmin && !isSuperAdmin
+            ? `Sire Bull: ${sireName} (${sireBreed}) • Your Allocated Available Stock: ${effectiveAvailableCount} Straws`
+            : `Sire Bull: ${sireName} (${sireBreed}) • Availability: ${availableCount} Straws`
+        }
         breadcrumbs={[
           { label: 'Stock Insemination', href: '/stock-insemination' },
           { label: stock.id },
@@ -339,54 +390,52 @@ export default function StockDetailPage() {
         backLabel="Back to Stock Insemination"
       >
         <div className="flex items-center gap-2 flex-wrap">
-          <button
-            onClick={() => openEditModal()}
-            className="inline-flex items-center gap-1.5 bg-slate-800 hover:bg-slate-900 text-white text-xs font-bold px-3.5 py-2 rounded-xl transition-all shadow-xs cursor-pointer"
-          >
-            <Edit className="h-4 w-4" />
-            <span>Edit Stock Record</span>
-          </button>
+          {(!isBreeder || isAdmin || isSuperAdmin) && (
+            <>
+              <button
+                onClick={() => openEditModal()}
+                className="inline-flex items-center gap-1.5 bg-slate-800 hover:bg-slate-900 text-white text-xs font-bold px-3.5 py-2 rounded-xl transition-all shadow-xs cursor-pointer"
+              >
+                <Edit className="h-4 w-4" />
+                <span>Edit Stock Record</span>
+              </button>
 
-          <button
-            onClick={() => { setActionQty(50); setActiveModal('add'); }}
-            className="inline-flex items-center gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold px-3.5 py-2 rounded-xl transition-all shadow-xs cursor-pointer"
-          >
-            <Plus className="h-4 w-4" />
-            <span>+ Restock Inbound</span>
-          </button>
+              <button
+                onClick={() => { setActionQty(50); setActiveModal('add'); }}
+                className="inline-flex items-center gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold px-3.5 py-2 rounded-xl transition-all shadow-xs cursor-pointer"
+              >
+                <Plus className="h-4 w-4" />
+                <span>+ Restock Inbound</span>
+              </button>
 
-          <button
-            onClick={() => { setActionQty(10); setActiveModal('transfer_breeder'); }}
-            className="inline-flex items-center gap-1.5 bg-sky-600 hover:bg-sky-700 text-white text-xs font-bold px-3.5 py-2 rounded-xl transition-all shadow-xs cursor-pointer"
-          >
-            <Send className="h-4 w-4" />
-            <span>⇄ Transfer to Breeder</span>
-          </button>
+              <button
+                onClick={() => { setActionQty(10); setActiveModal('transfer_stock'); }}
+                className="inline-flex items-center gap-1.5 bg-sky-600 hover:bg-sky-700 text-white text-xs font-bold px-3.5 py-2 rounded-xl transition-all shadow-xs cursor-pointer"
+              >
+                <Send className="h-4 w-4" />
+                <span>⇄ Transfer & Stock Allocation</span>
+              </button>
+            </>
+          )}
 
           <button
             onClick={() => { setActionQty(5); setActiveModal('breeder_stock_out'); }}
             className="inline-flex items-center gap-1.5 bg-amber-600 hover:bg-amber-700 text-white text-xs font-bold px-3.5 py-2 rounded-xl transition-all shadow-xs cursor-pointer"
           >
             <Package className="h-4 w-4" />
-            <span>⤓ Breeder Stock-Out</span>
+            <span>⤓ Stock Movement & Dispense</span>
           </button>
 
-          <button
-            onClick={() => { setActionQty(10); setActiveModal('sell'); }}
-            className="inline-flex items-center gap-1.5 bg-purple-600 hover:bg-purple-700 text-white text-xs font-bold px-3.5 py-2 rounded-xl transition-all shadow-xs cursor-pointer"
-          >
-            <ShoppingCart className="h-4 w-4" />
-            <span>🛒 Commercial Sale</span>
-          </button>
-
-          <button
-            onClick={() => handleDeleteBatch()}
-            className="inline-flex items-center gap-1.5 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 text-xs font-bold px-3.5 py-2 rounded-xl transition-all shadow-xs cursor-pointer"
-            title="Delete Stock Record"
-          >
-            <Trash2 className="h-4 w-4 text-rose-600" />
-            <span>Delete</span>
-          </button>
+          {(!isBreeder || isAdmin || isSuperAdmin) && (
+            <button
+              onClick={() => handleDeleteBatch()}
+              className="inline-flex items-center gap-1.5 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 text-xs font-bold px-3.5 py-2 rounded-xl transition-all shadow-xs cursor-pointer"
+              title="Delete Stock Record"
+            >
+              <Trash2 className="h-4 w-4 text-rose-600" />
+              <span>Delete</span>
+            </button>
+          )}
         </div>
       </PageHeader>
 
@@ -498,13 +547,15 @@ export default function StockDetailPage() {
                     </p>
                   </div>
                 </div>
-                <button
-                  onClick={() => openEditModal()}
-                  className="inline-flex items-center gap-1.5 px-3.5 py-1.5 bg-slate-900 hover:bg-black text-white text-xs font-bold rounded-xl shadow-2xs transition-colors cursor-pointer"
-                >
-                  <Edit className="h-3.5 w-3.5 text-purple-300" />
-                  <span>Edit Setup Architecture</span>
-                </button>
+                {(!isBreeder || isAdmin || isSuperAdmin) && (
+                  <button
+                    onClick={() => openEditModal()}
+                    className="inline-flex items-center gap-1.5 px-3.5 py-1.5 bg-slate-900 hover:bg-black text-white text-xs font-bold rounded-xl shadow-2xs transition-colors cursor-pointer"
+                  >
+                    <Edit className="h-3.5 w-3.5 text-purple-300" />
+                    <span>Edit Setup Architecture</span>
+                  </button>
+                )}
               </div>
 
               {/* 2-Column Architectural Layout */}
@@ -637,6 +688,27 @@ export default function StockDetailPage() {
 
                   {/* Stock Quantity Progress Visualization Bar */}
                   {(() => {
+                    if (isBreeder && !isAdmin && !isSuperAdmin) {
+                      const totalAllocated = breederTransferredIn || 5;
+                      const pctAllocated = totalAllocated > 0 ? Math.min(100, Math.max(0, Math.round((effectiveAvailableCount / totalAllocated) * 100))) : 100;
+                      return (
+                        <div className="p-4 bg-gradient-to-r from-amber-50 to-orange-50/50 rounded-2xl border border-amber-200 space-y-2">
+                          <div className="flex items-center justify-between text-xs">
+                            <span className="font-black text-amber-900 uppercase tracking-wider flex items-center gap-1.5">
+                              <Package className="h-4 w-4 text-amber-600" /> Your Allocated Breeder Straw Inventory
+                            </span>
+                            <span className="font-black text-amber-800">{effectiveAvailableCount} / {totalAllocated} Straws ({pctAllocated}%)</span>
+                          </div>
+                          <div className="w-full h-3 bg-amber-200/60 rounded-full overflow-hidden">
+                            <div className="h-full bg-amber-600 rounded-full transition-all duration-500" style={{ width: `${pctAllocated}%` }} />
+                          </div>
+                          <p className="text-[11px] font-semibold text-amber-800">
+                            Transferred from Internal System Management to your Breeder Account ({currentUser?.name || 'Registered Breeder'}). Storage Tank: <span className="font-bold text-amber-900">{stock.tankNumber || 'CAN-TANK-01'}</span>.
+                          </p>
+                        </div>
+                      );
+                    }
+
                     const initVal = stock.initialQuantity || (transactions.length > 0 
                       ? (transactions.find(t => t.type.includes('Initial'))?.balance || Math.max(...transactions.map(t => t.balance), availableCount))
                       : Math.max(availableCount, 100));
@@ -845,11 +917,11 @@ export default function StockDetailPage() {
 
                 <div className="flex items-center gap-2 flex-wrap">
                   <button
-                    onClick={() => { setActionQty(10); setActiveModal('transfer_breeder'); }}
+                    onClick={() => { setActionQty(10); setActiveModal('transfer_stock'); }}
                     className="inline-flex items-center gap-1 px-3 py-1.5 bg-sky-600 text-white text-xs font-bold rounded-xl shadow-2xs hover:bg-sky-700 transition-colors cursor-pointer"
                   >
                     <Send className="h-3.5 w-3.5" />
-                    <span>Transfer to Breeder</span>
+                    <span>Transfer / Allocation</span>
                   </button>
                   <button
                     onClick={() => { setActionQty(5); setActiveModal('breeder_stock_out'); }}
@@ -1070,8 +1142,7 @@ export default function StockDetailPage() {
               <h3 className="text-sm font-black text-slate-900 uppercase tracking-wider flex items-center gap-2">
                 {activeModal === 'edit_batch' && <><Edit className="h-4 w-4 text-slate-800" /> Edit Setup Architecture & Master Details</>}
                 {activeModal === 'add' && <><Plus className="h-4 w-4 text-emerald-600" /> Restock Semen Straws (+)</>}
-                {activeModal === 'sell' && <><ShoppingCart className="h-4 w-4 text-purple-600" /> Commercial Sale Invoice</>}
-                {activeModal === 'transfer_breeder' && <><Send className="h-4 w-4 text-sky-600" /> Stock Transfer to Breeder Specialist</>}
+                {activeModal === 'transfer_stock' && <><Send className="h-4 w-4 text-sky-600" /> Stock Transfer & Allocation</>}
                 {activeModal === 'breeder_stock_out' && <><Package className="h-4 w-4 text-amber-600" /> Breeder Stock-Out (Dispense)</>}
               </h3>
               <button
@@ -1242,90 +1313,176 @@ export default function StockDetailPage() {
               </div>
             )}
 
-            {/* Modal 2: Commercial Sale */}
-            {activeModal === 'sell' && (
-              <div className="space-y-3">
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1">Buyer / Farm Name</label>
-                  <input
-                    type="text"
-                    value={buyerName}
-                    onChange={(e) => setBuyerName(e.target.value)}
-                    placeholder="e.g. Prek Anchanh Farm"
-                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-bold"
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1">Quantity (Straws)</label>
-                  <input
-                    type="number"
-                    min={1}
-                    max={availableCount}
-                    value={actionQty}
-                    onChange={(e) => setActionQty(parseInt(e.target.value, 10) || 0)}
-                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-sm font-black text-purple-900"
-                  />
-                </div>
-                <div className="bg-emerald-50 p-3 rounded-xl border border-emerald-200 text-xs text-emerald-900 font-bold flex justify-between">
-                  <span>Total Sale Price ($USD):</span>
-                  <span className="font-black">${actionQty * stock.priceUsd}.00 USD</span>
-                </div>
-              </div>
-            )}
-
-            {/* Modal 3: Transfer Stock to Breeder */}
-            {activeModal === 'transfer_breeder' && (
+            {/* Modal 2: Consolidated Transfer & Stock Allocation */}
+            {activeModal === 'transfer_stock' && (
               <div className="space-y-3.5">
                 <div>
                   <label className="block text-xs font-bold text-slate-700 mb-1">
-                    Select Target Breeder Specialist <span className="text-rose-500">*</span>
+                    Select Target Recipient Category <span className="text-rose-500">*</span>
                   </label>
-                  {breeders.length > 0 ? (
-                    <select
-                      value={selectedBreederId}
-                      onChange={e => {
-                        const bId = e.target.value;
-                        setSelectedBreederId(bId);
-                        const b = breeders.find(br => br.id === bId);
-                        if (b) setSelectedBreederName(b.name);
-                      }}
-                      className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2.5 text-xs font-bold text-slate-900 focus:ring-2 focus:ring-sky-600 focus:outline-none"
+                  <div className="grid grid-cols-3 gap-2 text-xs">
+                    <button
+                      type="button"
+                      onClick={() => setRecipientCategory('BREEDER')}
+                      className={`py-2 px-3 rounded-xl border text-center font-bold transition-all cursor-pointer ${recipientCategory === 'BREEDER' ? 'bg-sky-600 text-white border-sky-600 shadow-xs' : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100'}`}
                     >
-                      {breeders.map(b => (
-                        <option key={b.id} value={b.id}>
-                          {b.name} ({b.id} • {b.station || b.phone || 'Breeder Specialist'})
-                        </option>
-                      ))}
-                    </select>
-                  ) : (
-                    <input
-                      type="text"
-                      value={selectedBreederName}
-                      onChange={e => setSelectedBreederName(e.target.value)}
-                      placeholder="Type Breeder Specialist Name..."
-                      className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2.5 text-xs font-bold text-slate-900"
-                    />
-                  )}
+                      Breeder
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setRecipientCategory('FARM')}
+                      className={`py-2 px-3 rounded-xl border text-center font-bold transition-all cursor-pointer ${recipientCategory === 'FARM' ? 'bg-purple-600 text-white border-purple-600 shadow-xs' : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100'}`}
+                    >
+                      Farm Station
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setRecipientCategory('CUSTOMER')}
+                      className={`py-2 px-3 rounded-xl border text-center font-bold transition-all cursor-pointer ${recipientCategory === 'CUSTOMER' ? 'bg-emerald-600 text-white border-emerald-600 shadow-xs' : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100'}`}
+                    >
+                      Customer / Sale
+                    </button>
+                  </div>
                 </div>
 
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1">
-                    Quantity to Transfer (Straws) <span className="text-rose-500">*</span>
-                  </label>
-                  <input
-                    type="number"
-                    min={1}
-                    max={availableCount}
-                    value={actionQty}
-                    onChange={e => setActionQty(parseInt(e.target.value, 10) || 0)}
-                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2.5 text-sm font-black text-sky-900"
-                  />
-                  <p className="text-[10px] text-slate-400 font-semibold mt-1">Available in stock: {availableCount} Straws</p>
+                {recipientCategory === 'BREEDER' && (
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 mb-1">
+                      Select Breeder Specialist <span className="text-rose-500">*</span>
+                    </label>
+                    {breeders.length > 0 ? (
+                      <select
+                        value={selectedBreederId}
+                        onChange={e => {
+                          const bId = e.target.value;
+                          setSelectedBreederId(bId);
+                          const b = breeders.find(br => br.id === bId);
+                          if (b) setRecipientName(b.name);
+                        }}
+                        className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2.5 text-xs font-bold text-slate-900 focus:ring-2 focus:ring-sky-600 focus:outline-none"
+                      >
+                        {breeders.map(b => (
+                          <option key={b.id} value={b.id}>
+                            {b.name} ({b.id} • {b.station || b.phone || 'Registered Breeder'})
+                          </option>
+                        ))}
+                      </select>
+                    ) : (
+                      <input
+                        type="text"
+                        value={recipientName}
+                        onChange={e => setRecipientName(e.target.value)}
+                        placeholder="Type Breeder Specialist Name..."
+                        className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2.5 text-xs font-bold text-slate-900"
+                      />
+                    )}
+                  </div>
+                )}
+
+                {recipientCategory === 'FARM' && (
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 mb-1">
+                      Select Target Farm Station <span className="text-rose-500">*</span>
+                    </label>
+                    {farmsList.length > 0 ? (
+                      <select
+                        value={selectedFarmId}
+                        onChange={e => {
+                          const fId = e.target.value;
+                          setSelectedFarmId(fId);
+                          const f = farmsList.find(fm => fm.id === fId);
+                          if (f) setRecipientName(f.name);
+                        }}
+                        className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2.5 text-xs font-bold text-slate-900 focus:ring-2 focus:ring-purple-600 focus:outline-none"
+                      >
+                        {farmsList.map(f => (
+                          <option key={f.id} value={f.id}>
+                            {f.name} ({f.id} • {f.location || f.address || 'Farm Station'})
+                          </option>
+                        ))}
+                      </select>
+                    ) : (
+                      <input
+                        type="text"
+                        value={recipientName}
+                        onChange={e => setRecipientName(e.target.value)}
+                        placeholder="Type Farm Station Name..."
+                        className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2.5 text-xs font-bold text-slate-900"
+                      />
+                    )}
+                  </div>
+                )}
+
+                {recipientCategory === 'CUSTOMER' && (
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 mb-1">
+                      Select Customer / Sale Recipient <span className="text-rose-500">*</span>
+                    </label>
+                    {customersList.length > 0 ? (
+                      <select
+                        value={selectedCustomerId}
+                        onChange={e => {
+                          const cId = e.target.value;
+                          setSelectedCustomerId(cId);
+                          const c = customersList.find(cust => cust.id === cId);
+                          if (c) setRecipientName(c.name);
+                        }}
+                        className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2.5 text-xs font-bold text-slate-900 focus:ring-2 focus:ring-emerald-600 focus:outline-none"
+                      >
+                        {customersList.map(c => (
+                          <option key={c.id} value={c.id}>
+                            {c.name} ({c.id} • {c.phone || 'Customer'})
+                          </option>
+                        ))}
+                      </select>
+                    ) : (
+                      <input
+                        type="text"
+                        value={recipientName}
+                        onChange={e => setRecipientName(e.target.value)}
+                        placeholder="Type Buyer / Customer Name..."
+                        className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2.5 text-xs font-bold text-slate-900"
+                      />
+                    )}
+                  </div>
+                )}
+
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 mb-1">
+                      Quantity to Transfer (Straws) <span className="text-rose-500">*</span>
+                    </label>
+                    <input
+                      type="number"
+                      min={1}
+                      max={availableCount}
+                      value={actionQty}
+                      onChange={e => setActionQty(parseInt(e.target.value, 10) || 0)}
+                      className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2.5 text-sm font-black text-slate-900"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 mb-1">
+                      Unit Price ($USD)
+                    </label>
+                    <input
+                      type="number"
+                      value={transferPriceUsd}
+                      onChange={e => setTransferPriceUsd(parseFloat(e.target.value) || 0)}
+                      className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2.5 text-sm font-black text-slate-900"
+                    />
+                  </div>
+                </div>
+
+                <div className="bg-sky-50 p-3 rounded-xl border border-sky-200 text-xs text-sky-900 font-bold flex justify-between">
+                  <span>Calculated Transfer / Invoice Value:</span>
+                  <span className="font-black">${(actionQty * transferPriceUsd).toFixed(2)} USD</span>
                 </div>
               </div>
             )}
 
-            {/* Modal 4: Breeder Stock-Out */}
+            {/* Modal 3: Breeder Stock-Out */}
             {activeModal === 'breeder_stock_out' && (
               <div className="space-y-3.5">
                 <div>
@@ -1361,25 +1518,22 @@ export default function StockDetailPage() {
                 </div>
 
                 <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1">
-                    Stock-Out Purpose / Reason <span className="text-rose-500">*</span>
-                  </label>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">Reason for Stock-Out</label>
                   <select
                     value={stockOutReason}
                     onChange={e => setStockOutReason(e.target.value)}
-                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2.5 text-xs font-bold text-slate-900 focus:ring-2 focus:ring-amber-600 focus:outline-none"
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2.5 text-xs font-bold text-slate-900"
                   >
                     <option value="Field AI Insemination Service">Field AI Insemination Service</option>
-                    <option value="Sample Quality Testing & Motility Check">Sample Quality Testing & Motility Check</option>
-                    <option value="Direct Dam Insemination Dispatch">Direct Dam Insemination Dispatch</option>
-                    <option value="Dam Breeding Emergency Service">Dam Breeding Emergency Service</option>
-                    <option value="Tank Transport & Field Storage">Tank Transport & Field Storage</option>
+                    <option value="Breeding Program Allocation">Breeding Program Allocation</option>
+                    <option value="Dam Sire Mating Operation">Dam Sire Mating Operation</option>
+                    <option value="Damaged / Expired Straw Replacement">Damaged / Expired Straw Replacement</option>
                   </select>
                 </div>
 
                 <div>
                   <label className="block text-xs font-bold text-slate-700 mb-1">
-                    Quantity to Stock-Out (Straws) <span className="text-rose-500">*</span>
+                    Dispensed Quantity (Straws) <span className="text-rose-500">*</span>
                   </label>
                   <input
                     type="number"
@@ -1405,19 +1559,18 @@ export default function StockDetailPage() {
                 onClick={() => {
                   if (activeModal === 'edit_batch') handleSaveEditBatch();
                   if (activeModal === 'add') handleAddStock();
-                  if (activeModal === 'sell') handleSellStock();
-                  if (activeModal === 'transfer_breeder') handleStockTransferToBreeder();
+                  if (activeModal === 'transfer_stock') handleConsolidatedTransfer();
                   if (activeModal === 'breeder_stock_out') handleBreederStockOut();
                 }}
                 disabled={processing}
                 className={`px-5 py-2 rounded-xl text-xs font-black text-white transition-all cursor-pointer ${
                   activeModal === 'edit_batch'
                     ? 'bg-slate-900 hover:bg-black'
-                    : activeModal === 'transfer_breeder'
+                    : activeModal === 'transfer_stock'
                     ? 'bg-sky-600 hover:bg-sky-700'
                     : activeModal === 'breeder_stock_out'
                     ? 'bg-amber-600 hover:bg-amber-700'
-                    : 'bg-purple-600 hover:bg-purple-700'
+                    : 'bg-emerald-600 hover:bg-emerald-700'
                 }`}
               >
                 {processing ? 'Processing...' : activeModal === 'edit_batch' ? 'Save Changes to DB' : 'Confirm Stock Movement'}

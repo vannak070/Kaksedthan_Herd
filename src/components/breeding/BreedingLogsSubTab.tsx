@@ -37,7 +37,7 @@ const MASTER_COW_OWNERS = [
 ];
 
 const MASTER_BREEDERS = [
-  { id: 'EMP-001', name: 'Dr. Sokha (Senior Vet)', title: 'Senior Veterinarian', contact: '+855 12 111 222' },
+  { id: 'EMP-001', name: 'ATH Vannak (Breeder)', title: 'Senior Breeder & Specialist', contact: '+855 12 111 222' },
   { id: 'EMP-002', name: 'Dr. Veasna (Insemination Spec)', title: 'AI Specialist', contact: '+855 12 333 444' },
   { id: 'EMP-003', name: 'Technician Vannak (Senior Tech)', title: 'Senior Inseminator', contact: '+855 12 555 666' },
   { id: 'EMP-004', name: 'Dr. Chea (Livestock Geneticist)', title: 'Breeding Director', contact: '+855 12 777 888' }
@@ -94,7 +94,7 @@ export default function BreedingLogsSubTab({
   const [priceInput, setPriceInput] = useState<number>(85);
   const [currencyInput, setCurrencyInput] = useState<'USD' | 'KHR'>('USD');
   const [breederIdInput, setBreederIdInput] = useState('EMP-001');
-  const [breederNameInput, setBreederNameInput] = useState('Dr. Sokha (Senior Vet)');
+  const [breederNameInput, setBreederNameInput] = useState(MASTER_BREEDERS[0].name);
 
   // ── SECTION 6: TIMETABLE & EXPECTED RESULT ──
   const [followUpDateInput, setFollowUpDateInput] = useState('');
@@ -121,7 +121,7 @@ export default function BreedingLogsSubTab({
   const [calvingBirthOutcome, setCalvingBirthOutcome] = useState('Normal / Alive');
   const [calvingDeliveryMethod, setCalvingDeliveryMethod] = useState('Natural Spontaneous');
   const [calvingAssistedDelivery, setCalvingAssistedDelivery] = useState(false);
-  const [calvingTechnician, setCalvingTechnician] = useState('Dr. Sokha (Senior Vet)');
+  const [calvingTechnician, setCalvingTechnician] = useState(MASTER_BREEDERS[0].name);
   const [calvingNotes, setCalvingNotes] = useState('');
 
   // Calf List State (supports multiple calves for twins/multiples)
@@ -148,7 +148,7 @@ export default function BreedingLogsSubTab({
     setCalvingBirthOutcome('Normal / Alive');
     setCalvingDeliveryMethod('Natural Spontaneous');
     setCalvingAssistedDelivery(false);
-    setCalvingTechnician(rec.breederName || 'Dr. Sokha (Senior Vet)');
+    setCalvingTechnician(rec.breederName || MASTER_BREEDERS[0].name);
     setCalvingNotes(`Normal calving event registered for Dam ${rec.damName || rec.damId}.`);
 
     const defaultCalf: CalfItemInput = {
@@ -390,7 +390,7 @@ export default function BreedingLogsSubTab({
     setCurrencyInput('USD');
 
     setBreederIdInput('EMP-001');
-    setBreederNameInput('Dr. Sokha (Senior Vet)');
+    setBreederNameInput(MASTER_BREEDERS[0].name);
 
     setServiceTypeInput('AI');
     setBreedingMethodInput('Cross-Breeding');
@@ -424,7 +424,7 @@ export default function BreedingLogsSubTab({
     setCurrencyInput(rec.currency || 'USD');
 
     setBreederIdInput(rec.breederId || 'EMP-001');
-    setBreederNameInput(rec.breederName || 'Dr. Sokha (Senior Vet)');
+    setBreederNameInput(rec.breederName || MASTER_BREEDERS[0].name);
 
     setServiceTypeInput(rec.serviceType || 'AI');
     setBreedingMethodInput(rec.breedingMethod || 'Cross-Breeding');

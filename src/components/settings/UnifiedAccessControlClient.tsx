@@ -97,9 +97,30 @@ export default function UnifiedAccessControlClient({
     setTimeout(() => setToast(null), 5000);
   };
 
-  // Filtered Lists
+  // Filtered Lists - Exclude External Operations (Breeder, Sire Sourcing, Customer) from Internal Staff Accounts
   const staffUsers = useMemo(() => {
-    return users.filter(u => (u as any).accountCategory === 'STAFF' || !(u as any).accountCategory);
+    return users.filter(u => {
+      const lvl = (u.userLevel || '').toLowerCase();
+      const r = (u.role || '').toLowerCase();
+      const cat = ((u as any).accountCategory || '').toLowerCase();
+
+      if (cat === 'external' || cat === 'breeder' || cat === 'customer' || cat === 'company') return false;
+
+      const isExternalLevel =
+        lvl.includes('breeder') ||
+        lvl.includes('sire sourcing') ||
+        lvl.includes('sourcing company') ||
+        lvl.includes('customer') ||
+        lvl.includes('cow owner') ||
+        r.includes('breeder') ||
+        r.includes('cow owner') ||
+        r.includes('sourcing company');
+
+      const isSuperAdmin = lvl.includes('super admin') || r.includes('super admin');
+      if (isSuperAdmin) return true;
+
+      return !isExternalLevel;
+    });
   }, [users]);
 
   const filteredUsers = useMemo(() => {

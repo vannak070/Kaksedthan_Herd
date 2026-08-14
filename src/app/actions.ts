@@ -534,6 +534,15 @@ export async function fetchStockTransactionsAction(stockInseminationId: string) 
   }
 }
 
+export async function fetchBreederTransactionsAction(breederId?: string, breederName?: string) {
+  try {
+    const txs = await herdbookRepository.getStockTransactionsForBreeder(breederId, breederName);
+    return { success: true, data: txs };
+  } catch (err: any) {
+    return { success: false, error: err.message || 'Failed to fetch breeder transactions' };
+  }
+}
+
 export async function createStockTransactionAction(tx: {
   stockInseminationId: string;
   transactionType: string;
@@ -541,6 +550,9 @@ export async function createStockTransactionAction(tx: {
   balance: number;
   reference?: string;
   recipient?: string;
+  breederId?: string;
+  farmId?: string;
+  customerId?: string;
   priceUsd?: number;
   userName?: string;
 }) {
@@ -2072,6 +2084,17 @@ export async function fetchSireFormOptionsAction() {
       query("SELECT id, code, name, level_type FROM user_levels WHERE status = 'Active' ORDER BY sort_order ASC, name ASC").catch(() => ({ rows: [] }))
     ]);
 
+    const externalUserLevels = userLevelsRes.rows.filter((ul: any) => {
+      const code = (ul.code || '').toUpperCase();
+      const name = (ul.name || '').toLowerCase();
+      const levelType = (ul.level_type || '').toUpperCase();
+      
+      if (levelType === 'INTERNAL') return false;
+      if (code === 'SUPER_ADMIN' || code === 'ADMIN_OPERATION' || code === 'ADMIN') return false;
+      if (name.includes('admin') || name.includes('internal')) return false;
+      return true;
+    });
+
     return {
       success: true,
       data: {
@@ -2080,7 +2103,7 @@ export async function fetchSireFormOptionsAction() {
         farms: farmsRes.filter(f => f.accountStatus === 'Active'),
         breeders: breedersRes.filter(b => b.status === 'Active'),
         customers: customersRes.filter(c => c.status === 'Active'),
-        userLevels: userLevelsRes.rows,
+        userLevels: externalUserLevels,
       }
     };
   } catch (error: any) {

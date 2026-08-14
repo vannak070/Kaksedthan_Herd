@@ -276,12 +276,16 @@ export interface HerdbookCertificateItem {
   sireImageUrl?: string;
   sireStatus?: string;
   sireRegNumber?: string;
+  parentSireId?: string;
+  parentSireName?: string;
   damId?: string;
   damName?: string;
   damBreed?: string;
   damImageUrl?: string;
   damStatus?: string;
   damRegNumber?: string;
+  parentDamId?: string;
+  parentDamName?: string;
   breedingProgramId?: string;
   programNumber?: string;
   ownerName?: string;

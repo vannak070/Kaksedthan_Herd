@@ -409,7 +409,6 @@ export default function EditDamPage({ params }: PageProps) {
                         <option value="Breeder Account">Breeder Account</option>
                         <option value="Farm Owner Account">Farm Owner Account</option>
                         <option value="Sire Sourcing Company Account">Sire Sourcing Company Account</option>
-                        <option value="Admin">Admin (Internal Company)</option>
                       </>
                     )}
                   </select>
