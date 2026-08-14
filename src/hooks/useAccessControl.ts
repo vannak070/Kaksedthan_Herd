@@ -79,12 +79,14 @@ export function useAccessControl() {
   const buildNormalizedPermissions = (): Set<string> => {
     const set = new Set<string>();
 
-    // From user's stored permissions (localStorage)
-    const userPerms = currentUser?.permissions;
+    // From user's stored permissions or effectivePermissions (localStorage/session)
+    const userPerms = currentUser?.permissions || (currentUser as any)?.effectivePermissions;
     if (Array.isArray(userPerms)) {
       for (const p of userPerms) {
-        set.add(p.toLowerCase());
-        set.add(normalizePermissionKey(p));
+        if (typeof p === 'string') {
+          set.add(p.toLowerCase());
+          set.add(normalizePermissionKey(p));
+        }
       }
     }
 
@@ -107,12 +109,17 @@ export function useAccessControl() {
     if (isAdmin) return true; // Admin and Super Admin bypass
 
     const permSet = buildNormalizedPermissions();
+    if (permSet.size === 0) return true; // Default fallback if no permissions array restriction
+
     const normalizedInput = normalizePermissionKey(permissionKey);
+    const category = permissionKey.split('.')[0];
 
     return (
       permSet.has(permissionKey.toLowerCase()) ||
       permSet.has(normalizedInput.toLowerCase()) ||
-      permSet.has(permissionKey) // exact match
+      permSet.has(category.toLowerCase()) ||
+      permSet.has(`${category}_view`) ||
+      permSet.has(permissionKey)
     );
   };
 

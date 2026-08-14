@@ -147,12 +147,13 @@ export default function SidebarLayout({
   const currentUser = activeUser || initialUser || { id: '0', name: 'User Account', role: selectedRole || 'Guest', email: '', status: 'Active' };
   const userRole = currentUser.role || selectedRole;
 
-  const isSuperAdmin = userRole === 'Super Admin' || userRole === 'Super Administrator' || (currentUser as any).userLevel === 'Super Admin';
-  const isAdmin = isSuperAdmin || userRole === 'Admin' || userRole === 'System Administrator';
-  const isSourcingCompany = userRole === 'Sire Sourcing Company' || userRole === 'Company';
-  const isFarmOwner = userRole === 'Farm Owner';
+  const isSuperAdmin = userRole === 'Super Admin' || userRole === 'Super Administrator' || (currentUser as any).userLevel === 'Super Admin' || (currentUser as any).userLevel === 'Super Admin Account';
+  const isAdmin = isSuperAdmin || userRole === 'Admin' || userRole === 'System Administrator' || userRole.toLowerCase().includes('admin') || (((currentUser as any).userLevel || '').toLowerCase().includes('admin'));
+  const isSourcingCompany = userRole === 'Sire Sourcing Company' || userRole === 'Company' || (currentUser as any).userLevel === 'Sire Sourcing Company Account';
+  const isFarmOwner = userRole === 'Farm Owner' || (currentUser as any).userLevel === 'Farm Owner Account';
   const isBreeder = userRole === 'Breeder' || userRole === 'Breeder Account' || (currentUser as any).userLevel === 'Breeder Account';
-  const isFarmManager = userRole === 'Farmer / Farm Manager Account' || userRole === 'Farm Manager';
+  const isFarmManager = userRole === 'Farmer / Farm Manager Account' || userRole === 'Farm Manager' || (currentUser as any).userLevel === 'Farmer / Farm Manager Account';
+  const isCustomUserLevel = !isSourcingCompany && !isFarmOwner && !isBreeder && !isFarmManager;
 
   // Strict Route Access Security Guard: NON-ADMIN ACCOUNTS CANNOT ACCESS ADMIN ROUTES
   const isUnauthorizedRoute = React.useMemo(() => {
@@ -427,8 +428,8 @@ export default function SidebarLayout({
           </>
         )}
 
-        {/* 6. System Administration (Super Admin / Admin) */}
-        {isAdmin && (
+        {/* 6. System Administration & Custom User Level Navigation */}
+        {(isAdmin || isCustomUserLevel) && (
           <>
             <NavSection label="Breeding Operations">
               <NavItem
