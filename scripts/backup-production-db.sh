@@ -23,7 +23,7 @@ echo ""
 
 ssh -o StrictHostKeyChecking=no "$PROD_HOST" 'node << '"'"'EOF'"'"'
 const { Pool } = require("/root/LiveStock/node_modules/pg");
-const pool = new Pool({ host:"localhost", port:5432, user:"postgres", password:"postgres123", database:"kaksedthan_herdbook" });
+const pool = new Pool({ host:"localhost", port:5432, user:"postgres", password:"postgres123", database:"livestock_db" });
 async function dump() {
   const c = await pool.connect();
   try {

@@ -444,6 +444,67 @@ async function safeMigrate() {
     `);
     console.log('[✓] activity_logs');
 
+    // ── 18. stock_insemination & stock_transactions ─────────────────────────────
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS stock_insemination (
+        id                  VARCHAR(100) PRIMARY KEY,
+        sire_id             VARCHAR(100) NOT NULL,
+        stock_available     INTEGER DEFAULT 0,
+        price_usd           NUMERIC(10, 2) DEFAULT 0,
+        price_khr           NUMERIC(15, 2) DEFAULT 0,
+        currency            VARCHAR(10) DEFAULT 'USD',
+        owner_name          VARCHAR(100),
+        farm_location       VARCHAR(100),
+        breeder_name        VARCHAR(100),
+        availability        VARCHAR(50) DEFAULT 'Available',
+        status              VARCHAR(50) DEFAULT 'Active',
+        sourcing_company_id VARCHAR(50),
+        breeder_id          VARCHAR(50),
+        farm_id             VARCHAR(50),
+        unit_type           VARCHAR(50) DEFAULT 'Dose',
+        tank_number         VARCHAR(50),
+        collection_date     TIMESTAMP WITH TIME ZONE,
+        notes               TEXT,
+        initial_quantity    INTEGER DEFAULT 100,
+        created_at          TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+        updated_at          TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+      );
+
+      ALTER TABLE stock_insemination ADD COLUMN IF NOT EXISTS breeder_id VARCHAR(50);
+      ALTER TABLE stock_insemination ADD COLUMN IF NOT EXISTS farm_id VARCHAR(50);
+      ALTER TABLE stock_insemination ADD COLUMN IF NOT EXISTS unit_type VARCHAR(50);
+      ALTER TABLE stock_insemination ADD COLUMN IF NOT EXISTS tank_number VARCHAR(50);
+      ALTER TABLE stock_insemination ADD COLUMN IF NOT EXISTS collection_date TIMESTAMP WITH TIME ZONE;
+      ALTER TABLE stock_insemination ADD COLUMN IF NOT EXISTS notes TEXT;
+      ALTER TABLE stock_insemination ADD COLUMN IF NOT EXISTS initial_quantity INTEGER;
+      ALTER TABLE stock_insemination ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP;
+
+      CREATE TABLE IF NOT EXISTS stock_transactions (
+        id                    VARCHAR(100) PRIMARY KEY,
+        stock_insemination_id VARCHAR(100) NOT NULL REFERENCES stock_insemination(id) ON DELETE CASCADE,
+        transaction_type      VARCHAR(100) NOT NULL,
+        quantity              INTEGER NOT NULL,
+        balance               INTEGER NOT NULL,
+        reference             VARCHAR(100),
+        recipient             VARCHAR(255),
+        breeder_id            VARCHAR(50),
+        farm_id               VARCHAR(50),
+        customer_id           VARCHAR(50),
+        price_usd             NUMERIC(10, 2),
+        user_name             VARCHAR(100),
+        created_at            TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+      );
+
+      ALTER TABLE stock_transactions ADD COLUMN IF NOT EXISTS breeder_id VARCHAR(50);
+      ALTER TABLE stock_transactions ADD COLUMN IF NOT EXISTS farm_id VARCHAR(50);
+      ALTER TABLE stock_transactions ADD COLUMN IF NOT EXISTS customer_id VARCHAR(50);
+
+      ALTER TABLE breed_configurations ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP;
+      ALTER TABLE sires ADD COLUMN IF NOT EXISTS sourcing_company VARCHAR(100);
+      ALTER TABLE dams ADD COLUMN IF NOT EXISTS sourcing_company VARCHAR(100);
+    `);
+    console.log('[✓] stock_insemination & stock_transactions');
+
     // ── Indexes (CREATE INDEX IF NOT EXISTS is idempotent) ──────────────────
     const indexes = [
       'CREATE INDEX IF NOT EXISTS idx_stock_status          ON stock(status)',
@@ -463,6 +524,8 @@ async function safeMigrate() {
       'CREATE INDEX IF NOT EXISTS idx_activity_entity       ON activity_logs(entity_type, entity_id)',
       'CREATE INDEX IF NOT EXISTS idx_calves_code           ON calves_herd(code)',
       'CREATE INDEX IF NOT EXISTS idx_calves_tag            ON calves_herd(tag_id)',
+      'CREATE INDEX IF NOT EXISTS idx_stock_tx_stock_id     ON stock_transactions(stock_insemination_id)',
+      'CREATE INDEX IF NOT EXISTS idx_stock_tx_breeder_id   ON stock_transactions(breeder_id)',
     ];
     for (const idx of indexes) {
       await client.query(idx + ';');
