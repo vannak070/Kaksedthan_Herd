@@ -2,6 +2,8 @@
 
 A production-grade Livestock & Pedigree Management Platform built with Next.js 16, TypeScript, TailwindCSS, Express, and PostgreSQL.
 
+> 📘 **Official Technical Guide:** Refer to [`OFFICIAL_DEVELOPMENT_AND_DEPLOYMENT_GUIDE.md`](./OFFICIAL_DEVELOPMENT_AND_DEPLOYMENT_GUIDE.md) for the mandatory technical standards, API contracts, database migration rules, and fail-safe production deployment procedures.
+
 ---
 
 ## 🏗️ Environment & Deployment Architecture
