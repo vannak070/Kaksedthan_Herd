@@ -11,6 +11,7 @@
     "db:seed:dev": "npx tsx src/db/seeds/dev-seed.ts",
     "safe-migrate": "npx tsx src/db/migrations/safe-migrate.ts",
     "deploy:prod": "bash deployment/production/deploy.sh",
+    "deploy:github": "bash deployment/production/deploy-from-github.sh",
     "backup:prod": "bash deployment/production/backup.sh",
     "setup:dev": "bash deployment/development/setup-dev.sh",
     "build": "next build --webpack",
