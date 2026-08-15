@@ -2423,6 +2423,82 @@ export class HerdbookRepository {
     return { deleted: true };
   }
 
+  async deleteUserAccount(userId: string, performedBy?: string): Promise<{ deleted: boolean; reason?: string }> {
+    const userRes = await query(`SELECT id, email, name, role FROM users WHERE id = $1 OR LOWER(email) = LOWER($1) LIMIT 1`, [userId]);
+    if (userRes.rows.length === 0) {
+      return { deleted: false, reason: 'User account not found' };
+    }
+
+    const u = userRes.rows[0];
+    if (u.email === 'admin@kaksedthan.com' || u.email === 'vannak@snrfarm.com') {
+      return { deleted: false, reason: 'System Protected Super Admin account cannot be deleted' };
+    }
+
+    await query(`DELETE FROM users WHERE id = $1`, [u.id]);
+    return { deleted: true };
+  }
+
+  async updateUserAccount(userId: string, data: {
+    name?: string;
+    email?: string;
+    role?: string;
+    userLevel?: string;
+    userLevelId?: string;
+    status?: string;
+    dataScope?: string;
+    farmLocation?: string;
+    companyName?: string;
+  }): Promise<{ updated: boolean; user?: any; reason?: string }> {
+    const userRes = await query(`SELECT id, email FROM users WHERE id = $1 OR LOWER(email) = LOWER($1) LIMIT 1`, [userId]);
+    if (userRes.rows.length === 0) {
+      return { updated: false, reason: 'User account not found' };
+    }
+    const id = userRes.rows[0].id;
+
+    let levelId = data.userLevelId;
+    let levelName = data.userLevel;
+    if (data.userLevel && !levelId) {
+      const levelRes = await query(
+        `SELECT id, name FROM user_levels WHERE id = $1 OR LOWER(name) = LOWER($1) OR LOWER(code) = LOWER($1) LIMIT 1`,
+        [data.userLevel]
+      );
+      if (levelRes.rows.length > 0) {
+        levelId = levelRes.rows[0].id;
+        levelName = levelRes.rows[0].name;
+      }
+    }
+
+    await query(
+      `UPDATE users SET
+         name = COALESCE($1, name),
+         email = COALESCE($2, email),
+         role = COALESCE($3, role),
+         user_level = COALESCE($4, user_level),
+         user_level_id = COALESCE($5, user_level_id),
+         status = COALESCE($6, status),
+         data_scope = COALESCE($7, data_scope),
+         farm_location = COALESCE($8, farm_location),
+         company_name = COALESCE($9, company_name),
+         updated_at = CURRENT_TIMESTAMP
+       WHERE id = $10`,
+      [
+        data.name || null,
+        data.email ? data.email.trim().toLowerCase() : null,
+        data.role || null,
+        levelName || null,
+        levelId || null,
+        data.status || null,
+        data.dataScope || null,
+        data.farmLocation || null,
+        data.companyName || null,
+        id
+      ]
+    );
+
+    const updatedRes = await query(`SELECT * FROM users WHERE id = $1`, [id]);
+    return { updated: true, user: updatedRes.rows[0] };
+  }
+
   // ─────────────────────────────────────────────────────────────
   // 13. User Level Audit Log
   // ─────────────────────────────────────────────────────────────

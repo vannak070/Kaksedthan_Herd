@@ -1853,6 +1853,43 @@ export async function createUserAccountAction(userData: {
   }
 }
 
+export async function updateUserAccountAction(userId: string, userData: {
+  name?: string;
+  email?: string;
+  role?: string;
+  userLevel?: string;
+  dataScope?: string;
+  status?: string;
+  farmLocation?: string;
+  companyName?: string;
+}) {
+  try {
+    const result = await herdbookRepository.updateUserAccount(userId, userData);
+    if (result.updated) {
+      revalidatePath('/settings/users');
+      revalidatePath('/settings/access-control');
+      return { success: true, data: result.user };
+    }
+    return { success: false, error: result.reason || 'Failed to update user account' };
+  } catch (err: any) {
+    return { success: false, error: err.message || 'Database error updating user account' };
+  }
+}
+
+export async function deleteUserAccountAction(userId: string, performedBy?: string) {
+  try {
+    const result = await herdbookRepository.deleteUserAccount(userId, performedBy);
+    if (result.deleted) {
+      revalidatePath('/settings/users');
+      revalidatePath('/settings/access-control');
+      return { success: true };
+    }
+    return { success: false, error: result.reason || 'Failed to delete user account' };
+  } catch (err: any) {
+    return { success: false, error: err.message || 'Database error deleting user account' };
+  }
+}
+
 /**
  * Seed system roles and permissions catalog (run during setup).
  */

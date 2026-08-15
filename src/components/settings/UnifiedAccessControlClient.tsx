@@ -8,7 +8,7 @@ import {
   ArrowRight, ToggleLeft, ToggleRight, Trash2, RefreshCw, FileEdit, Activity, ShieldAlert,
   Building, UserCheck, Globe2, UserPlus, Eye, Lock, Mail, ShieldCheck, UserCheck2, HelpCircle, Edit3
 } from 'lucide-react';
-import { setUserLevelStatusAction, deleteUserLevelAction, updateSettingsAction, createUserAccountAction, createUserLevelAction } from '@/app/actions';
+import { setUserLevelStatusAction, deleteUserLevelAction, updateSettingsAction, createUserAccountAction, updateUserAccountAction, deleteUserAccountAction, createUserLevelAction } from '@/app/actions';
 import { UserRoleItem, UserLevelItem, CustomRoleDefinition } from '@/types/settings.types';
 import UserAccessDetailsModal from './UserAccessDetailsModal';
 
@@ -246,7 +246,13 @@ export default function UnifiedAccessControlClient({
     }
   };
 
-  // Handle Save User
+  // Delete User State
+  const [userConfirmState, setUserConfirmState] = useState<{
+    open: boolean;
+    user?: UserRoleItem;
+  }>({ open: false });
+
+  // Handle Save User (Create or Update)
   const handleSaveUserSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!userFormData.name.trim() || !userFormData.email.trim()) {
@@ -256,21 +262,40 @@ export default function UnifiedAccessControlClient({
 
     setSubmittingUser(true);
     try {
-      const res = await createUserAccountAction({
-        name: userFormData.name,
-        email: userFormData.email,
-        password: userFormData.password,
-        role: userFormData.role,
-        userLevel: userFormData.userLevel,
-        dataScope: 'GLOBAL',
-        status: userFormData.status,
-        farmLocation: userFormData.farmLocation,
-        companyName: userFormData.companyName
-      });
+      let res;
+      if (editingUser) {
+        res = await updateUserAccountAction(editingUser.id, {
+          name: userFormData.name,
+          email: userFormData.email,
+          role: userFormData.role,
+          userLevel: userFormData.userLevel,
+          status: userFormData.status,
+          farmLocation: userFormData.farmLocation,
+          companyName: userFormData.companyName
+        });
+      } else {
+        res = await createUserAccountAction({
+          name: userFormData.name,
+          email: userFormData.email,
+          password: userFormData.password,
+          role: userFormData.role,
+          userLevel: userFormData.userLevel,
+          dataScope: 'GLOBAL',
+          status: userFormData.status,
+          farmLocation: userFormData.farmLocation,
+          companyName: userFormData.companyName
+        });
+      }
 
-      if (res.success && res.data) {
-        showToast('success', `Internal staff account "${userFormData.name}" saved successfully to PostgreSQL database.`);
+      if (res.success) {
+        showToast('success', `Internal staff account "${userFormData.name}" ${editingUser ? 'updated' : 'saved'} successfully to PostgreSQL database!`);
         setIsUserModalOpen(false);
+        setUsers(prev => {
+          if (editingUser) {
+            return prev.map(u => u.id === editingUser.id ? { ...u, name: userFormData.name, email: userFormData.email, role: userFormData.role, userLevel: userFormData.userLevel, status: userFormData.status } : u);
+          }
+          return [res.data, ...prev];
+        });
         router.refresh();
       } else {
         showToast('error', res.error || 'Failed to save user account.');
@@ -279,6 +304,24 @@ export default function UnifiedAccessControlClient({
       showToast('error', err.message || 'Failed to save user account.');
     } finally {
       setSubmittingUser(false);
+    }
+  };
+
+  const handleDeleteUser = async (user: UserRoleItem) => {
+    setLoadingId(user.id);
+    try {
+      const res = await deleteUserAccountAction(user.id);
+      if (res.success) {
+        setUsers(prev => prev.filter(u => u.id !== user.id));
+        showToast('success', `Internal staff account "${user.name}" deleted successfully.`);
+      } else {
+        showToast('error', res.error || 'Failed to delete user account.');
+      }
+    } catch (err: any) {
+      showToast('error', err.message || 'Failed to delete user account.');
+    } finally {
+      setLoadingId(null);
+      setUserConfirmState({ open: false });
     }
   };
 
@@ -500,16 +543,26 @@ export default function UnifiedAccessControlClient({
                           <button
                             onClick={() => openEditUserModal(u)}
                             className="px-3 py-1.5 rounded-xl bg-purple-600 hover:bg-purple-700 text-white font-bold text-[11px] transition-all cursor-pointer flex items-center gap-1.5 shadow-xs"
+                            title="Edit User Account"
                           >
                             <Edit3 className="h-3.5 w-3.5" />
-                            <span>Edit User</span>
+                            <span>Edit</span>
                           </button>
                           <button
                             onClick={() => setSelectedUserForDetails(u)}
                             className="px-3 py-1.5 rounded-xl bg-purple-50 text-purple-700 hover:bg-purple-100 border border-purple-200 font-bold text-[11px] transition-all cursor-pointer flex items-center gap-1.5"
+                            title="View Details & Permissions"
                           >
                             <Eye className="h-3.5 w-3.5" />
-                            <span>Details & Access</span>
+                            <span>Details</span>
+                          </button>
+                          <button
+                            disabled={loadingId === u.id || u.email === 'admin@kaksedthan.com' || u.email === 'vannak@snrfarm.com'}
+                            onClick={() => setUserConfirmState({ open: true, user: u })}
+                            className="p-1.5 rounded-xl bg-rose-50 hover:bg-rose-100 text-rose-600 border border-rose-200 font-bold transition-all cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
+                            title={u.email === 'admin@kaksedthan.com' ? 'System Protected Account' : 'Delete User Account'}
+                          >
+                            <Trash2 className="h-4 w-4" />
                           </button>
                         </div>
                       </td>
@@ -842,6 +895,38 @@ export default function UnifiedAccessControlClient({
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Delete User Confirmation Modal */}
+      {userConfirmState.open && userConfirmState.user && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/60 backdrop-blur-sm p-4 animate-in fade-in duration-150">
+          <div className="bg-white rounded-3xl shadow-2xl max-w-md w-full p-6 space-y-4 border border-slate-200 text-center">
+            <div className="h-12 w-12 rounded-2xl bg-rose-100 text-rose-600 flex items-center justify-center mx-auto">
+              <AlertTriangle className="h-6 w-6" />
+            </div>
+            <div>
+              <h3 className="font-black text-slate-900 text-base">Delete User Account?</h3>
+              <p className="text-xs text-slate-500 mt-1">
+                Are you sure you want to permanently delete internal staff account <strong className="text-slate-900">{userConfirmState.user.name}</strong> ({userConfirmState.user.email})?
+              </p>
+            </div>
+            <div className="flex items-center justify-center gap-3 pt-2">
+              <button
+                onClick={() => setUserConfirmState({ open: false })}
+                className="px-4 py-2.5 rounded-xl border border-slate-200 text-slate-600 font-bold text-xs hover:bg-slate-50 transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => handleDeleteUser(userConfirmState.user!)}
+                disabled={loadingId === userConfirmState.user.id}
+                className="px-5 py-2.5 rounded-xl bg-rose-600 hover:bg-rose-700 text-white font-black text-xs transition-all shadow-md shadow-rose-600/20"
+              >
+                Confirm Delete
+              </button>
+            </div>
           </div>
         </div>
       )}
