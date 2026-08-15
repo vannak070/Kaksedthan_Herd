@@ -20,8 +20,9 @@ echo -e "${BOLD}${CYAN}=========================================================
 
 # 1. Install System Dependencies (Node.js 20, PostgreSQL 16, PM2, Nginx)
 echo -e "\n${BOLD}[1/7] Installing System Dependencies (Node.js, PostgreSQL, PM2, Nginx)...${RESET}"
-sudo apt update && sudo apt upgrade -y
-sudo apt install -y curl git build-essential nginx postgresql postgresql-contrib
+export DEBIAN_FRONTEND=noninteractive
+sudo apt-get update && sudo apt-get -y -o Dpkg::Options::="--force-confdef" -o Dpkg::Options::="--force-confold" upgrade
+sudo apt-get install -y curl git build-essential nginx postgresql postgresql-contrib
 
 if ! command -v node &> /dev/null; then
   echo -e "${CYAN}Installing Node.js 20 LTS...${RESET}"

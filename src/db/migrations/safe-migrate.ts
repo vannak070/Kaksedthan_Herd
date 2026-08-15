@@ -54,8 +54,19 @@ async function safeMigrate() {
     await client.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS sourcing_company_id VARCHAR(50);`);
     await client.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS user_level_id VARCHAR(50);`);
     await client.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS user_level VARCHAR(100);`);
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS customers (
+        id                   VARCHAR(50) PRIMARY KEY,
+        name                 VARCHAR(100) NOT NULL,
+        phone                VARCHAR(50),
+        email                VARCHAR(100),
+        address              TEXT,
+        status               VARCHAR(20) DEFAULT 'Active',
+        created_at           TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+      );
+    `);
     await client.query(`ALTER TABLE customers ADD COLUMN IF NOT EXISTS farm_location VARCHAR(100);`);
-    console.log('[✓] users');
+    console.log('[✓] users & customers base');
 
     // ── 3. stock ─────────────────────────────────────────────────────────────
     await client.query(`

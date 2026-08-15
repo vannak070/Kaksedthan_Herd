@@ -1,36 +1,90 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# 🐄 Kaksethan Livestock & Herdbook Management System
 
-## Getting Started
+A production-grade Livestock & Pedigree Management Platform built with Next.js 16, TypeScript, TailwindCSS, Express, and PostgreSQL.
 
-First, run the development server:
+---
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+## 🏗️ Environment & Deployment Architecture
+
+This project enforces strict separation between **Development (Localhost)** and **Production** environments.
+
+```text
+Kaksethan_Herdbook/
+├── config/
+│   ├── database.ts             # Environment-aware Database Connection Pool
+│   └── storage.ts              # Environment-aware Upload & Storage Configuration
+├── deployment/
+│   ├── development/
+│   │   └── setup-dev.sh        # Localhost Dev Environment Setup Script
+│   └── production/
+│       ├── backup.sh           # Automated Production DB Backup Guard
+│       ├── deploy.sh           # Fail-Safe Production Deployment Pipeline
+│       └── nginx.conf          # Nginx Reverse Proxy Template
+├── src/
+│   ├── db/
+│   │   ├── migrations/         # Schema-only DDL Migrations (Dev & Prod)
+│   │   └── seeds/              # Localhost Development Sample Data Seeder
+│   ├── lib/
+│   └── server/
+├── .env.example                # Environment Variable Template
+├── .env.development            # Localhost Environment Configuration
+├── .env.production.example     # Production Environment Template (Secrets NOT committed)
+└── README.md
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+---
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## ⚙️ Environment Comparison
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+| Feature / Setting | 🛠️ Development (Localhost) | 🚀 Production (`livestock.kaksedthan.com`) |
+| :--- | :--- | :--- |
+| **Env File** | `.env.development` | `.env.production` (Server-side) |
+| **Database Host** | `localhost:5433` (Docker) | `127.0.0.1:5432` (PostgreSQL 16) |
+| **Database Name** | `kaksedthan_herdbook` | `livestock_db` |
+| **File Storage** | `public/uploads/dev/` | `public/uploads/prod/` |
+| **API URL** | `http://localhost:5001/api/v1` | `/api/v1` (Nginx Proxy to `:3002`) |
+| **Sample/Test Data** | Allowed (`npm run db:seed:dev`) | 🔴 **Forbidden** (Only Real Business Data) |
+| **Database Backups** | Manual | 🛡️ **Automated pre-deployment backup** |
 
-## Learn More
+---
 
-To learn more about Next.js, take a look at the following resources:
+## 🛠️ Local Development Workflow
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+### 1. Setup Local Development Environment
+```bash
+npm run setup:dev
+```
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+### 2. Start Development Servers
+```bash
+npm run dev:all
+```
+- **Frontend UI**: [http://localhost:3000](http://localhost:3000)
+- **Backend API**: [http://localhost:5001/api/v1](http://localhost:5001/api/v1)
 
-## Deploy on Vercel
+---
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+## 🚀 Production Deployment Pipeline
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+Deploying to production executes an **automated, fail-safe 6-step deployment pipeline**:
+
+```bash
+npm run deploy:prod
+```
+
+### Automated Safety Pipeline Execution Steps:
+1. **Environment & Secrets Guard**: Validates required production variables (`DB_HOST`, `DB_NAME`, `DB_USER`, `DB_PASSWORD`). Aborts if missing.
+2. **Database Connection Guard**: Verifies database connectivity. Aborts if unreachable.
+3. **Automated Production Backup**: Creates compressed timestamped dump `backups/prod_backup_YYYYMMDD_HHMMSS.sql.gz`. **Deployment aborts immediately if backup fails.**
+4. **Schema-Only Migrations**: Applies DDL schema migrations (`safe-migrate.ts`). Aborts if migration fails.
+5. **Production Build**: Compiles optimized Next.js production bundle. Aborts if build fails.
+6. **Zero-Downtime PM2 Reload**: Reloads production UI and API PM2 services safely.
+
+---
+
+## 🛡️ Data Protection Rules
+
+1. **Database Isolation**: Localhost development database (`kaksedthan_herdbook`) and production database (`livestock_db`) are completely independent.
+2. **No Data Leakage**: Development mock/sample records are **NEVER** copied to production.
+3. **Pre-Migration Backups**: Production database backups are executed and verified before any migration or code update is applied.
+4. **Git Hygiene**: Production passwords, secrets, `.env.production`, and database backups (`*.sql.gz`) are strictly ignored in `.gitignore`.

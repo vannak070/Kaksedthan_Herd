@@ -30,13 +30,17 @@ yarn-debug.log*
 yarn-error.log*
 .pnpm-debug.log*
 
-# env files (can opt-in for committing if needed)
-.env*
+# env files & production secrets (NEVER COMMIT PRODUCTION SECRETS)
+.env
+.env.production
+.env.local
+.env.*.local
+!.env.example
+!.env.development
+!.env.production.example
 
-# vercel
-.vercel
-
-# typescript
-*.tsbuildinfo
-next-env.d.ts
-backups/*.json
+# database backups & dump files
+/backups/
+*.sql
+*.sql.gz
+*.dump

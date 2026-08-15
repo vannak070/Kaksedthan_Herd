@@ -4,6 +4,22 @@ export async function addLevelTypeToUserLevels() {
   console.log('=== ⚡ Executing Level Type Column Migration for user_levels ===');
 
   await withTransaction(async (client) => {
+    // 0. Ensure user_levels table exists
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS user_levels (
+        id          VARCHAR(50) PRIMARY KEY,
+        code        VARCHAR(50) UNIQUE NOT NULL,
+        name        VARCHAR(100) NOT NULL,
+        description TEXT,
+        purpose     TEXT,
+        sort_order  INTEGER DEFAULT 0,
+        status      VARCHAR(20) DEFAULT 'Active',
+        level_type  VARCHAR(50) DEFAULT 'ACCOUNT_MANAGEMENT',
+        created_at  TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+        updated_at  TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+      );
+    `);
+
     // 1. Add level_type column if it doesn't exist
     await client.query(`
       ALTER TABLE user_levels 
