@@ -32,8 +32,13 @@ export async function migrateBreederAccounts() {
   // 2. Add `user_type` and `breeder_id` to `users` table if not existing
   await query(`
     ALTER TABLE users
+    ADD COLUMN IF NOT EXISTS phone VARCHAR(50),
     ADD COLUMN IF NOT EXISTS user_type VARCHAR(50) DEFAULT 'General User',
-    ADD COLUMN IF NOT EXISTS breeder_id VARCHAR(50);
+    ADD COLUMN IF NOT EXISTS breeder_id VARCHAR(50),
+    ADD COLUMN IF NOT EXISTS national_id VARCHAR(100),
+    ADD COLUMN IF NOT EXISTS id_front_url TEXT,
+    ADD COLUMN IF NOT EXISTS id_back_url TEXT,
+    ADD COLUMN IF NOT EXISTS id_verification_status VARCHAR(50) DEFAULT 'UNVERIFIED';
   `);
 
   // 3. Migrate existing breeder users from `users` table into `breeders` profile table if missing

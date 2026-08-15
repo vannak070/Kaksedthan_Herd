@@ -47,6 +47,7 @@ async function safeMigrate() {
     `);
     // Optional columns added in later migrations
     await client.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS farm_location VARCHAR(100);`);
+    await client.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS phone VARCHAR(50);`);
     await client.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS permissions JSONB DEFAULT '[]'::jsonb;`);
     await client.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS breeder_id VARCHAR(50);`);
     await client.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS farm_id VARCHAR(50);`);
@@ -54,6 +55,11 @@ async function safeMigrate() {
     await client.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS sourcing_company_id VARCHAR(50);`);
     await client.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS user_level_id VARCHAR(50);`);
     await client.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS user_level VARCHAR(100);`);
+    await client.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS data_scope VARCHAR(50) DEFAULT 'GLOBAL';`);
+    await client.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS national_id VARCHAR(100);`);
+    await client.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS id_front_url TEXT;`);
+    await client.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS id_back_url TEXT;`);
+    await client.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS id_verification_status VARCHAR(50) DEFAULT 'UNVERIFIED';`);
     await client.query(`
       CREATE TABLE IF NOT EXISTS customers (
         id                   VARCHAR(50) PRIMARY KEY,
@@ -517,6 +523,22 @@ async function safeMigrate() {
       ALTER TABLE customers ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP;
 
       ALTER TABLE farms ADD COLUMN IF NOT EXISTS code VARCHAR(50);
+      ALTER TABLE farms ADD COLUMN IF NOT EXISTS farm_type VARCHAR(50) DEFAULT 'General Livestock Station';
+      ALTER TABLE farms ADD COLUMN IF NOT EXISTS province VARCHAR(100);
+      ALTER TABLE farms ADD COLUMN IF NOT EXISTS district VARCHAR(100);
+      ALTER TABLE farms ADD COLUMN IF NOT EXISTS commune VARCHAR(100);
+      ALTER TABLE farms ADD COLUMN IF NOT EXISTS village VARCHAR(100);
+      ALTER TABLE farms ADD COLUMN IF NOT EXISTS phone VARCHAR(50);
+      ALTER TABLE farms ADD COLUMN IF NOT EXISTS email VARCHAR(100);
+      ALTER TABLE farms ADD COLUMN IF NOT EXISTS owner_name VARCHAR(100);
+      ALTER TABLE farms ADD COLUMN IF NOT EXISTS owner_phone VARCHAR(50);
+      ALTER TABLE farms ADD COLUMN IF NOT EXISTS owner_email VARCHAR(100);
+      ALTER TABLE farms ADD COLUMN IF NOT EXISTS owner_national_id VARCHAR(50);
+      ALTER TABLE farms ADD COLUMN IF NOT EXISTS owner_id VARCHAR(50);
+      ALTER TABLE farms ADD COLUMN IF NOT EXISTS user_id VARCHAR(50);
+      ALTER TABLE farms ADD COLUMN IF NOT EXISTS capacity INTEGER DEFAULT 0;
+      ALTER TABLE farms ADD COLUMN IF NOT EXISTS image_url TEXT;
+      ALTER TABLE farms ADD COLUMN IF NOT EXISTS notes TEXT;
       ALTER TABLE farms ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP;
 
       CREATE TABLE IF NOT EXISTS calves_herd (

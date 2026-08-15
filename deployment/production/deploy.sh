@@ -69,6 +69,8 @@ if ! npm run safe-migrate; then
 fi
 npx tsx src/db/migrations/migrate-user-levels-enhanced.ts
 npx tsx src/db/migrations/migrate-access-control-v2.ts
+npx tsx src/db/migrations/migrate-farm-station-accounts.ts
+npx tsx src/db/migrations/migrate-breeder-accounts.ts
 npx tsx src/db/migrations/add-level-type-to-user-levels.ts
 npx tsx src/db/migrations/seed-breed-configs.ts
 echo -e "${GREEN}✓ Production schema migrations applied cleanly${RESET}"
