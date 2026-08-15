@@ -10,6 +10,7 @@
     "db:migrate": "npx tsx src/db/migrations/safe-migrate.ts",
     "db:seed:dev": "npx tsx src/db/seeds/dev-seed.ts",
     "safe-migrate": "npx tsx src/db/migrations/safe-migrate.ts",
+    "db:reset-master-data": "npx tsx src/db/migrations/reset-user-levels-master-data.ts",
     "deploy:prod": "bash deployment/production/deploy.sh",
     "deploy:github": "bash deployment/production/deploy-from-github.sh",
     "backup:prod": "bash deployment/production/backup.sh",
