@@ -11,18 +11,20 @@ export async function addLevelTypeToUserLevels() {
     `);
     console.log('[✓] Added level_type column to user_levels');
 
-    // 2. Set default values for known system vs account levels
+    // 2. Set default values for external account management levels vs internal system levels
     await client.query(`
       UPDATE user_levels 
       SET level_type = 'ACCOUNT_MANAGEMENT' 
-      WHERE code IN ('BREEDER', 'FARM_OWNER', 'CUSTOMER_COW_OWNER', 'SIRE_SOURCING_COMPANY', 'COW_OWNER', 'SIRE_SOURCING_CO')
-         OR id IN ('LEVEL-01', 'LEVEL-02', 'LEVEL-03', 'LEVEL-04', 'LEVEL-05');
+      WHERE code IN ('FARM_OWNER', 'CUSTOMER_COW_OWNER', 'SIRE_SOURCING_COMPANY', 'COW_OWNER', 'SIRE_SOURCING_CO')
+         OR id IN ('LEVEL-02', 'LEVEL-04', 'LEVEL-05');
     `);
 
     await client.query(`
       UPDATE user_levels 
       SET level_type = 'SYSTEM_ACCOUNT' 
-      WHERE level_type IS NULL OR (code NOT IN ('BREEDER', 'FARM_OWNER', 'CUSTOMER_COW_OWNER', 'SIRE_SOURCING_COMPANY', 'COW_OWNER', 'SIRE_SOURCING_CO') AND id NOT IN ('LEVEL-01', 'LEVEL-02', 'LEVEL-03', 'LEVEL-04', 'LEVEL-05'));
+      WHERE code IN ('BREEDER', 'ADMIN_OPERATION', 'FARM_MANAGER', 'SYSTEM_ADMIN')
+         OR id IN ('LEVEL-01', 'LEVEL-03', 'LEVEL-446833')
+         OR level_type IS NULL;
     `);
     console.log('[✓] Updated level_type categories for existing user levels');
   });

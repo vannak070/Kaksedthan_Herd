@@ -2044,7 +2044,7 @@ export class HerdbookRepository {
       name: r.name,
       description: r.description,
       purpose: r.purpose,
-      levelType: r.level_type || (['LEVEL-01', 'LEVEL-02', 'LEVEL-03', 'LEVEL-04', 'LEVEL-05', 'BREEDER', 'FARM_OWNER', 'CUSTOMER_COW_OWNER', 'SIRE_SOURCING_COMPANY'].includes(r.code) || ['LEVEL-01', 'LEVEL-02', 'LEVEL-03', 'LEVEL-04', 'LEVEL-05'].includes(r.id) ? 'ACCOUNT_MANAGEMENT' : 'SYSTEM_ACCOUNT'),
+      levelType: r.level_type || (['CUSTOMER_COW_OWNER', 'SIRE_SOURCING_COMPANY', 'FARM_OWNER', 'LEVEL-02', 'LEVEL-04', 'LEVEL-05'].includes(r.code) || ['LEVEL-02', 'LEVEL-04', 'LEVEL-05'].includes(r.id) ? 'ACCOUNT_MANAGEMENT' : 'SYSTEM_ACCOUNT'),
       status: r.status as 'Draft' | 'Active' | 'Inactive',
       sortOrder: r.sort_order,
       userCount: parseInt(r.user_count || '0', 10),
@@ -2076,7 +2076,7 @@ export class HerdbookRepository {
       name: r.name,
       description: r.description,
       purpose: r.purpose,
-      levelType: r.level_type || (['LEVEL-01', 'LEVEL-02', 'LEVEL-03', 'LEVEL-04', 'LEVEL-05', 'BREEDER', 'FARM_OWNER', 'CUSTOMER_COW_OWNER', 'SIRE_SOURCING_COMPANY'].includes(r.code) || ['LEVEL-01', 'LEVEL-02', 'LEVEL-03', 'LEVEL-04', 'LEVEL-05'].includes(r.id) ? 'ACCOUNT_MANAGEMENT' : 'SYSTEM_ACCOUNT'),
+      levelType: r.level_type || (['CUSTOMER_COW_OWNER', 'SIRE_SOURCING_COMPANY', 'FARM_OWNER', 'LEVEL-02', 'LEVEL-04', 'LEVEL-05'].includes(r.code) || ['LEVEL-02', 'LEVEL-04', 'LEVEL-05'].includes(r.id) ? 'ACCOUNT_MANAGEMENT' : 'SYSTEM_ACCOUNT'),
       status: r.status as 'Draft' | 'Active' | 'Inactive',
       sortOrder: r.sort_order,
       userCount: parseInt(r.user_count || '0', 10),
@@ -3702,6 +3702,21 @@ export class HerdbookRepository {
     sortOrder?: number;
   }): Promise<any> {
     this.breedConfigCache = null; // Invalidate cache
+    await query(`
+      CREATE TABLE IF NOT EXISTS breed_configurations (
+        id          VARCHAR(50) PRIMARY KEY,
+        code        VARCHAR(50) UNIQUE NOT NULL,
+        name        VARCHAR(100) NOT NULL,
+        category    VARCHAR(50) DEFAULT 'Cattle',
+        origin      VARCHAR(100),
+        description TEXT,
+        image_url   TEXT,
+        sort_order  INTEGER DEFAULT 0,
+        is_active   BOOLEAN DEFAULT true,
+        created_at  TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+        updated_at  TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+      );
+    `);
     const id = `BRD-${Date.now().toString().slice(-6)}`;
     const code = (data.code || data.name.trim().toUpperCase().replace(/[^A-Z0-9]+/g, '_')).slice(0, 50);
     const sql = `

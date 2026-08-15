@@ -2007,8 +2007,9 @@ export async function createBreedConfigurationAction(data: {
 }) {
   try {
     const caller = await resolveCallerPermissions(data.callerUserId);
-    if (!caller.isSuperAdmin) {
-      return { success: false, error: 'Forbidden: Only Super Admin can create breed configurations.', statusCode: 403 };
+    const isInternalSystemLevel = caller.isSuperAdmin || caller.dataScope === 'GLOBAL' || caller.userLevel === 'Internal Staff' || caller.userLevel === 'Breeder Account' || caller.userLevel === 'Breeder' || caller.userLevel === 'Farm Manager Account' || caller.effectivePermissions.includes('settings.write') || caller.effectivePermissions.includes('master_data.manage');
+    if (!isInternalSystemLevel) {
+      return { success: false, error: 'Forbidden: Only authorized internal system user levels can create breed configurations.', statusCode: 403 };
     }
     const { callerUserId: _c, ...breedData } = data;
     const created = await herdbookRepository.createBreedConfiguration(breedData);
@@ -2028,8 +2029,9 @@ export async function createBreedConfigurationAction(data: {
 export async function toggleBreedConfigStatusAction(id: string, isActive: boolean, callerUserId?: string) {
   try {
     const caller = await resolveCallerPermissions(callerUserId);
-    if (!caller.isSuperAdmin) {
-      return { success: false, error: 'Forbidden: Only Super Admin can update breed configurations.', statusCode: 403 };
+    const isInternalSystemLevel = caller.isSuperAdmin || caller.dataScope === 'GLOBAL' || caller.userLevel === 'Internal Staff' || caller.userLevel === 'Breeder Account' || caller.userLevel === 'Breeder' || caller.userLevel === 'Farm Manager Account' || caller.effectivePermissions.includes('settings.write') || caller.effectivePermissions.includes('master_data.manage');
+    if (!isInternalSystemLevel) {
+      return { success: false, error: 'Forbidden: Only authorized internal system user levels can update breed configurations.', statusCode: 403 };
     }
     const updated = await herdbookRepository.toggleBreedConfigStatus(id, isActive);
     try {
