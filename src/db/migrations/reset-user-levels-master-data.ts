@@ -88,6 +88,19 @@ async function resetAccessControlAndMasterData() {
       ON CONFLICT (id) DO NOTHING;
     `);
 
+    // Seed default Farm Station and Breeder Station
+    await client.query(`
+      INSERT INTO farms (id, code, name, location, status)
+      VALUES ('FARM-01', 'HQ-STATION', 'Central Breeding Station', 'Phnom Penh HQ', 'Active')
+      ON CONFLICT (id) DO NOTHING;
+    `);
+
+    await client.query(`
+      INSERT INTO breeders (id, name, email, phone, station, status)
+      VALUES ('BRD-01', 'SNR Farm Breeder Station', 'breeder@snrfarm.com', '+85512345678', 'Central Station', 'Active')
+      ON CONFLICT (id) DO NOTHING;
+    `);
+
     await client.query('COMMIT');
     console.log('====================================================================');
     console.log(' ✅ DATA RESET COMPLETED SUCCESSFULLY WITH SAFETY BACKUP VERIFIED');
