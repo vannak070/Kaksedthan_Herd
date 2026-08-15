@@ -61,6 +61,38 @@ async function safeMigrate() {
     await client.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS id_back_url TEXT;`);
     await client.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS id_verification_status VARCHAR(50) DEFAULT 'UNVERIFIED';`);
     await client.query(`
+      CREATE TABLE IF NOT EXISTS roles (
+        id          VARCHAR(50) PRIMARY KEY,
+        name        VARCHAR(100) NOT NULL UNIQUE,
+        code        VARCHAR(50),
+        category    VARCHAR(50) DEFAULT 'System',
+        description TEXT,
+        status      VARCHAR(20) DEFAULT 'Active',
+        is_system   BOOLEAN DEFAULT false,
+        created_at  TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+        updated_at  TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+      );
+      CREATE TABLE IF NOT EXISTS user_roles (
+        user_id VARCHAR(50) REFERENCES users(id) ON DELETE CASCADE,
+        role_id VARCHAR(50) REFERENCES roles(id) ON DELETE CASCADE,
+        PRIMARY KEY (user_id, role_id)
+      );
+      CREATE TABLE IF NOT EXISTS role_permissions (
+        role_id        VARCHAR(50) REFERENCES roles(id) ON DELETE CASCADE,
+        permission_key VARCHAR(100) NOT NULL,
+        PRIMARY KEY (role_id, permission_key)
+      );
+      CREATE TABLE IF NOT EXISTS audit_logs (
+        id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        action      VARCHAR(100) NOT NULL,
+        module      VARCHAR(50) NOT NULL,
+        resource_id VARCHAR(100),
+        performed_by VARCHAR(100),
+        details     JSONB DEFAULT '{}'::jsonb,
+        created_at  TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+      );
+    `);
+    await client.query(`
       CREATE TABLE IF NOT EXISTS customers (
         id                   VARCHAR(50) PRIMARY KEY,
         name                 VARCHAR(100) NOT NULL,

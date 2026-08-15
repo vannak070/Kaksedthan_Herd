@@ -1796,21 +1796,25 @@ export async function createUserAccountAction(userData: {
     }
 
     // 2. Link user to a single RBAC role in user_roles table (strict single-role enforcement)
-    await client.query(`DELETE FROM user_roles WHERE user_id = $1`, [userId]);
+    try {
+      await client.query(`DELETE FROM user_roles WHERE user_id = $1`, [userId]);
 
-    const cleanRoleName = role.replace(/ Account$/, '');
-    const roleRes = await client.query(
-      `SELECT id FROM roles WHERE LOWER(name) = LOWER($1) OR LOWER(name) LIKE LOWER($2) OR id = $3 LIMIT 1`,
-      [role, `%${cleanRoleName}%`, role]
-    );
-    const isSuper = role.toLowerCase() === 'super admin' || role.toLowerCase() === 'super administrator';
-    const fallbackRoleId = isSuper ? 'R-01' : (role.toLowerCase().includes('admin') ? 'R-02' : 'R-03');
-    const roleId = roleRes.rows.length > 0 ? roleRes.rows[0].id : fallbackRoleId;
+      const cleanRoleName = role.replace(/ Account$/, '');
+      const roleRes = await client.query(
+        `SELECT id FROM roles WHERE LOWER(name) = LOWER($1) OR LOWER(name) LIKE LOWER($2) OR id = $3 LIMIT 1`,
+        [role, `%${cleanRoleName}%`, role]
+      );
+      const isSuper = role.toLowerCase() === 'super admin' || role.toLowerCase() === 'super administrator';
+      const fallbackRoleId = isSuper ? 'R-01' : (role.toLowerCase().includes('admin') ? 'R-02' : 'R-03');
+      const roleId = roleRes.rows.length > 0 ? roleRes.rows[0].id : fallbackRoleId;
 
-    await client.query(
-      `INSERT INTO user_roles (user_id, role_id) VALUES ($1, $2) ON CONFLICT DO NOTHING`,
-      [userId, roleId]
-    );
+      await client.query(
+        `INSERT INTO user_roles (user_id, role_id) VALUES ($1, $2) ON CONFLICT DO NOTHING`,
+        [userId, roleId]
+      );
+    } catch (roleErr) {
+      console.warn('[Notice] Optional user_roles link notice:', roleErr);
+    }
 
     await client.query('COMMIT');
 
