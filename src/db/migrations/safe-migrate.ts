@@ -445,9 +445,20 @@ async function safeMigrate() {
         customer_id          VARCHAR(50),
         breeder_id          VARCHAR(50),
         breed_id             VARCHAR(50),
-        registration_number VARCHAR(50),
         created_at           TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
       );
+
+      ALTER TABLE sires ADD COLUMN IF NOT EXISTS farm_location VARCHAR(100);
+      ALTER TABLE sires ADD COLUMN IF NOT EXISTS farm_id VARCHAR(50);
+
+      ALTER TABLE dams ADD COLUMN IF NOT EXISTS farm_location VARCHAR(100);
+      ALTER TABLE dams ADD COLUMN IF NOT EXISTS farm_id VARCHAR(50);
+
+      ALTER TABLE calves ADD COLUMN IF NOT EXISTS farm_location VARCHAR(100);
+      ALTER TABLE calves ADD COLUMN IF NOT EXISTS farm_id VARCHAR(50);
+
+      ALTER TABLE breeding_programs ADD COLUMN IF NOT EXISTS farm_location VARCHAR(100);
+      ALTER TABLE breeding_programs ADD COLUMN IF NOT EXISTS farm_id VARCHAR(50);
 
       CREATE TABLE IF NOT EXISTS breeding_programs (
         id                   VARCHAR(50) PRIMARY KEY,
