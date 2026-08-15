@@ -276,8 +276,31 @@ async function safeMigrate() {
       );
       ALTER TABLE feed_products ADD COLUMN IF NOT EXISTS cost_type VARCHAR(20) DEFAULT 'per_bag';
       ALTER TABLE feed_products ADD COLUMN IF NOT EXISTS cost_per_bag NUMERIC(15,2) DEFAULT 0;
+
+      CREATE TABLE IF NOT EXISTS feed_transactions (
+        id VARCHAR(100) PRIMARY KEY,
+        date TIMESTAMP WITH TIME ZONE NOT NULL,
+        product_id VARCHAR(100),
+        product_name VARCHAR(255),
+        type VARCHAR(50) NOT NULL,
+        quantity_bags NUMERIC(12, 2) DEFAULT 0,
+        quantity_kg NUMERIC(12, 2) DEFAULT 0,
+        unit_cost NUMERIC(15, 4) DEFAULT 0,
+        total_cost NUMERIC(15, 2) DEFAULT 0,
+        source_farm VARCHAR(255),
+        target_farm VARCHAR(255),
+        reference_no VARCHAR(100),
+        recorded_by VARCHAR(255),
+        notes TEXT,
+        created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+      );
+
+      ALTER TABLE feed_transactions ADD COLUMN IF NOT EXISTS product_id VARCHAR(100);
+      ALTER TABLE feed_transactions ADD COLUMN IF NOT EXISTS product_name VARCHAR(255);
+      ALTER TABLE feed_transactions ADD COLUMN IF NOT EXISTS reference_no VARCHAR(100);
+      ALTER TABLE feed_transactions ADD COLUMN IF NOT EXISTS created_by VARCHAR(100);
     `);
-    console.log('[✓] feed_products');
+    console.log('[✓] feed_products & feed_transactions');
 
     // ── 11. breeding_records ─────────────────────────────────────────────────
     await client.query(`

@@ -157,7 +157,7 @@ async function restoreLocal() {
       await client.query(
         `INSERT INTO users (id,name,email,role,status,password,farm_location,permissions,created_at)
          VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
-         ON CONFLICT (id) DO UPDATE SET name=EXCLUDED.name, email=EXCLUDED.email, role=EXCLUDED.role, status=EXCLUDED.status, farm_location=EXCLUDED.farm_location, permissions=EXCLUDED.permissions`,
+         ON CONFLICT (email) DO UPDATE SET name=EXCLUDED.name, role=EXCLUDED.role, status=EXCLUDED.status, farm_location=EXCLUDED.farm_location, permissions=EXCLUDED.permissions`,
         [u.id,u.name,u.email,u.role,u.status,u.password,u.farm_location,u.permissions ? JSON.stringify(u.permissions) : '[]',u.created_at]
       );
     }

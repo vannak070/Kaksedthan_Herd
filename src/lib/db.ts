@@ -77,11 +77,6 @@ export function invalidateDbDataCache() {
 }
 
 export async function getDbData(): Promise<ERPLivestockData> {
-  // Return cached data if still fresh
-  if (_dbDataCache && Date.now() - _dbDataCacheTime < DB_DATA_CACHE_TTL_MS) {
-    return _dbDataCache;
-  }
-
   try {
     const jsonDb = getJsonDbData();
     const [
@@ -89,15 +84,15 @@ export async function getDbData(): Promise<ERPLivestockData> {
       feedProducts, feedTransactions,
       sires, stockInsemination, dams, breedingPrograms, calves, herdbookRegistrations, certificates
     ] = await Promise.all([
-      stockService.getAllStock().catch(() => jsonDb.stock || []),
-      weightService.getAllWeightRecords().catch(() => jsonDb.weightTracking || []),
-      salesService.getAllSales().catch(() => jsonDb.salesTracking || []),
-      batchService.getAllBatches().catch(() => jsonDb.batches || []),
-      healthService.getAllHealthLogs().catch(() => jsonDb.healthLogs || []),
-      expenseService.getAllExpenses().catch(() => jsonDb.expenses || []),
-      settingsService.getSettings().catch(() => jsonDb.settings || {}),
-      feedRepository.getProducts().catch(() => jsonDb.feedProducts || []),
-      feedRepository.getTransactions().catch(() => jsonDb.feedTransactions || []),
+      stockService.getAllStock().catch(() => []),
+      weightService.getAllWeightRecords().catch(() => []),
+      salesService.getAllSales().catch(() => []),
+      batchService.getAllBatches().catch(() => []),
+      healthService.getAllHealthLogs().catch(() => []),
+      expenseService.getAllExpenses().catch(() => []),
+      settingsService.getSettings().catch(() => ({}) as any),
+      feedRepository.getProducts().catch(() => []),
+      feedRepository.getTransactions().catch(() => []),
       herdbookRepository.getSires().catch(() => []),
       herdbookRepository.getStockInsemination().catch(() => []),
       herdbookRepository.getDams().catch(() => []),
@@ -106,14 +101,6 @@ export async function getDbData(): Promise<ERPLivestockData> {
       herdbookRepository.getHerdbookRegistrations().catch(() => []),
       herdbookRepository.getCertificates().catch(() => [])
     ]);
-
-    const batchMap = new Map<string, BatchItem>();
-    for (const b of jsonDb.batches || []) {
-      batchMap.set(b.id, b);
-    }
-    for (const b of batches || []) {
-      batchMap.set(b.id, b);
-    }
 
     const common = {
       breeds: settings.breeds || [],
@@ -132,8 +119,8 @@ export async function getDbData(): Promise<ERPLivestockData> {
       healthLogs,
       expenses,
       settings,
-      feedProducts: feedProducts && feedProducts.length > 0 ? feedProducts : (jsonDb.feedProducts || []),
-      feedTransactions: feedTransactions && feedTransactions.length > 0 ? feedTransactions : (jsonDb.feedTransactions || []),
+      feedProducts: feedProducts || [],
+      feedTransactions: feedTransactions || [],
       sires,
       stockInsemination,
       dams,
@@ -146,18 +133,10 @@ export async function getDbData(): Promise<ERPLivestockData> {
     // Auto-calculate daily feed stock outs based on Daily Feed Ration
     await processDailyFeedStockOuts(erpData).catch(e => console.warn('[Daily Feed Cron] Non-blocking error:', e));
 
-    // Store in cache
-    _dbDataCache = erpData;
-    _dbDataCacheTime = Date.now();
-
     return erpData;
   } catch (err) {
-    console.warn('[getDbData] PostgreSQL read error, falling back to db.json:', err);
-    const fallback = getJsonDbData();
-    // Cache the fallback too so we don't retry failed DB 15+ times per minute
-    _dbDataCache = fallback;
-    _dbDataCacheTime = Date.now();
-    return fallback;
+    console.warn('[getDbData] PostgreSQL read error:', err);
+    return getJsonDbData();
   }
 }
 

@@ -144,7 +144,15 @@
         "email": "vannak@snrfarm.com",
         "role": "Super Admin",
         "status": "Active",
-        "password": "admin"
+        "password": "password123"
+      },
+      {
+        "id": "USR-ADMIN-KAKSEDTHAN",
+        "name": "Admin Account",
+        "email": "admin@kaksedthan.com",
+        "role": "Super Admin",
+        "status": "Active",
+        "password": "password123"
       }
     ],
     "breeds": [
@@ -228,7 +236,76 @@
     ]
   },
   "feedProducts": [],
-  "feedTransactions": [],
+  "feedTransactions": [
+    {
+      "id": "TX-AUTO-1786761383900-718",
+      "date": "2026-08-15",
+      "productId": "PROD-F01",
+      "productName": "DSR-16 Cow Feed",
+      "type": "STOCK_OUT",
+      "quantityBags": 8.8,
+      "quantityKg": 264,
+      "unitCost": 1367,
+      "totalCost": 360888,
+      "sourceFarm": "SNR Farm",
+      "targetFarm": "Daily Feed Ration (Batch01_10/06/2026)",
+      "referenceNo": "AUTO-RATION-FAT-2026-961-2026-08-15-0",
+      "recordedBy": "Daily Automated Feed Cron",
+      "notes": "Automated daily feed ration deduction (6 kg/head/day x 44 head) for Batch01_10/06/2026",
+      "createdAt": "2026-08-15T02:36:23.900Z"
+    },
+    {
+      "id": "TX-AUTO-1786761383891-629",
+      "date": "2026-08-15",
+      "productId": "PROD-F01",
+      "productName": "DSR-16 Cow Feed",
+      "type": "STOCK_OUT",
+      "quantityBags": 4.33,
+      "quantityKg": 130,
+      "unitCost": 1367,
+      "totalCost": 177710,
+      "sourceFarm": "SNR Farm",
+      "targetFarm": "Daily Feed Ration (គោឈ្មោល ពូជប្រ៉ាម៉ាន់)",
+      "referenceNo": "AUTO-RATION-CCB-2026-519-2026-08-15-0",
+      "recordedBy": "Daily Automated Feed Cron",
+      "notes": "Automated daily feed ration deduction (5 kg/head/day x 26 head) for គោឈ្មោល ពូជប្រ៉ាម៉ាន់",
+      "createdAt": "2026-08-15T02:36:23.891Z"
+    },
+    {
+      "id": "TX-AUTO-1786761378942-330",
+      "date": "2026-08-15",
+      "productId": "PROD-F01",
+      "productName": "DSR-16 Cow Feed",
+      "type": "STOCK_OUT",
+      "quantityBags": 8.8,
+      "quantityKg": 264,
+      "unitCost": 1367,
+      "totalCost": 360888,
+      "sourceFarm": "SNR Farm",
+      "targetFarm": "Daily Feed Ration (Batch01_10/06/2026)",
+      "referenceNo": "AUTO-RATION-FAT-2026-961-2026-08-15-0",
+      "recordedBy": "Daily Automated Feed Cron",
+      "notes": "Automated daily feed ration deduction (6 kg/head/day x 44 head) for Batch01_10/06/2026",
+      "createdAt": "2026-08-15T02:36:18.942Z"
+    },
+    {
+      "id": "TX-AUTO-1786761378912-868",
+      "date": "2026-08-15",
+      "productId": "PROD-F01",
+      "productName": "DSR-16 Cow Feed",
+      "type": "STOCK_OUT",
+      "quantityBags": 4.33,
+      "quantityKg": 130,
+      "unitCost": 1367,
+      "totalCost": 177710,
+      "sourceFarm": "SNR Farm",
+      "targetFarm": "Daily Feed Ration (គោឈ្មោល ពូជប្រ៉ាម៉ាន់)",
+      "referenceNo": "AUTO-RATION-CCB-2026-519-2026-08-15-0",
+      "recordedBy": "Daily Automated Feed Cron",
+      "notes": "Automated daily feed ration deduction (5 kg/head/day x 26 head) for គោឈ្មោល ពូជប្រ៉ាម៉ាន់",
+      "createdAt": "2026-08-15T02:36:18.912Z"
+    }
+  ],
   "sires": [],
   "dams": [],
   "calves": [],

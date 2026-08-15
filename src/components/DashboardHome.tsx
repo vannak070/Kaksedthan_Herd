@@ -147,7 +147,7 @@ export default function DashboardHome({ data }: DashboardHomeProps) {
               </h2>
             </div>
             <p className="text-xs text-slate-400 mt-1 font-medium">
-              Real-time operational summary from PostgreSQL database <code className="text-orange-400 font-mono">kaksedthan_herdbook</code> • <span className="text-emerald-400 font-bold">{filteredData.scopeLabel}</span>
+              Real-time operational summary from PostgreSQL database <code className="text-orange-400 font-mono">livestock_db</code> • <span className="text-emerald-400 font-bold">{filteredData.scopeLabel}</span>
             </p>
           </div>
         </div>

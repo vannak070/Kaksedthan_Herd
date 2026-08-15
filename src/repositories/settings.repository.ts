@@ -22,6 +22,7 @@ const DEFAULT_ROLES: CustomRoleDefinition[] = [
 
 const DEFAULT_USERS: UserRoleItem[] = [
   { id: '1', name: 'Vannak Admin', email: 'vannak@snrfarm.com', role: 'Super Admin', status: 'Active', password: 'password123', permissions: DEFAULT_ROLE_PERMISSIONS['Super Admin'] },
+  { id: 'USR-ADMIN-KAKSEDTHAN', name: 'Admin Account', email: 'admin@kaksedthan.com', role: 'Super Admin', status: 'Active', password: 'password123', permissions: DEFAULT_ROLE_PERMISSIONS['Super Admin'] },
   { id: '2', name: 'Dr. Vannak Breeder', email: 'breeder@snrfarm.com', role: 'Breeder', status: 'Active', password: 'password123', permissions: DEFAULT_ROLE_PERMISSIONS['Breeder'] },
   { id: '3', name: 'Bona Farm Owner', email: 'bona.v@snrfarm.com', role: 'Farm Owner', status: 'Active', password: 'password123', permissions: DEFAULT_ROLE_PERMISSIONS['Farm Owner'], farmLocation: 'រទាំង' },
   { id: '4', name: 'Sophea Cow Owner', email: 'sophea@customer.com', role: 'Customer / Cow Owner', status: 'Active', password: 'password123', permissions: DEFAULT_ROLE_PERMISSIONS['Customer / Cow Owner'] },
