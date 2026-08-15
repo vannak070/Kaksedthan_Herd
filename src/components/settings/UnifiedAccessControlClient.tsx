@@ -625,18 +625,12 @@ export default function UnifiedAccessControlClient({
                   </button>
 
                   <button
-                    disabled={loadingId === level.id}
+                    disabled={loadingId === level.id || level.id === 'LEVEL-01' || level.code === 'SYSTEM_ADMIN'}
                     onClick={() => {
-                      if ((level.userCount || 0) > 0) {
-                        setLevelConfirmState({ open: true, type: 'warning_delete', level });
-                      } else {
-                        setLevelConfirmState({ open: true, type: 'delete', level });
-                      }
+                      setLevelConfirmState({ open: true, type: 'delete', level });
                     }}
-                    className={`p-2 rounded-xl border transition-all cursor-pointer disabled:opacity-40 ${
-                      (level.userCount || 0) > 0 ? 'border-amber-200 bg-amber-50 text-amber-600 hover:bg-amber-100' : 'border-rose-200 bg-rose-50 text-rose-600 hover:bg-rose-100'
-                    }`}
-                    title={(level.userCount || 0) > 0 ? 'Cannot Delete (Active Dependencies)' : 'Delete User Level'}
+                    className="p-2 rounded-xl border border-rose-200 bg-rose-50 text-rose-600 hover:bg-rose-100 transition-all cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
+                    title={level.id === 'LEVEL-01' || level.code === 'SYSTEM_ADMIN' ? 'Super Admin System Level Protected' : 'Delete User Level'}
                   >
                     <Trash2 className="h-4 w-4" />
                   </button>
@@ -928,6 +922,61 @@ export default function UnifiedAccessControlClient({
                 className="px-5 py-2.5 rounded-xl bg-rose-600 hover:bg-rose-700 text-white font-black text-xs transition-all shadow-md shadow-rose-600/20"
               >
                 Confirm Delete
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Delete User Level Confirmation Modal */}
+      {levelConfirmState.open && levelConfirmState.level && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/60 backdrop-blur-sm p-4 animate-in fade-in duration-150">
+          <div className="bg-white rounded-3xl shadow-2xl max-w-md w-full p-6 space-y-4 border border-slate-200 text-center">
+            <div className="h-12 w-12 rounded-2xl bg-rose-100 text-rose-600 flex items-center justify-center mx-auto">
+              <AlertTriangle className="h-6 w-6" />
+            </div>
+            <div>
+              <h3 className="font-black text-slate-900 text-base">
+                {levelConfirmState.type === 'toggle'
+                  ? `${levelConfirmState.level.status === 'Active' ? 'Deactivate' : 'Activate'} User Level?`
+                  : 'Delete Account & User Level?'}
+              </h3>
+              <div className="text-xs text-slate-500 mt-1">
+                {levelConfirmState.type === 'toggle' ? (
+                  <p>Are you sure you want to change the status of <strong className="text-slate-900">{levelConfirmState.level.name}</strong>?</p>
+                ) : (
+                  <>
+                    <p>Are you sure you want to permanently delete user level <strong className="text-slate-900">{levelConfirmState.level.name}</strong>?</p>
+                    {(levelConfirmState.level.userCount || 0) > 0 && (
+                      <p className="mt-2 font-bold text-amber-700 bg-amber-50 p-2.5 rounded-xl border border-amber-200 text-[11px]">
+                        ⚠️ Warning: This level is currently assigned to {levelConfirmState.level.userCount} active staff user account(s). Deleting this level will detach these accounts.
+                      </p>
+                    )}
+                  </>
+                )}
+              </div>
+            </div>
+            <div className="flex items-center justify-center gap-3 pt-2">
+              <button
+                onClick={() => setLevelConfirmState({ open: false })}
+                className="px-4 py-2.5 rounded-xl border border-slate-200 text-slate-600 font-bold text-xs hover:bg-slate-50 transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => {
+                  if (levelConfirmState.type === 'toggle') {
+                    handleToggleLevelStatus(levelConfirmState.level!);
+                  } else {
+                    handleDeleteLevel(levelConfirmState.level!);
+                  }
+                }}
+                disabled={loadingId === levelConfirmState.level.id}
+                className={`px-5 py-2.5 rounded-xl text-white font-black text-xs transition-all shadow-md ${
+                  levelConfirmState.type === 'toggle' ? 'bg-purple-600 hover:bg-purple-700' : 'bg-rose-600 hover:bg-rose-700'
+                }`}
+              >
+                {levelConfirmState.type === 'toggle' ? 'Confirm Status Change' : 'Confirm Delete Level'}
               </button>
             </div>
           </div>

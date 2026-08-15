@@ -2371,43 +2371,14 @@ export class HerdbookRepository {
     const levelName = levelRes.rows[0].name;
     const levelCode = levelRes.rows[0].code;
 
-    // 1. Check assigned users
-    const countRes = await query(
-      `SELECT COUNT(*) as cnt FROM users WHERE user_level_id = $1 OR user_level = $2`,
-      [id, levelName]
-    );
-    const userCount = parseInt(countRes.rows[0]?.cnt || '0', 10);
-
-    // 2. Check attached business entities
-    let attachedEntityCount = 0;
-    let attachedEntityLabel = '';
-
-    if (levelCode === 'SIRE_SOURCING_CO' || id === 'LEVEL-05' || levelName.toLowerCase().includes('sourcing')) {
-      try {
-        const scRes = await query(`SELECT COUNT(*) as cnt FROM sourcing_companies`);
-        const scCnt = parseInt(scRes.rows[0]?.cnt || '0', 10);
-        if (scCnt > 0) {
-          attachedEntityCount += scCnt;
-          attachedEntityLabel = `${scCnt} Genetics Sourcing Company record(s)`;
-        }
-      } catch {
-        // sourcing_companies table may not exist, safely continue
-      }
+    if (id === 'LEVEL-01' || levelCode === 'SYSTEM_ADMIN' || levelName.toLowerCase() === 'super admin account') {
+      return { deleted: false, reason: 'System Protected Super Admin Account level cannot be deleted.' };
     }
 
-    const totalAttached = userCount + attachedEntityCount;
-    if (totalAttached > 0) {
-      const reasons = [];
-      if (userCount > 0) reasons.push(`${userCount} active user account(s)`);
-      if (attachedEntityCount > 0) reasons.push(attachedEntityLabel);
+    // Detach any assigned users first so deletion succeeds cleanly
+    await query(`UPDATE users SET user_level_id = NULL, user_level = 'Unassigned' WHERE user_level_id = $1 OR user_level = $2`, [id, levelName]).catch(() => {});
 
-      return {
-        deleted: false,
-        reason: `This Account Level ("${levelName}") is currently attached to ${reasons.join(' and ')}. Permanent deletion is blocked to prevent breaking system data integrity. Please reassign or remove all attached accounts first, or safely deactivate this level instead.`
-      };
-    }
-
-    // Clean up dependent permission & module maps first
+    // Clean up dependent permission & module maps
     await query(`DELETE FROM user_level_modules WHERE user_level_id = $1`, [id]).catch(() => {});
     await query(`DELETE FROM user_level_permissions WHERE user_level_id = $1`, [id]).catch(() => {});
 
