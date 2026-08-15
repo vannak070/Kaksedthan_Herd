@@ -632,12 +632,25 @@ async function safeMigrate() {
         status       VARCHAR(20) DEFAULT 'Active',
         created_at   TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
       );
+      ALTER TABLE herdbook_registrations ADD COLUMN IF NOT EXISTS registration_number VARCHAR(100);
+      ALTER TABLE herdbook_registrations ADD COLUMN IF NOT EXISTS registration_date TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP;
+      ALTER TABLE herdbook_registrations ADD COLUMN IF NOT EXISTS breeder_name VARCHAR(100);
+      ALTER TABLE herdbook_registrations ADD COLUMN IF NOT EXISTS owner_name VARCHAR(100);
+      ALTER TABLE herdbook_registrations ADD COLUMN IF NOT EXISTS cow_owner VARCHAR(100);
+      ALTER TABLE herdbook_registrations ADD COLUMN IF NOT EXISTS farm_location VARCHAR(100);
+      ALTER TABLE herdbook_registrations ADD COLUMN IF NOT EXISTS farm_id VARCHAR(50);
       ALTER TABLE herdbook_registrations ADD COLUMN IF NOT EXISTS breeder_id VARCHAR(50);
       ALTER TABLE herdbook_registrations ADD COLUMN IF NOT EXISTS customer_id VARCHAR(50);
       ALTER TABLE herdbook_registrations ADD COLUMN IF NOT EXISTS breeding_program_id VARCHAR(50);
       ALTER TABLE herdbook_registrations ADD COLUMN IF NOT EXISTS sire_id VARCHAR(50);
       ALTER TABLE herdbook_registrations ADD COLUMN IF NOT EXISTS dam_id VARCHAR(50);
       ALTER TABLE herdbook_registrations ADD COLUMN IF NOT EXISTS calf_id VARCHAR(50);
+      ALTER TABLE herdbook_registrations ADD COLUMN IF NOT EXISTS applied_by VARCHAR(50);
+      ALTER TABLE herdbook_registrations ADD COLUMN IF NOT EXISTS applied_date TIMESTAMP WITH TIME ZONE;
+      ALTER TABLE herdbook_registrations ADD COLUMN IF NOT EXISTS approved_by VARCHAR(50);
+      ALTER TABLE herdbook_registrations ADD COLUMN IF NOT EXISTS approved_at TIMESTAMP WITH TIME ZONE;
+      ALTER TABLE herdbook_registrations ADD COLUMN IF NOT EXISTS rejection_reason TEXT;
+      ALTER TABLE herdbook_registrations ADD COLUMN IF NOT EXISTS public_token VARCHAR(100);
     `);
     console.log('[✓] calves_herd & master tables');
 
