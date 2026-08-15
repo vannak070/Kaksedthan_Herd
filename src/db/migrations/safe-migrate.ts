@@ -48,6 +48,13 @@ async function safeMigrate() {
     // Optional columns added in later migrations
     await client.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS farm_location VARCHAR(100);`);
     await client.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS permissions JSONB DEFAULT '[]'::jsonb;`);
+    await client.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS breeder_id VARCHAR(50);`);
+    await client.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS farm_id VARCHAR(50);`);
+    await client.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS customer_id VARCHAR(50);`);
+    await client.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS sourcing_company_id VARCHAR(50);`);
+    await client.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS user_level_id VARCHAR(50);`);
+    await client.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS user_level VARCHAR(100);`);
+    await client.query(`ALTER TABLE customers ADD COLUMN IF NOT EXISTS farm_location VARCHAR(100);`);
     console.log('[✓] users');
 
     // ── 3. stock ─────────────────────────────────────────────────────────────
@@ -184,12 +191,24 @@ async function safeMigrate() {
         status       VARCHAR(20) DEFAULT 'Active',
         created_at   TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
       );
+      ALTER TABLE breed_configurations ADD COLUMN IF NOT EXISTS category VARCHAR(50) DEFAULT 'Cattle';
+      ALTER TABLE breed_configurations ADD COLUMN IF NOT EXISTS origin VARCHAR(100);
+      ALTER TABLE breed_configurations ADD COLUMN IF NOT EXISTS sort_order INTEGER DEFAULT 0;
+      ALTER TABLE breed_configurations ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP;
+      CREATE UNIQUE INDEX IF NOT EXISTS idx_breed_configs_code ON breed_configurations(code);
+
       ALTER TABLE sourcing_companies ADD COLUMN IF NOT EXISTS country VARCHAR(100);
       ALTER TABLE sourcing_companies ADD COLUMN IF NOT EXISTS image_url TEXT;
       ALTER TABLE sourcing_companies ADD COLUMN IF NOT EXISTS status VARCHAR(20) DEFAULT 'Active';
       ALTER TABLE sourcing_companies ADD COLUMN IF NOT EXISTS contact_person VARCHAR(100);
+      ALTER TABLE sourcing_companies ADD COLUMN IF NOT EXISTS contact_name VARCHAR(100);
+      ALTER TABLE sourcing_companies ADD COLUMN IF NOT EXISTS address TEXT;
+      ALTER TABLE sourcing_companies ADD COLUMN IF NOT EXISTS website TEXT;
+      ALTER TABLE sourcing_companies ADD COLUMN IF NOT EXISTS user_id VARCHAR(50);
       ALTER TABLE sourcing_companies ADD COLUMN IF NOT EXISTS phone VARCHAR(50);
       ALTER TABLE sourcing_companies ADD COLUMN IF NOT EXISTS email VARCHAR(100);
+      ALTER TABLE sourcing_companies ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP;
+      CREATE UNIQUE INDEX IF NOT EXISTS idx_sourcing_companies_code ON sourcing_companies(code);
     `);
     console.log('[✓] breed_configurations & sourcing_companies');
 
@@ -333,8 +352,138 @@ async function safeMigrate() {
     `);
     console.log('[✓] calving_events');
 
-    // ── 14. calves_herd (Registered Infant Stock) ───────────────────────────
+    // ── 14. calves_herd, sires, dams, calves, breeding_programs ───────────────────────────
     await client.query(`
+      CREATE TABLE IF NOT EXISTS sires (
+        id                   VARCHAR(50) PRIMARY KEY,
+        code                 VARCHAR(50) UNIQUE,
+        name                 VARCHAR(100) NOT NULL,
+        breed                VARCHAR(50),
+        sourcing_company     VARCHAR(100),
+        sourcing_company_id VARCHAR(50),
+        breeder_id          VARCHAR(50),
+        breed_id             VARCHAR(50),
+        registration_number VARCHAR(50),
+        father_id            VARCHAR(50),
+        mother_id            VARCHAR(50),
+        owner_type           VARCHAR(50),
+        image_url            TEXT,
+        status               VARCHAR(20) DEFAULT 'Active',
+        created_at           TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+      );
+
+      CREATE TABLE IF NOT EXISTS dams (
+        id                   VARCHAR(50) PRIMARY KEY,
+        code                 VARCHAR(50) UNIQUE,
+        name                 VARCHAR(100) NOT NULL,
+        breed                VARCHAR(50),
+        sourcing_company     VARCHAR(100),
+        sourcing_company_id VARCHAR(50),
+        customer_id          VARCHAR(50),
+        breeder_id          VARCHAR(50),
+        breed_id             VARCHAR(50),
+        registration_number VARCHAR(50),
+        father_id            VARCHAR(50),
+        mother_id            VARCHAR(50),
+        owner_type           VARCHAR(50),
+        ownership_status     VARCHAR(50) DEFAULT 'Active',
+        ownership_start_date TIMESTAMP WITH TIME ZONE,
+        image_url            TEXT,
+        status               VARCHAR(20) DEFAULT 'Active',
+        created_at           TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+      );
+
+      CREATE TABLE IF NOT EXISTS calves (
+        id                   VARCHAR(50) PRIMARY KEY,
+        code                 VARCHAR(50) UNIQUE,
+        tag_id               VARCHAR(50),
+        calf_name            VARCHAR(100) NOT NULL,
+        sex                  VARCHAR(10) NOT NULL,
+        breed                VARCHAR(50) NOT NULL,
+        color                VARCHAR(50),
+        customer_id          VARCHAR(50),
+        breeder_id          VARCHAR(50),
+        breed_id             VARCHAR(50),
+        registration_number VARCHAR(50),
+        created_at           TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+      );
+
+      CREATE TABLE IF NOT EXISTS breeding_programs (
+        id                   VARCHAR(50) PRIMARY KEY,
+        code                 VARCHAR(50) UNIQUE,
+        title                VARCHAR(100) NOT NULL,
+        sire_id              VARCHAR(50),
+        dam_id               VARCHAR(50),
+        customer_id          VARCHAR(50),
+        status               VARCHAR(50) DEFAULT 'Active',
+        created_at           TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+      );
+
+      CREATE TABLE IF NOT EXISTS certificates (
+        id                   VARCHAR(50) PRIMARY KEY,
+        certificate_number   VARCHAR(100) UNIQUE NOT NULL,
+        calf_id              VARCHAR(50),
+        issued_date          TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+        qr_code              TEXT,
+        status               VARCHAR(50) DEFAULT 'Active'
+      );
+      ALTER TABLE certificates ADD COLUMN IF NOT EXISTS registration_id VARCHAR(50);
+      ALTER TABLE certificates ADD COLUMN IF NOT EXISTS breeder_id VARCHAR(50);
+      ALTER TABLE certificates ADD COLUMN IF NOT EXISTS customer_id VARCHAR(50);
+      ALTER TABLE certificates ADD COLUMN IF NOT EXISTS animal_id VARCHAR(50);
+      ALTER TABLE certificates ADD COLUMN IF NOT EXISTS created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP;
+
+      CREATE TABLE IF NOT EXISTS breeders (
+        id                   VARCHAR(50) PRIMARY KEY,
+        name                 VARCHAR(100) NOT NULL,
+        email                VARCHAR(100),
+        phone                VARCHAR(50),
+        station              VARCHAR(100),
+        status               VARCHAR(20) DEFAULT 'Active',
+        created_at           TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+      );
+
+      CREATE TABLE IF NOT EXISTS farms (
+        id                   VARCHAR(50) PRIMARY KEY,
+        name                 VARCHAR(100) NOT NULL,
+        code                 VARCHAR(50),
+        address              TEXT,
+        location             VARCHAR(100),
+        status               VARCHAR(20) DEFAULT 'Active',
+        created_at           TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+      );
+
+      CREATE TABLE IF NOT EXISTS customers (
+        id                   VARCHAR(50) PRIMARY KEY,
+        name                 VARCHAR(100) NOT NULL,
+        phone                VARCHAR(50),
+        email                VARCHAR(100),
+        address              TEXT,
+        status               VARCHAR(20) DEFAULT 'Active',
+        created_at           TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+      );
+
+      ALTER TABLE breeders ADD COLUMN IF NOT EXISTS code VARCHAR(50);
+      ALTER TABLE breeders ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP;
+
+      ALTER TABLE customers ADD COLUMN IF NOT EXISTS code VARCHAR(50);
+      ALTER TABLE customers ADD COLUMN IF NOT EXISTS national_id VARCHAR(50);
+      ALTER TABLE customers ADD COLUMN IF NOT EXISTS id_front_url TEXT;
+      ALTER TABLE customers ADD COLUMN IF NOT EXISTS id_back_url TEXT;
+      ALTER TABLE customers ADD COLUMN IF NOT EXISTS profile_image_url TEXT;
+      ALTER TABLE customers ADD COLUMN IF NOT EXISTS image_url TEXT;
+      ALTER TABLE customers ADD COLUMN IF NOT EXISTS id_verification_status VARCHAR(50) DEFAULT 'UNVERIFIED';
+      ALTER TABLE customers ADD COLUMN IF NOT EXISTS customer_type VARCHAR(50) DEFAULT 'INDIVIDUAL';
+      ALTER TABLE customers ADD COLUMN IF NOT EXISTS notes TEXT;
+      ALTER TABLE customers ADD COLUMN IF NOT EXISTS village VARCHAR(100);
+      ALTER TABLE customers ADD COLUMN IF NOT EXISTS commune VARCHAR(100);
+      ALTER TABLE customers ADD COLUMN IF NOT EXISTS district VARCHAR(100);
+      ALTER TABLE customers ADD COLUMN IF NOT EXISTS province VARCHAR(100);
+      ALTER TABLE customers ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP;
+
+      ALTER TABLE farms ADD COLUMN IF NOT EXISTS code VARCHAR(50);
+      ALTER TABLE farms ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP;
+
       CREATE TABLE IF NOT EXISTS calves_herd (
         id                   VARCHAR(50) PRIMARY KEY,
         calving_event_id     VARCHAR(50) REFERENCES calving_events(id) ON DELETE CASCADE,
@@ -359,10 +508,17 @@ async function safeMigrate() {
         current_status       VARCHAR(50) DEFAULT 'Healthy (Nursing)',
         created_at           TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
       );
+
       ALTER TABLE calves ADD COLUMN IF NOT EXISTS customer_id VARCHAR(50);
       ALTER TABLE calves ADD COLUMN IF NOT EXISTS breeder_id VARCHAR(50);
       ALTER TABLE calves ADD COLUMN IF NOT EXISTS breed_id VARCHAR(50);
       ALTER TABLE calves ADD COLUMN IF NOT EXISTS registration_number VARCHAR(50);
+      ALTER TABLE calves ADD COLUMN IF NOT EXISTS owner_name VARCHAR(100);
+      ALTER TABLE calves ADD COLUMN IF NOT EXISTS owner_id VARCHAR(50);
+      ALTER TABLE calves ADD COLUMN IF NOT EXISTS breeding_program_id VARCHAR(50);
+      ALTER TABLE calves ADD COLUMN IF NOT EXISTS sire_id VARCHAR(50);
+      ALTER TABLE calves ADD COLUMN IF NOT EXISTS dam_id VARCHAR(50);
+      ALTER TABLE calves ADD COLUMN IF NOT EXISTS farm_id VARCHAR(50);
 
       ALTER TABLE dams ADD COLUMN IF NOT EXISTS customer_id VARCHAR(50);
       ALTER TABLE dams ADD COLUMN IF NOT EXISTS breeder_id VARCHAR(50);
@@ -371,8 +527,11 @@ async function safeMigrate() {
       ALTER TABLE dams ADD COLUMN IF NOT EXISTS father_id VARCHAR(50);
       ALTER TABLE dams ADD COLUMN IF NOT EXISTS mother_id VARCHAR(50);
       ALTER TABLE dams ADD COLUMN IF NOT EXISTS owner_type VARCHAR(50);
+      ALTER TABLE dams ADD COLUMN IF NOT EXISTS owner_name VARCHAR(100);
+      ALTER TABLE dams ADD COLUMN IF NOT EXISTS owner_id VARCHAR(50);
       ALTER TABLE dams ADD COLUMN IF NOT EXISTS ownership_status VARCHAR(50) DEFAULT 'Active';
       ALTER TABLE dams ADD COLUMN IF NOT EXISTS ownership_start_date TIMESTAMP WITH TIME ZONE;
+      ALTER TABLE dams ADD COLUMN IF NOT EXISTS farm_id VARCHAR(50);
 
       ALTER TABLE sires ADD COLUMN IF NOT EXISTS breeder_id VARCHAR(50);
       ALTER TABLE sires ADD COLUMN IF NOT EXISTS breed_id VARCHAR(50);
@@ -380,10 +539,39 @@ async function safeMigrate() {
       ALTER TABLE sires ADD COLUMN IF NOT EXISTS father_id VARCHAR(50);
       ALTER TABLE sires ADD COLUMN IF NOT EXISTS mother_id VARCHAR(50);
       ALTER TABLE sires ADD COLUMN IF NOT EXISTS owner_type VARCHAR(50);
+      ALTER TABLE sires ADD COLUMN IF NOT EXISTS owner_name VARCHAR(100);
+      ALTER TABLE sires ADD COLUMN IF NOT EXISTS owner_id VARCHAR(50);
+      ALTER TABLE sires ADD COLUMN IF NOT EXISTS farm_id VARCHAR(50);
+
+      ALTER TABLE customers ADD COLUMN IF NOT EXISTS managed_by_breeder_id VARCHAR(50);
 
       ALTER TABLE breeding_programs ADD COLUMN IF NOT EXISTS customer_id VARCHAR(50);
+      ALTER TABLE breeding_programs ADD COLUMN IF NOT EXISTS breeder_id VARCHAR(50);
+      ALTER TABLE breeding_programs ADD COLUMN IF NOT EXISTS farm_id VARCHAR(50);
+      ALTER TABLE breeding_programs ADD COLUMN IF NOT EXISTS breed_id VARCHAR(50);
+      ALTER TABLE breeding_programs ADD COLUMN IF NOT EXISTS cow_owner VARCHAR(100);
+      ALTER TABLE breeding_programs ADD COLUMN IF NOT EXISTS owner_name VARCHAR(100);
+      ALTER TABLE breeding_programs ADD COLUMN IF NOT EXISTS breeder_name VARCHAR(100);
+      ALTER TABLE breeding_programs ADD COLUMN IF NOT EXISTS customer_name VARCHAR(100);
+
+      CREATE TABLE IF NOT EXISTS herdbook_registrations (
+        id           VARCHAR(50) PRIMARY KEY,
+        code         VARCHAR(50) UNIQUE,
+        animal_type  VARCHAR(50),
+        animal_id    VARCHAR(50),
+        breeder_id   VARCHAR(50),
+        customer_id  VARCHAR(50),
+        status       VARCHAR(20) DEFAULT 'Active',
+        created_at   TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+      );
+      ALTER TABLE herdbook_registrations ADD COLUMN IF NOT EXISTS breeder_id VARCHAR(50);
+      ALTER TABLE herdbook_registrations ADD COLUMN IF NOT EXISTS customer_id VARCHAR(50);
+      ALTER TABLE herdbook_registrations ADD COLUMN IF NOT EXISTS breeding_program_id VARCHAR(50);
+      ALTER TABLE herdbook_registrations ADD COLUMN IF NOT EXISTS sire_id VARCHAR(50);
+      ALTER TABLE herdbook_registrations ADD COLUMN IF NOT EXISTS dam_id VARCHAR(50);
+      ALTER TABLE herdbook_registrations ADD COLUMN IF NOT EXISTS calf_id VARCHAR(50);
     `);
-    console.log('[✓] calves_herd');
+    console.log('[✓] calves_herd & master tables');
 
     // ── 15. birth_certificates (Pedigree Certificates) ───────────────────────
     await client.query(`

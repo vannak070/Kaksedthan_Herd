@@ -91,13 +91,29 @@ export class SettingsRepository {
           perms = DEFAULT_ROLE_PERMISSIONS[row.role] || [];
         }
 
+        const derivedUserLevel = row.user_level || (
+          row.role === 'Breeder' ? 'Breeder Account' :
+          row.role === 'Farm Owner' ? 'Farm Owner Account' :
+          row.role === 'Customer / Cow Owner' || row.role === 'Cow Owner' ? 'Customer / Cow Owner Account' :
+          row.role === 'Sire Sourcing Company' ? 'Sire Sourcing Company Account' :
+          row.user_level
+        );
+
+        const derivedUserLevelId = row.user_level_id || (
+          row.role === 'Breeder' ? 'LEVEL-01' :
+          row.role === 'Farm Owner' ? 'LEVEL-02' :
+          row.role === 'Customer / Cow Owner' || row.role === 'Cow Owner' ? 'LEVEL-04' :
+          row.role === 'Sire Sourcing Company' ? 'LEVEL-05' :
+          row.user_level_id
+        );
+
         return {
           id: row.id,
           name: row.name,
           email: row.email,
           role: row.role,
-          userLevel: row.user_level,
-          userLevelId: row.user_level_id,
+          userLevel: derivedUserLevel,
+          userLevelId: derivedUserLevelId,
           dataScope: row.data_scope || 'ASSIGNED_RECORD',
           status: row.status,
           password: row.password,

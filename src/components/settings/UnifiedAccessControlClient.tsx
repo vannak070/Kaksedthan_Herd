@@ -112,7 +112,11 @@ export default function UnifiedAccessControlClient({
         lvl.includes('sourcing company') ||
         lvl.includes('customer') ||
         lvl.includes('cow owner') ||
+        lvl.includes('farm owner') ||
+        lvl.includes('farm manager') ||
         r.includes('breeder') ||
+        r.includes('farm owner') ||
+        r.includes('farm manager') ||
         r.includes('cow owner') ||
         r.includes('sourcing company');
 
