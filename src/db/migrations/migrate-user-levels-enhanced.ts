@@ -111,8 +111,7 @@ export async function migrateUserLevelsEnhanced() {
       await client.query(`
         INSERT INTO user_levels (id, code, name, description, purpose, sort_order, status)
         VALUES ($1, $2, $3, $4, $5, $6, 'Active')
-        ON CONFLICT (id) DO UPDATE SET
-          code        = EXCLUDED.code,
+        ON CONFLICT (code) DO UPDATE SET
           name        = EXCLUDED.name,
           description = EXCLUDED.description,
           purpose     = EXCLUDED.purpose,
@@ -142,14 +141,22 @@ export async function migrateUserLevelsEnhanced() {
 
     // Default modules per level
     const defaultModuleMap: Record<string, string[]> = {
+      'BREEDER': ['dashboard', 'breeding', 'sires', 'dams', 'calves', 'herdbook', 'certificates', 'stock'],
       'LEVEL-01': ['dashboard', 'breeding', 'sires', 'dams', 'calves', 'herdbook', 'certificates', 'stock'],
+      'FARM_OWNER': ['dashboard', 'breeding', 'sires', 'dams', 'calves', 'herdbook', 'certificates'],
       'LEVEL-02': ['dashboard', 'breeding', 'sires', 'dams', 'calves', 'herdbook', 'certificates'],
+      'FARM_MANAGER': ['dashboard', 'breeding', 'dams', 'calves', 'herdbook', 'certificates'],
       'LEVEL-03': ['dashboard', 'breeding', 'dams', 'calves', 'herdbook', 'certificates'],
+      'CUSTOMER_COW_OWNER': ['dashboard', 'calves', 'herdbook', 'certificates'],
       'LEVEL-04': ['dashboard', 'calves', 'herdbook', 'certificates'],
+      'SIRE_SOURCING_COMPANY': ['dashboard', 'sires', 'stock', 'herdbook', 'certificates'],
       'LEVEL-05': ['dashboard', 'sires', 'stock', 'herdbook', 'certificates'],
     };
 
-    for (const [levelId, enabledModules] of Object.entries(defaultModuleMap)) {
+    for (const [key, enabledModules] of Object.entries(defaultModuleMap)) {
+      const res = await client.query(`SELECT id FROM user_levels WHERE code = $1 OR id = $1 LIMIT 1`, [key]);
+      if (res.rows.length === 0) continue;
+      const levelId = res.rows[0].id;
       for (const mod of allModules) {
         const isAvailable = enabledModules.includes(mod.key);
         await client.query(`
@@ -164,37 +171,41 @@ export async function migrateUserLevelsEnhanced() {
 
     // ── 7. Seed default role associations ──
     const defaultRoleMap: Record<string, { role_name: string; role_label: string }[]> = {
-      'LEVEL-01': [
+      'BREEDER': [
         { role_name: 'Breeder',             role_label: 'Breeder' },
         { role_name: 'Breeding Specialist', role_label: 'Breeding Specialist' },
         { role_name: 'Breeding Manager',    role_label: 'Breeding Manager' },
       ],
-      'LEVEL-02': [
+      'FARM_OWNER': [
         { role_name: 'Farm Owner',   role_label: 'Farm Owner' },
         { role_name: 'Farm Manager', role_label: 'Farm Manager' },
       ],
-      'LEVEL-03': [
+      'FARM_MANAGER': [
         { role_name: 'Farm Manager', role_label: 'Farm Manager' },
         { role_name: 'Farm Staff',   role_label: 'Farm Staff' },
         { role_name: 'Veterinarian', role_label: 'Veterinarian' },
       ],
-      'LEVEL-04': [
+      'CUSTOMER_COW_OWNER': [
         { role_name: 'Customer',   role_label: 'Customer' },
         { role_name: 'Cow Owner',  role_label: 'Cow Owner' },
       ],
-      'LEVEL-05': [
+      'SIRE_SOURCING_COMPANY': [
         { role_name: 'Company Manager', role_label: 'Company Manager' },
         { role_name: 'Sire Specialist', role_label: 'Sire Specialist' },
         { role_name: 'Stock Manager',   role_label: 'Stock Manager' },
       ],
     };
 
-    for (const [levelId, roles] of Object.entries(defaultRoleMap)) {
+    for (const [key, roles] of Object.entries(defaultRoleMap)) {
+      const res = await client.query(`SELECT id FROM user_levels WHERE code = $1 OR id = $1 LIMIT 1`, [key]);
+      if (res.rows.length === 0) continue;
+      const levelId = res.rows[0].id;
       for (const r of roles) {
         await client.query(`
           INSERT INTO user_level_roles (user_level_id, role_name, role_label)
           VALUES ($1, $2, $3)
-          ON CONFLICT (user_level_id, role_name) DO UPDATE SET role_label = EXCLUDED.role_label;
+          ON CONFLICT (user_level_id, role_name) DO UPDATE SET
+            role_label = EXCLUDED.role_label;
         `, [levelId, r.role_name, r.role_label]);
       }
     }
