@@ -21,14 +21,16 @@ echo -e "\n${BOLD}[1/6] Verifying Production Environment Configuration...${RESET
 export NODE_ENV=production
 
 if [ -f ".env.production" ]; then
+  cp .env.production .env
   set -a
   source .env.production
-  set -a
+  set +a
 elif [ -f ".env" ]; then
   set -a
   source .env
-  set -a
+  set +a
 fi
+export PGPASSWORD="${DB_PASSWORD:-postgres123}"
 
 if [ -z "$DB_NAME" ] || [ -z "$DB_HOST" ]; then
   echo -e "${RED}❌ CRITICAL DEPLOYMENT FAILURE: Required production database env vars (DB_HOST, DB_NAME) are missing!${RESET}"
@@ -59,10 +61,14 @@ echo -e "${GREEN}✓ Production database backup verified${RESET}"
 
 # Step 4: Schema DDL Migrations (No Dev Data Injected)
 echo -e "\n${BOLD}[4/6] Executing Production Database Schema Migrations...${RESET}"
+pm2 stop all 2>/dev/null || true
 if ! npm run safe-migrate; then
   echo -e "${RED}❌ CRITICAL DEPLOYMENT FAILURE: Database migration failed! Deployment aborted.${RESET}"
+  pm2 restart all 2>/dev/null || true
   exit 1
 fi
+npx tsx src/db/migrations/migrate-user-levels-enhanced.ts
+npx tsx src/db/migrations/migrate-access-control-v2.ts
 npx tsx src/db/migrations/add-level-type-to-user-levels.ts
 npx tsx src/db/migrations/seed-breed-configs.ts
 echo -e "${GREEN}✓ Production schema migrations applied cleanly${RESET}"

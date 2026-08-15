@@ -13,6 +13,8 @@
 import fs from 'fs';
 import path from 'path';
 import { pool, connectWithRetry } from '../../config/database';
+import { migrateUserLevelsEnhanced } from './migrate-user-levels-enhanced';
+import { migrateAccessControlV2 } from './migrate-access-control-v2';
 
 async function safeMigrate() {
   console.log('=== 🛡️  Safe Production Schema Migration (non-destructive) ===');
@@ -20,8 +22,6 @@ async function safeMigrate() {
   const client = await pool.connect();
 
   try {
-    await client.query('BEGIN');
-
     // ── 1. master_settings ──────────────────────────────────────────────────
     await client.query(`
       CREATE TABLE IF NOT EXISTS master_settings (
@@ -247,20 +247,18 @@ async function safeMigrate() {
         const raw = fs.readFileSync(dbJsonPath, 'utf-8');
         const dbData = JSON.parse(raw);
         if (Array.isArray(dbData.expenses) && dbData.expenses.length > 0) {
-          for (const exp of dbData.expenses) {
-            await client.query(`
-              INSERT INTO expenses (id, category, amount, date, description, farm_location)
-              VALUES ($1, $2, $3, $4, $5, $6)
-              ON CONFLICT (id) DO NOTHING;
-            `, [
-              exp.id,
-              exp.category,
-              exp.amount || 0,
-              exp.date ? new Date(exp.date) : new Date(),
-              exp.description || '',
-              exp.farmLocation || null
-            ]);
-          }
+          const values: any[] = [];
+          const valueClauses: string[] = [];
+          dbData.expenses.forEach((exp: any, idx: number) => {
+            const base = idx * 6;
+            valueClauses.push(`($${base + 1}, $${base + 2}, $${base + 3}, $${base + 4}, $${base + 5}, $${base + 6})`);
+            values.push(exp.id, exp.category, exp.amount || 0, exp.date ? new Date(exp.date) : new Date(), exp.description || '', exp.farmLocation || null);
+          });
+          await client.query(`
+            INSERT INTO expenses (id, category, amount, date, description, farm_location)
+            VALUES ${valueClauses.join(', ')}
+            ON CONFLICT (id) DO NOTHING;
+          `, values);
           console.log(`[✓] Synced ${dbData.expenses.length} expense entries to database.`);
         }
       }
@@ -755,14 +753,10 @@ async function safeMigrate() {
     for (const idx of indexes) {
       await client.query(idx + ';');
     }
-    console.log('[✓] indexes');
-
-    await client.query('COMMIT');
     console.log('\n✅ Safe migration completed successfully — production data is untouched.');
   } catch (err: unknown) {
-    await client.query('ROLLBACK');
     const msg = err instanceof Error ? err.message : String(err);
-    console.error('\n❌ Migration failed (rolled back):', msg);
+    console.error('\n❌ Migration failed:', msg);
     process.exit(1);
   } finally {
     client.release();

@@ -23,13 +23,17 @@ echo "   • Output File:     ${BACKUP_FILE}"
 
 export PGPASSWORD="${DB_PASSWORD:-postgres123}"
 
-if pg_dump -h "$DB_HOST" -p "$DB_PORT" -U "$DB_USER" -d "$DB_NAME" | gzip > "$BACKUP_FILE"; then
+if pg_dump -U "${DB_USER:-postgres}" -d "${DB_NAME:-livestock_db}" | gzip > "$BACKUP_FILE"; then
   FILE_SIZE=$(du -h "$BACKUP_FILE" | cut -f1)
   echo "✅ Production database backup successfully created! Size: ${FILE_SIZE}"
   echo "   • Backup Timestamp: ${TIMESTAMP}"
   exit 0
 else
-  echo "❌ CRITICAL ERROR: Production database backup failed!"
-  rm -f "$BACKUP_FILE" 2>/dev/null || true
-  exit 1
+  echo "⚠️ Warning: pg_dump backup failed, attempting node backup fallback..."
+  if npx tsx src/db/migrations/prod-backup.ts; then
+    exit 0
+  else
+    echo "❌ CRITICAL ERROR: Production database backup failed!"
+    exit 1
+  fi
 fi
