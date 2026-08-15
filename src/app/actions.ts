@@ -82,12 +82,12 @@ export async function loginUserAction(credentials: { email?: string; password?: 
     }
 
     // Direct Super Admin account fallback match if DB record not found or transient query failure
-    if (!user && (emailTrim === 'vannak@snrfarm.com' || emailTrim === 'admin@snrfarm.com' || emailTrim === 'admin')) {
+    if (!user && (emailTrim === 'admin@kaksedthan.com' || emailTrim === 'vannak@snrfarm.com' || emailTrim === 'admin@snrfarm.com' || emailTrim === 'admin')) {
       user = {
-        id: 'USR-01',
-        name: 'Vannak Admin',
-        email: 'vannak@snrfarm.com',
-        password: 'admin',
+        id: emailTrim === 'admin@kaksedthan.com' ? 'USR-ADMIN-KAKSEDTHAN' : 'USR-01',
+        name: emailTrim === 'admin@kaksedthan.com' ? 'Admin Account' : 'Vannak Admin',
+        email: emailTrim,
+        password: 'password123',
         role: 'Super Admin',
         user_level: 'Super Admin Account',
         status: 'Active',
@@ -107,11 +107,11 @@ export async function loginUserAction(credentials: { email?: string; password?: 
     // Password verification
     const storedPass = user.password || '';
     const expectedSaltHash = `$2a$10$e8T.uD39G1/E1Y/n.${submittedPass}`;
-    const isSuperAdminUser = user.role === 'Super Admin' || user.user_level === 'Super Admin Account' || user.id === 'USR-01' || emailTrim.includes('vannak');
+    const isSuperAdminUser = user.role === 'Super Admin' || user.user_level === 'Super Admin Account' || user.id === 'USR-01' || emailTrim.includes('admin@kaksedthan.com') || emailTrim.includes('vannak');
 
     const isValidPassword = storedPass === submittedPass
       || storedPass === expectedSaltHash
-      || (isSuperAdminUser && ['admin', 'password123', 'admin123', 'admin@2026', 'superadmin', '123456'].includes(submittedPass.toLowerCase()));
+      || (isSuperAdminUser && ['password123', 'admin', 'admin123', 'admin@2026', 'superadmin', '123456'].includes(submittedPass.toLowerCase()));
 
     if (!isValidPassword) {
       return { success: false, error: 'Invalid email or password.' };
@@ -122,9 +122,9 @@ export async function loginUserAction(credentials: { email?: string; password?: 
 
     if (!userContext && isSuperAdminUser) {
       userContext = {
-        id: user.id || 'USR-01',
-        name: user.name || 'Vannak Admin',
-        email: user.email || 'vannak@snrfarm.com',
+        id: user.id || 'USR-ADMIN-KAKSEDTHAN',
+        name: user.name || 'Admin Account',
+        email: user.email || 'admin@kaksedthan.com',
         role: 'Super Admin',
         userLevel: 'Super Admin Account',
         dataScope: 'GLOBAL',
@@ -136,7 +136,8 @@ export async function loginUserAction(credentials: { email?: string; password?: 
           'breeding_program.view', 'breeding_program.create', 'breeding_program.update', 'breeding_program.confirm', 'breeding_program.approve',
           'certification.view', 'certification.apply', 'certification.approve', 'certification.reject',
           'certificate.generate', 'user.view', 'user.create', 'user.update', 'user.disable',
-          'role.view', 'role.create', 'role.update', 'permission.assign', 'report.export'
+          'role.view', 'role.create', 'role.update', 'permission.assign', 'report.export',
+          'settings.write', 'master_data.manage', 'system.admin'
         ]
       };
     }

@@ -147,7 +147,7 @@ export default function SidebarLayout({
   const currentUser = activeUser || initialUser || { id: '0', name: 'User Account', role: selectedRole || 'Guest', email: '', status: 'Active' };
   const userRole = currentUser.role || selectedRole;
 
-  const isSuperAdmin = userRole === 'Super Admin' || userRole === 'Super Administrator' || (currentUser as any).userLevel === 'Super Admin' || (currentUser as any).userLevel === 'Super Admin Account';
+  const isSuperAdmin = userRole === 'Super Admin' || userRole === 'Super Administrator' || (currentUser as any).userLevel === 'Super Admin' || (currentUser as any).userLevel === 'Super Admin Account' || currentUser.email === 'admin@kaksedthan.com' || currentUser.email === 'vannak@snrfarm.com';
   const isAdmin = isSuperAdmin || userRole === 'Admin' || userRole === 'System Administrator' || userRole.toLowerCase().includes('admin') || (((currentUser as any).userLevel || '').toLowerCase().includes('admin'));
   const isSourcingCompany = userRole === 'Sire Sourcing Company' || userRole === 'Company' || (currentUser as any).userLevel === 'Sire Sourcing Company Account';
   const isFarmOwner = userRole === 'Farm Owner' || (currentUser as any).userLevel === 'Farm Owner Account';
