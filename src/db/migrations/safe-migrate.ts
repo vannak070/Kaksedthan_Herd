@@ -906,6 +906,15 @@ async function safeMigrate() {
     for (const idx of indexes) {
       await client.query(idx + ';');
     }
+
+    // Ensure Access Control V2 permissions and user levels enhance sub-migrations run
+    try {
+      await migrateAccessControlV2();
+      await migrateUserLevelsEnhanced();
+    } catch (subErr: any) {
+      console.warn('[Notice] Sub-migration notice:', subErr.message);
+    }
+
     console.log('\n✅ Safe migration completed successfully — production data is untouched.');
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : String(err);

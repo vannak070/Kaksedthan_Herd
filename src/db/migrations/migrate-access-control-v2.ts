@@ -156,7 +156,7 @@ export async function migrateAccessControlV2() {
     const rolesData = [
       { id: 'R-01', name: 'Super Administrator', category: 'System', description: 'Full system management and security authority.', isSystem: true },
       { id: 'R-02', name: 'System Administrator', category: 'System', description: 'Manages users, farms, and system configuration.', isSystem: true },
-      { id: 'R-[#03]', idCode: 'R-03', name: 'Breeding Manager', category: 'Breeding', description: 'Oversees breeding programs, inseminations, and certification requests.', isSystem: false },
+      { id: 'R-03', name: 'Breeding Manager', category: 'Breeding', description: 'Oversees breeding programs, inseminations, and certification requests.', isSystem: false },
       { id: 'R-04', name: 'Farm Manager', category: 'Farm', description: 'Manages daily farm operations, animal records, and calf births.', isSystem: false },
       { id: 'R-05', name: 'Certification Reviewer', category: 'Quality', description: 'Reviews and approves/rejects pedigree certificate applications.', isSystem: false },
       { id: 'R-06', name: 'Customer Viewer', category: 'Restricted', description: 'Read-only access to authorized personal animals and certificates.', isSystem: false },
@@ -174,14 +174,66 @@ export async function migrateAccessControlV2() {
       `, [r.id, r.name, r.category, r.description, r.isSystem]);
     }
 
-    // 10. Link All Permissions to Super Administrator
+    // 10. Link Permissions to System Roles
     const allPerms = permissionsData.map(p => p.key);
-    for (const permKey of allPerms) {
-      await client.query(`
-        INSERT INTO role_permissions (role_id, permission_key)
-        VALUES ('R-01', $1)
-        ON CONFLICT DO NOTHING;
-      `, [permKey]);
+    const rolePermissionMappings: Record<string, string[]> = {
+      'R-01': allPerms,
+      'R-02': [
+        'dashboard.view', 'sire.view', 'sire.create', 'sire.update', 'sire.delete',
+        'dam.view', 'dam.create', 'dam.update', 'dam.delete',
+        'calf.view', 'calf.create', 'calf.update', 'calf.delete',
+        'breeding_program.view', 'breeding_program.create', 'breeding_program.update',
+        'breeding_cost.view', 'breeding_cost.create',
+        'stock.view', 'stock.create', 'stock.update',
+        'farm.view', 'farm.create', 'farm.update',
+        'customer.view', 'customer.create', 'customer.update',
+        'herdbook.view', 'certificate.view', 'certificate.generate', 'certification.view',
+        'user.view', 'user.create', 'user.update', 'role.view'
+      ],
+      'R-03': [
+        'dashboard.view', 'sire.view', 'sire.create', 'sire.update',
+        'dam.view', 'dam.create', 'dam.update',
+        'calf.view', 'calf.create', 'calf.update',
+        'breeding_program.view', 'breeding_program.create', 'breeding_program.update', 'breeding_program.confirm', 'breeding_program.approve',
+        'breeding_cost.view', 'breeding_cost.create', 'stock.view',
+        'certification.view', 'certification.apply', 'certification.approve', 'certificate.view', 'certificate.generate'
+      ],
+      'R-04': [
+        'dashboard.view', 'sire.view', 'dam.view', 'dam.create', 'dam.update',
+        'calf.view', 'calf.create', 'calf.update',
+        'stock.view', 'stock.create', 'stock.update',
+        'farm.view', 'farm.create', 'farm.update', 'customer.view', 'herdbook.view'
+      ],
+      'R-05': [
+        'dashboard.view', 'sire.view', 'dam.view', 'calf.view', 'herdbook.view',
+        'certificate.view', 'certificate.generate', 'certificate.download',
+        'certification.view', 'certification.apply', 'certification.approve', 'certification.reject'
+      ],
+      'R-06': [
+        'dashboard.view', 'sire.view', 'dam.view', 'calf.view', 'certificate.view', 'certificate.download'
+      ],
+      'R-07': [
+        'dashboard.view', 'sire.view', 'sire.create', 'sire.update',
+        'stock.view', 'stock.create', 'stock.update', 'stock.transfer', 'breeding_cost.view'
+      ]
+    };
+
+    const validPermKeys = new Set(permissionsData.map(p => p.key));
+    const rolesRes = await client.query(`SELECT id FROM roles;`);
+    const validRoleIds = new Set(rolesRes.rows.map(r => r.id));
+
+    for (const [roleId, permKeys] of Object.entries(rolePermissionMappings)) {
+      if (validRoleIds.has(roleId)) {
+        for (const permKey of permKeys) {
+          if (validPermKeys.has(permKey)) {
+            await client.query(`
+              INSERT INTO role_permissions (role_id, permission_key)
+              VALUES ($1, $2)
+              ON CONFLICT DO NOTHING;
+            `, [roleId, permKey]);
+          }
+        }
+      }
     }
 
     // 11. Seed Super Admin User Level & Link Super Admin Account
@@ -191,11 +243,15 @@ export async function migrateAccessControlV2() {
       ON CONFLICT (id) DO UPDATE SET name = EXCLUDED.name, level_type = EXCLUDED.level_type;
     `);
 
-    await client.query(`
-      INSERT INTO user_roles (user_id, role_id)
-      VALUES ('USR-ADMIN-KAKSEDTHAN', 'R-01')
-      ON CONFLICT DO NOTHING;
-    `);
+    // 11. Link Super Admin Users to R-01 in user_roles table
+    const adminUsers = await client.query(`SELECT id FROM users WHERE email IN ('admin@kaksedthan.com', 'vannak@snrfarm.com') OR role LIKE '%Super%' OR id = 'USR-01' OR id = 'USR-ADMIN-KAKSEDTHAN'`);
+    for (const uRow of adminUsers.rows) {
+      await client.query(`
+        INSERT INTO user_roles (user_id, role_id)
+        VALUES ($1, 'R-01')
+        ON CONFLICT DO NOTHING;
+      `, [uRow.id]);
+    }
 
     const allPermsJson = JSON.stringify(allPerms);
     await client.query(`

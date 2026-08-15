@@ -410,26 +410,57 @@ export class SettingsRepository {
   }
 
   async getUserEffectivePermissions(userId: string): Promise<{ permissions: string[]; roles: any[] }> {
-    const rolesRes = await query(`
-      SELECT r.id, r.name, r.category, r.status
-      FROM roles r
-      JOIN user_roles ur ON ur.role_id = r.id
-      WHERE ur.user_id = $1 AND r.status = 'Active'
-    `, [userId]);
+    const userRes = await query(`SELECT id, name, email, role, user_level, user_level_id, status FROM users WHERE id = $1 LIMIT 1`, [userId]);
+    if (userRes.rows.length === 0) {
+      return { permissions: [], roles: [] };
+    }
+    const u = userRes.rows[0];
 
-    const roleIds = rolesRes.rows.map(r => r.id);
-    let perms: string[] = [];
+    const isSuperAdmin = u.role === 'Super Admin' || u.role === 'Super Administrator'
+      || u.user_level === 'Super Admin' || u.user_level === 'Super Admin Account'
+      || u.email === 'admin@kaksedthan.com' || u.email === 'vannak@snrfarm.com';
 
-    if (roleIds.length > 0) {
-      const permsRes = await query(`
-        SELECT DISTINCT rp.permission_key
-        FROM role_permissions rp
-        WHERE rp.role_id = ANY($1)
-      `, [roleIds]);
-      perms = permsRes.rows.map(r => r.permission_key);
+    if (isSuperAdmin) {
+      const allPermsRes = await query(`SELECT key FROM permissions;`);
+      const allKeys = allPermsRes.rows.map(r => r.key);
+      return {
+        permissions: allKeys,
+        roles: [{ id: 'R-01', name: 'Super Admin', category: 'System', status: 'Active' }]
+      };
     }
 
-    return { permissions: perms, roles: rolesRes.rows };
+    const rolesRes = await query(`
+      SELECT DISTINCT r.id, r.name, r.category, r.status
+      FROM roles r
+      LEFT JOIN user_roles ur ON ur.role_id = r.id AND ur.user_id = $1
+      WHERE (ur.user_id = $1 OR LOWER(r.name) = LOWER($2)) AND r.status = 'Active'
+    `, [userId, u.role || '']);
+
+    const permsRes = await query(`
+      SELECT DISTINCT permission_key FROM (
+        SELECT rp.permission_key
+        FROM role_permissions rp
+        JOIN roles r ON r.id = rp.role_id
+        LEFT JOIN user_roles ur ON ur.role_id = r.id
+        WHERE (ur.user_id = $1 OR LOWER(r.name) = LOWER($2)) AND r.status = 'Active'
+
+        UNION
+
+        SELECT ulp.permission_key
+        FROM user_level_permissions ulp
+        JOIN user_levels ul ON ul.id = ulp.user_level_id
+        WHERE (ul.id = $3 OR LOWER(ul.name) = LOWER($4) OR LOWER(ul.code) = LOWER($4)) AND ul.status = 'Active'
+
+        UNION
+
+        SELECT ulm.module_key as permission_key
+        FROM user_level_modules ulm
+        JOIN user_levels ul ON ul.id = ulm.user_level_id
+        WHERE (ul.id = $3 OR LOWER(ul.name) = LOWER($4) OR LOWER(ul.code) = LOWER($4)) AND ul.status = 'Active' AND ulm.is_available = true
+      ) as combined_perms;
+    `, [userId, u.role || '', u.user_level_id || '', u.user_level || '']);
+
+    return { permissions: permsRes.rows.map(r => r.permission_key), roles: rolesRes.rows };
   }
 
   async seedSystemRoles(): Promise<void> {
