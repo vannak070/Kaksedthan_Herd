@@ -348,6 +348,9 @@ async function safeMigrate() {
       ALTER TABLE feed_transactions ADD COLUMN IF NOT EXISTS product_id VARCHAR(100);
       ALTER TABLE feed_transactions ADD COLUMN IF NOT EXISTS product_name VARCHAR(255);
       ALTER TABLE feed_transactions ADD COLUMN IF NOT EXISTS reference_no VARCHAR(100);
+      ALTER TABLE feed_transactions ADD COLUMN IF NOT EXISTS source_farm VARCHAR(255);
+      ALTER TABLE feed_transactions ADD COLUMN IF NOT EXISTS target_farm VARCHAR(255);
+      ALTER TABLE feed_transactions ADD COLUMN IF NOT EXISTS recorded_by VARCHAR(255);
       ALTER TABLE feed_transactions ADD COLUMN IF NOT EXISTS created_by VARCHAR(100);
     `);
     console.log('[✓] feed_products & feed_transactions');
@@ -482,26 +485,33 @@ async function safeMigrate() {
 
       ALTER TABLE sires ADD COLUMN IF NOT EXISTS farm_location VARCHAR(100);
       ALTER TABLE sires ADD COLUMN IF NOT EXISTS farm_id VARCHAR(50);
+      ALTER TABLE sires ADD COLUMN IF NOT EXISTS customer_id VARCHAR(50);
+      ALTER TABLE sires ADD COLUMN IF NOT EXISTS user_id VARCHAR(50);
 
       ALTER TABLE dams ADD COLUMN IF NOT EXISTS farm_location VARCHAR(100);
       ALTER TABLE dams ADD COLUMN IF NOT EXISTS farm_id VARCHAR(50);
 
       ALTER TABLE calves ADD COLUMN IF NOT EXISTS farm_location VARCHAR(100);
       ALTER TABLE calves ADD COLUMN IF NOT EXISTS farm_id VARCHAR(50);
+      ALTER TABLE calves ADD COLUMN IF NOT EXISTS breeder_id VARCHAR(50);
+      ALTER TABLE calves ADD COLUMN IF NOT EXISTS customer_id VARCHAR(50);
 
       ALTER TABLE breeding_programs ADD COLUMN IF NOT EXISTS farm_location VARCHAR(100);
       ALTER TABLE breeding_programs ADD COLUMN IF NOT EXISTS farm_id VARCHAR(50);
-
-      CREATE TABLE IF NOT EXISTS breeding_programs (
-        id                   VARCHAR(50) PRIMARY KEY,
-        code                 VARCHAR(50) UNIQUE,
-        title                VARCHAR(100) NOT NULL,
-        sire_id              VARCHAR(50),
-        dam_id               VARCHAR(50),
-        customer_id          VARCHAR(50),
-        status               VARCHAR(50) DEFAULT 'Active',
-        created_at           TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
-      );
+      ALTER TABLE breeding_programs ADD COLUMN IF NOT EXISTS breeder_id VARCHAR(50);
+      ALTER TABLE breeding_programs ADD COLUMN IF NOT EXISTS customer_id VARCHAR(50);
+      ALTER TABLE breeding_programs ADD COLUMN IF NOT EXISTS sire_id VARCHAR(50);
+      ALTER TABLE breeding_programs ADD COLUMN IF NOT EXISTS dam_id VARCHAR(50);
+      ALTER TABLE breeding_programs ADD COLUMN IF NOT EXISTS calf_id VARCHAR(50);
+      ALTER TABLE breeding_programs ADD COLUMN IF NOT EXISTS ai_tech_name VARCHAR(100);
+      ALTER TABLE breeding_programs ADD COLUMN IF NOT EXISTS pd_tech_name VARCHAR(100);
+      ALTER TABLE breeding_programs ADD COLUMN IF NOT EXISTS technician_id VARCHAR(50);
+      ALTER TABLE breeding_programs ADD COLUMN IF NOT EXISTS veterinarian_notes TEXT;
+      ALTER TABLE breeding_programs ADD COLUMN IF NOT EXISTS program_status VARCHAR(50) DEFAULT 'Active';
+      ALTER TABLE breeding_programs ADD COLUMN IF NOT EXISTS owner_id VARCHAR(50);
+      ALTER TABLE breeding_programs ADD COLUMN IF NOT EXISTS breed_id VARCHAR(50);
+      ALTER TABLE breeding_programs ADD COLUMN IF NOT EXISTS customer_name VARCHAR(100);
+      ALTER TABLE breeding_programs ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP;
 
       CREATE TABLE IF NOT EXISTS certificates (
         id                   VARCHAR(50) PRIMARY KEY,
@@ -514,8 +524,22 @@ async function safeMigrate() {
       ALTER TABLE certificates ADD COLUMN IF NOT EXISTS registration_id VARCHAR(50);
       ALTER TABLE certificates ADD COLUMN IF NOT EXISTS breeder_id VARCHAR(50);
       ALTER TABLE certificates ADD COLUMN IF NOT EXISTS customer_id VARCHAR(50);
-      ALTER TABLE certificates ADD COLUMN IF NOT EXISTS animal_id VARCHAR(50);
+      ALTER TABLE certificates ADD COLUMN IF NOT EXISTS animal_id VARCHAR(100);
+      ALTER TABLE certificates ADD COLUMN IF NOT EXISTS animal_type VARCHAR(50);
+      ALTER TABLE certificates ADD COLUMN IF NOT EXISTS owner_name VARCHAR(255);
+      ALTER TABLE certificates ADD COLUMN IF NOT EXISTS farm_location VARCHAR(255);
+      ALTER TABLE certificates ADD COLUMN IF NOT EXISTS applied_by VARCHAR(100);
+      ALTER TABLE certificates ADD COLUMN IF NOT EXISTS applied_date TIMESTAMP WITH TIME ZONE;
+      ALTER TABLE certificates ADD COLUMN IF NOT EXISTS reviewed_by VARCHAR(100);
+      ALTER TABLE certificates ADD COLUMN IF NOT EXISTS reviewed_date TIMESTAMP WITH TIME ZONE;
+      ALTER TABLE certificates ADD COLUMN IF NOT EXISTS rejection_reason TEXT;
+      ALTER TABLE certificates ADD COLUMN IF NOT EXISTS issue_date DATE;
+      ALTER TABLE certificates ADD COLUMN IF NOT EXISTS layout_type VARCHAR(30);
+      ALTER TABLE certificates ADD COLUMN IF NOT EXISTS public_verification_url TEXT;
+      ALTER TABLE certificates ADD COLUMN IF NOT EXISTS qr_code_data TEXT;
       ALTER TABLE certificates ADD COLUMN IF NOT EXISTS created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP;
+
+      ALTER TABLE users ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP;
 
       CREATE TABLE IF NOT EXISTS breeders (
         id                   VARCHAR(50) PRIMARY KEY,
