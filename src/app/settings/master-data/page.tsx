@@ -39,7 +39,7 @@ interface GenericMasterItem {
 }
 
 export default function MasterDataSettingsPage() {
-  const [activeTab, setActiveTab] = useState<'breeds' | 'breeding' | 'stock' | 'ownership' | 'commercial' | 'certification'>('breeds');
+  const [activeTab, setActiveTab] = useState<'breeds' | 'breeding' | 'stock' | 'commercial' | 'certification'>('breeds');
   
   // Master data states
   const [breeds, setBreeds] = useState<BreedItem[]>([]);
@@ -167,7 +167,6 @@ export default function MasterDataSettingsPage() {
     let defaultCat = 'Beef';
     if (activeTab === 'breeding') defaultCat = 'Reproduction Protocol';
     if (activeTab === 'stock') defaultCat = 'Dose / Straw';
-    if (activeTab === 'ownership') defaultCat = 'Scope Class';
     if (activeTab === 'commercial') defaultCat = '$';
     if (activeTab === 'certification') defaultCat = 'Official Registry';
 
@@ -383,7 +382,6 @@ export default function MasterDataSettingsPage() {
       case 'breeds': return 'Breed Configuration';
       case 'breeding': return 'Breeding Method';
       case 'stock': return 'Stock Material Type';
-      case 'ownership': return 'Ownership Type';
       case 'commercial': return 'Currency';
       case 'certification': return 'Certificate Type';
       default: return 'Master Item';
@@ -394,8 +392,8 @@ export default function MasterDataSettingsPage() {
     {
       id: 'breeds',
       number: '1',
-      title: 'Breed Master Catalog',
-      subtitle: 'PostgreSQL breed_configurations',
+      title: 'Breed Configurations',
+      subtitle: 'Angus, Brahman, Wagyu & Holstein rules',
       count: breeds.length,
       icon: BookOpen,
       color: 'from-orange-500 to-amber-600',
@@ -419,17 +417,8 @@ export default function MasterDataSettingsPage() {
       color: 'from-purple-500 to-indigo-600',
     },
     {
-      id: 'ownership',
-      number: '4',
-      title: 'Ownership & Setup',
-      subtitle: 'Data scopes (Station, Breeder, Owner)',
-      count: ownershipTypes.length,
-      icon: Globe,
-      color: 'from-blue-500 to-cyan-600',
-    },
-    {
       id: 'commercial',
-      number: '5',
+      number: '4',
       title: 'Commercial & Costing',
       subtitle: 'Currencies (USD $, KHR ៛) & fees',
       count: currencies.length,
@@ -438,7 +427,7 @@ export default function MasterDataSettingsPage() {
     },
     {
       id: 'certification',
-      number: '6',
+      number: '5',
       title: 'Certification Setup',
       subtitle: 'Pedigree & Registration passes',
       count: certificationTypes.length,
@@ -843,78 +832,7 @@ export default function MasterDataSettingsPage() {
         </Card>
       )}
 
-      {/* TAB 4: OWNERSHIP TYPES & SETUP */}
-      {activeTab === 'ownership' && (
-        <Card className="bg-white border-slate-200/90 rounded-3xl shadow-2xs overflow-hidden">
-          <CardHeader className="border-b border-slate-100 bg-slate-50/50 p-5">
-            <div className="flex items-center justify-between">
-              <div>
-                <CardTitle className="text-sm font-black text-slate-900 flex items-center gap-2">
-                  <Globe className="h-4 w-4 text-[#dc5c15]" />
-                  <span>Module 4: Ownership Classification Categories ({ownershipTypes.length})</span>
-                </CardTitle>
-                <CardDescription className="text-xs">
-                  Master ownership type categories (Farm Station, Breeder, Cow Owner, Sire Sourcing Company, Internal Company) mapping security data scopes.
-                </CardDescription>
-              </div>
-            </div>
-          </CardHeader>
-          <CardContent className="p-0">
-            <div className="overflow-x-auto">
-              <table className="w-full text-left text-xs">
-                <thead className="bg-slate-50 border-b border-slate-100 text-slate-500 font-extrabold uppercase text-[10px] tracking-wider">
-                  <tr>
-                    <th className="py-3 px-4">Media</th>
-                    <th className="py-3 px-4">Code</th>
-                    <th className="py-3 px-4">Ownership Category Name</th>
-                    <th className="py-3 px-4">Entity Scope Class</th>
-                    <th className="py-3 px-4">Description</th>
-                    <th className="py-3 px-4">Status</th>
-                    <th className="py-3 px-4 text-right">Actions</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100 font-medium">
-                  {ownershipTypes.map((ot) => (
-                    <tr key={ot.id} className="hover:bg-slate-50/80 transition-colors">
-                      <td className="py-3 px-4">
-                        {ot.imageUrl ? (
-                          <img src={ot.imageUrl} alt={ot.name} className="h-9 w-9 rounded-xl object-cover border border-slate-200" />
-                        ) : (
-                          <div className="h-9 w-9 rounded-xl bg-blue-50 border border-blue-200 text-blue-600 flex items-center justify-center font-black text-xs">
-                            {ot.code.slice(0, 2)}
-                          </div>
-                        )}
-                      </td>
-                      <td className="py-3 px-4 font-mono font-black text-slate-800">{ot.code}</td>
-                      <td className="py-3 px-4 font-black text-slate-900">{ot.name}</td>
-                      <td className="py-3 px-4 text-slate-600">{ot.category}</td>
-                      <td className="py-3 px-4 text-slate-500">{ot.description}</td>
-                      <td className="py-3 px-4">
-                        <span className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase ${ot.is_active ? 'bg-emerald-50 border border-emerald-200 text-emerald-700' : 'bg-slate-100 text-slate-500'}`}>
-                          {ot.is_active ? 'Active' : 'Inactive'}
-                        </span>
-                      </td>
-                      <td className="py-3 px-4 text-right">
-                        <div className="flex items-center justify-end gap-1">
-                          <button onClick={() => openGenericEditModal(ot)} className="p-1.5 bg-slate-100 text-slate-700 rounded-lg hover:bg-slate-200 font-bold text-[11px] flex items-center gap-1">
-                            <Edit2 className="h-3.5 w-3.5" />
-                            <span>Edit Scope</span>
-                          </button>
-                          <button onClick={() => toggleGenericStatus(ot, 'ownershipTypes')} className="p-1.5 bg-slate-100 text-slate-700 rounded-lg hover:bg-slate-200 font-bold text-[11px]">
-                            {ot.is_active ? 'Deactivate' : 'Activate'}
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </CardContent>
-        </Card>
-      )}
-
-      {/* TAB 5: COMMERCIAL & COSTING RULES */}
+      {/* TAB 4: COMMERCIAL & COSTING RULES */}
       {activeTab === 'commercial' && (
         <Card className="bg-white border-slate-200/90 rounded-3xl shadow-2xs overflow-hidden">
           <CardHeader className="border-b border-slate-100 bg-slate-50/50 p-5">
@@ -922,7 +840,7 @@ export default function MasterDataSettingsPage() {
               <div>
                 <CardTitle className="text-sm font-black text-slate-900 flex items-center gap-2">
                   <DollarSign className="h-4 w-4 text-[#dc5c15]" />
-                  <span>Module 5: Financial Currencies & Pricing Parameters ({currencies.length})</span>
+                  <span>Module 4: Financial Currencies & Pricing Parameters ({currencies.length})</span>
                 </CardTitle>
                 <CardDescription className="text-xs">
                   Approved commercial transaction currencies (US Dollar $, Khmer Riel ៛) and default pricing units.
@@ -985,7 +903,7 @@ export default function MasterDataSettingsPage() {
         </Card>
       )}
 
-      {/* TAB 6: CERTIFICATION SETUP */}
+      {/* TAB 5: CERTIFICATION SETUP */}
       {activeTab === 'certification' && (
         <Card className="bg-white border-slate-200/90 rounded-3xl shadow-2xs overflow-hidden">
           <CardHeader className="border-b border-slate-100 bg-slate-50/50 p-5">
@@ -993,7 +911,7 @@ export default function MasterDataSettingsPage() {
               <div>
                 <CardTitle className="text-sm font-black text-slate-900 flex items-center gap-2">
                   <ShieldCheck className="h-4 w-4 text-[#dc5c15]" />
-                  <span>Module 6: Pedigree & Registration Certificate Templates ({certificationTypes.length})</span>
+                  <span>Module 5: Pedigree & Registration Certificate Templates ({certificationTypes.length})</span>
                 </CardTitle>
                 <CardDescription className="text-xs">
                   Official certificate templates (Fullblood Pedigree, Sire Pass, Calf Pass, Herdbook Registration) generated by the Certificate Center.
