@@ -44,3 +44,4 @@ yarn-error.log*
 *.sql
 *.sql.gz
 *.dump
+*.docx
