@@ -399,6 +399,8 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<string, PermissionKey[]> = {
   'Admin': ALL_PERMISSIONS as PermissionKey[],
   'System Administrator': ALL_PERMISSIONS as PermissionKey[],
   'ADMIN_OPERATION': ALL_PERMISSIONS as PermissionKey[],
+  'Admin Operation': ALL_PERMISSIONS as PermissionKey[],
+  'Admin Operation Level': ALL_PERMISSIONS as PermissionKey[],
   'Breeder': [
     'dashboard.view', 'sire.view', 'dam.view', 'dam.create', 'dam.update',
     'calf.view', 'calf.create', 'calf.update',

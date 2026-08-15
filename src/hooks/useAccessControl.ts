@@ -55,8 +55,12 @@ export function useAccessControl() {
     isSuperAdmin ||
     effectiveRole === 'Admin' ||
     effectiveRole === 'System Administrator' ||
+    effectiveRole === 'Admin Operation' ||
     effectiveRole.toLowerCase().includes('admin') ||
-    ((currentUser?.userLevel || '').toLowerCase().includes('admin'));
+    effectiveRole.toLowerCase().includes('manager') ||
+    ((currentUser?.userLevel || '').toLowerCase().includes('admin')) ||
+    ((currentUser?.userLevel || '').toLowerCase().includes('operation')) ||
+    (currentUser?.permissions || []).some(p => typeof p === 'string' && (p.startsWith('user.') || p.startsWith('role.') || p.startsWith('permission.') || p === 'settings_manage'));
 
   const isBreeder =
     effectiveRole === 'Breeder' ||
