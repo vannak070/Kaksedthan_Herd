@@ -3108,12 +3108,14 @@ export class HerdbookRepository {
       }
     }
 
+    const farmLocation = [data.village, data.commune, data.district, data.province].filter(Boolean).join(', ') || data.address || null;
+
     const sql = `
       INSERT INTO customers (
         id, code, name, phone, email, address, farm_location, province, district, commune, village,
         image_url, national_id, id_front_url, id_back_url, id_verification_status, customer_type,
         notes, status, managed_by_breeder_id
-      ) VALUES ($1, $2, $3, $4, $5, $6, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19)
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20)
       RETURNING *
     `;
     const res = await query(sql, [
@@ -3123,6 +3125,7 @@ export class HerdbookRepository {
       data.phone || null,
       data.email || null,
       data.address || null,
+      farmLocation,
       data.province || null,
       data.district || null,
       data.commune || null,
