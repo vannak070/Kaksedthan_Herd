@@ -534,9 +534,20 @@ export default function UnifiedAccessControlClient({
                       </td>
                       <td className="py-3 px-4 font-bold text-purple-800">{u.userLevel}</td>
                       <td className="py-3 px-4">
-                        <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-black border uppercase ${STATUS_BADGE[u.status || 'Active']}`}>
-                          {u.status || 'Active'}
-                        </span>
+                        {((u as any).levelStatus && (u as any).levelStatus !== 'Active') ? (
+                          <div className="space-y-0.5">
+                            <span className="px-2.5 py-0.5 rounded-full text-[10px] font-black border uppercase bg-amber-50 text-amber-800 border-amber-300 block w-max" title="Parent User Level function status is disabled in system configuration">
+                              ⚠️ Level Off (Suspended)
+                            </span>
+                            <span className="text-[9.5px] text-slate-400 font-medium block">
+                              Parent level is {(u as any).levelStatus}
+                            </span>
+                          </div>
+                        ) : (
+                          <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-black border uppercase ${STATUS_BADGE[u.status || 'Active']}`}>
+                            {u.status || 'Active'}
+                          </span>
+                        )}
                       </td>
                       <td className="py-3 px-4 text-right">
                         <div className="flex items-center justify-end gap-1.5">

@@ -74,6 +74,16 @@ export async function resolveAuthenticatedUserContext(userEmail: string): Promis
     };
   }
 
+  // Check parent User Level status in user_levels table
+  const levelCheckRes = await query(`
+    SELECT status FROM user_levels
+    WHERE id = $1 OR LOWER(name) = LOWER($2) OR LOWER(code) = LOWER($2)
+    LIMIT 1
+  `, [user.user_level_id || '', user.user_level || '']);
+
+  const isLevelActive = levelCheckRes.rows.length === 0 || levelCheckRes.rows[0].status === 'Active';
+  const effectiveUserStatus = !isLevelActive ? 'Level Disabled' : (user.status || 'Active');
+
   // Fetch permissions assigned to user's role via role_permissions and user level
   const permRes = await query(`
     SELECT DISTINCT permission_key FROM (
@@ -85,16 +95,16 @@ export async function resolveAuthenticatedUserContext(userEmail: string): Promis
       SELECT ulp.permission_key
       FROM user_level_permissions ulp
       JOIN user_levels ul ON ul.id = ulp.user_level_id
-      WHERE (ul.id = $2 OR LOWER(ul.name) = LOWER($3) OR LOWER(ul.code) = LOWER($3))
+      WHERE (ul.id = $2 OR LOWER(ul.name) = LOWER($3) OR LOWER(ul.code) = LOWER($3)) AND ul.status = 'Active'
       UNION
       SELECT ulm.module_key as permission_key
       FROM user_level_modules ulm
       JOIN user_levels ul ON ul.id = ulm.user_level_id
-      WHERE (ul.id = $2 OR LOWER(ul.name) = LOWER($3) OR LOWER(ul.code) = LOWER($3)) AND ulm.is_available = true
+      WHERE (ul.id = $2 OR LOWER(ul.name) = LOWER($3) OR LOWER(ul.code) = LOWER($3)) AND ul.status = 'Active' AND ulm.is_available = true
     ) as combined_perms;
   `, [user.role || '', user.user_level_id || '', user.user_level || '']);
 
-  const effectivePermissions = permRes.rows.map(r => r.permission_key);
+  const effectivePermissions = isLevelActive ? permRes.rows.map(r => r.permission_key) : [];
 
   return {
     id: user.id,
@@ -103,7 +113,7 @@ export async function resolveAuthenticatedUserContext(userEmail: string): Promis
     role: user.role,
     userLevel: user.user_level,
     dataScope: user.data_scope || 'ASSIGNED_RECORD',
-    status: user.status || 'Active',
+    status: effectiveUserStatus,
     breederId: user.breeder_id,
     farmId: user.farm_id,
     sourcingCompanyId: user.sourcing_company_id,
@@ -115,7 +125,7 @@ export async function resolveAuthenticatedUserContext(userEmail: string): Promis
  * Checks whether a user has a specific granular permission key.
  */
 export function hasPermission(userCtx: AuthenticatedUserContext | null, permissionKey: string): boolean {
-  if (!userCtx || userCtx.status === 'Disabled') return false;
+  if (!userCtx || userCtx.status === 'Disabled' || userCtx.status === 'Level Disabled') return false;
   if (userCtx.role === 'Super Admin' || userCtx.dataScope === 'GLOBAL') return true;
 
   const keyLower = permissionKey.toLowerCase();

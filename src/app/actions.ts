@@ -1702,9 +1702,22 @@ export async function getUsersAction() {
   try {
     const { query } = await import('@/config/database');
     const res = await query(`
-      SELECT id, name, email, role, user_level as "userLevel", data_scope as "dataScope", status, farm_location as "farmLocation", company_name as "companyName"
-      FROM users
-      ORDER BY created_at DESC
+      SELECT 
+        u.id, 
+        u.name, 
+        u.email, 
+        u.role, 
+        u.user_level as "userLevel", 
+        u.user_level_id as "userLevelId",
+        u.data_scope as "dataScope", 
+        u.status, 
+        u.farm_location as "farmLocation", 
+        u.company_name as "companyName",
+        COALESCE(ul.status, 'Active') as "levelStatus",
+        ul.code as "levelCode"
+      FROM users u
+      LEFT JOIN user_levels ul ON (ul.id = u.user_level_id OR LOWER(ul.name) = LOWER(u.user_level) OR LOWER(ul.code) = LOWER(u.user_level))
+      ORDER BY u.created_at DESC
     `);
     return { success: true, data: res.rows };
   } catch (error: any) {
