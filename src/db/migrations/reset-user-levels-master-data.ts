@@ -79,12 +79,12 @@ async function resetAccessControlAndMasterData() {
 
     // Seed default Master Data Breed Configurations
     await client.query(`
-      INSERT INTO breed_configurations (id, code, name, category, description, status, is_system)
+      INSERT INTO breed_configurations (id, code, name, category, description, status)
       VALUES 
-        ('BC-01', 'ANGUS', 'Aberdeen Angus', 'BEEF', 'High-quality beef cattle breed with dark coat and strong growth rate.', 'Active', true),
-        ('BC-02', 'BRAHMAN', 'American Brahman', 'BEEF', 'Heat and parasite resistant beef cattle breed adapted for tropical climates.', 'Active', true),
-        ('BC-03', 'HOLSTEIN', 'Holstein Friesian', 'DAIRY', 'High-yielding dairy cattle breed with distinctive black and white markings.', 'Active', true),
-        ('BC-04', 'WAGYU', 'Japanese Wagyu', 'BEEF', 'Premium beef cattle breed known for intense intramuscular marbling.', 'Active', true)
+        ('BC-01', 'ANGUS', 'Aberdeen Angus', 'BEEF', 'High-quality beef cattle breed with dark coat and strong growth rate.', 'Active'),
+        ('BC-02', 'BRAHMAN', 'American Brahman', 'BEEF', 'Heat and parasite resistant beef cattle breed adapted for tropical climates.', 'Active'),
+        ('BC-03', 'HOLSTEIN', 'Holstein Friesian', 'DAIRY', 'High-yielding dairy cattle breed with distinctive black and white markings.', 'Active'),
+        ('BC-04', 'WAGYU', 'Japanese Wagyu', 'BEEF', 'Premium beef cattle breed known for intense intramuscular marbling.', 'Active')
       ON CONFLICT (id) DO NOTHING;
     `);
 
