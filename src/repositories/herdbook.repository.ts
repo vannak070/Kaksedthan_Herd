@@ -3716,6 +3716,13 @@ export class HerdbookRepository {
         created_at  TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
         updated_at  TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
       );
+
+      ALTER TABLE breed_configurations ADD COLUMN IF NOT EXISTS description TEXT;
+      ALTER TABLE breed_configurations ADD COLUMN IF NOT EXISTS image_url TEXT;
+      ALTER TABLE breed_configurations ADD COLUMN IF NOT EXISTS category VARCHAR(50) DEFAULT 'Cattle';
+      ALTER TABLE breed_configurations ADD COLUMN IF NOT EXISTS origin VARCHAR(100);
+      ALTER TABLE breed_configurations ADD COLUMN IF NOT EXISTS sort_order INTEGER DEFAULT 0;
+      ALTER TABLE breed_configurations ADD COLUMN IF NOT EXISTS is_active BOOLEAN DEFAULT true;
     `);
     const id = `BRD-${Date.now().toString().slice(-6)}`;
     const code = (data.code || data.name.trim().toUpperCase().replace(/[^A-Z0-9]+/g, '_')).slice(0, 50);

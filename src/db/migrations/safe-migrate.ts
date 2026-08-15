@@ -204,7 +204,10 @@ async function safeMigrate() {
       );
       ALTER TABLE breed_configurations ADD COLUMN IF NOT EXISTS category VARCHAR(50) DEFAULT 'Cattle';
       ALTER TABLE breed_configurations ADD COLUMN IF NOT EXISTS origin VARCHAR(100);
+      ALTER TABLE breed_configurations ADD COLUMN IF NOT EXISTS description TEXT;
+      ALTER TABLE breed_configurations ADD COLUMN IF NOT EXISTS image_url TEXT;
       ALTER TABLE breed_configurations ADD COLUMN IF NOT EXISTS sort_order INTEGER DEFAULT 0;
+      ALTER TABLE breed_configurations ADD COLUMN IF NOT EXISTS is_active BOOLEAN DEFAULT true;
       ALTER TABLE breed_configurations ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP;
       CREATE UNIQUE INDEX IF NOT EXISTS idx_breed_configs_code ON breed_configurations(code);
 
