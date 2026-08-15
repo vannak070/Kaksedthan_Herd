@@ -394,7 +394,11 @@ export const PERMISSION_MODULES: PermissionCategory[] = [
 // ─── DEFAULT ROLE PERMISSIONS (new standardized keys) ────────────────────────
 export const DEFAULT_ROLE_PERMISSIONS: Record<string, PermissionKey[]> = {
   'Super Admin': ALL_PERMISSIONS as PermissionKey[],
+  'Super Administrator': ALL_PERMISSIONS as PermissionKey[],
+  'Super Admin Account': ALL_PERMISSIONS as PermissionKey[],
   'Admin': ALL_PERMISSIONS as PermissionKey[],
+  'System Administrator': ALL_PERMISSIONS as PermissionKey[],
+  'ADMIN_OPERATION': ALL_PERMISSIONS as PermissionKey[],
   'Breeder': [
     'dashboard.view', 'sire.view', 'dam.view', 'dam.create', 'dam.update',
     'calf.view', 'calf.create', 'calf.update',

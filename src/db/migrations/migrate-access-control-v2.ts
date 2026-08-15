@@ -184,7 +184,32 @@ export async function migrateAccessControlV2() {
       `, [permKey]);
     }
 
-    // 11. Create Performance Indexes
+    // 11. Seed Super Admin User Level & Link Super Admin Account
+    await client.query(`
+      INSERT INTO user_levels (id, code, name, description, purpose, status, sort_order, level_type)
+      VALUES ('LEVEL-01', 'SYSTEM_ADMIN', 'Super Admin Account', 'Full system management and security authority', 'System Administration', 'Active', 1, 'SYSTEM_ACCOUNT')
+      ON CONFLICT (id) DO UPDATE SET name = EXCLUDED.name, level_type = EXCLUDED.level_type;
+    `);
+
+    await client.query(`
+      INSERT INTO user_roles (user_id, role_id)
+      VALUES ('USR-ADMIN-KAKSEDTHAN', 'R-01')
+      ON CONFLICT DO NOTHING;
+    `);
+
+    const allPermsJson = JSON.stringify(allPerms);
+    await client.query(`
+      UPDATE users 
+      SET role = 'Super Admin',
+          user_level = 'Super Admin Account',
+          user_level_id = 'LEVEL-01',
+          data_scope = 'GLOBAL',
+          permissions = $1::jsonb,
+          status = 'Active'
+      WHERE email IN ('admin@kaksedthan.com', 'vannak@snrfarm.com') OR id = 'USR-ADMIN-KAKSEDTHAN';
+    `, [allPermsJson]);
+
+    // 12. Create Performance Indexes
     await client.query(`CREATE INDEX IF NOT EXISTS idx_role_permissions_role ON role_permissions(role_id);`);
     await client.query(`CREATE INDEX IF NOT EXISTS idx_user_roles_user ON user_roles(user_id);`);
     await client.query(`CREATE INDEX IF NOT EXISTS idx_users_user_level ON users(user_level_id);`);

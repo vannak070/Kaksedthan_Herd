@@ -45,12 +45,18 @@ export function useAccessControl() {
   const isSuperAdmin =
     effectiveRole === 'Super Admin' ||
     effectiveRole === 'Super Administrator' ||
-    currentUser?.userLevel === 'Super Admin';
+    effectiveRole === 'Super Admin Account' ||
+    currentUser?.userLevel === 'Super Admin' ||
+    currentUser?.userLevel === 'Super Admin Account' ||
+    currentUser?.email === 'admin@kaksedthan.com' ||
+    currentUser?.email === 'vannak@snrfarm.com';
 
   const isAdmin =
     isSuperAdmin ||
     effectiveRole === 'Admin' ||
-    effectiveRole === 'System Administrator';
+    effectiveRole === 'System Administrator' ||
+    effectiveRole.toLowerCase().includes('admin') ||
+    ((currentUser?.userLevel || '').toLowerCase().includes('admin'));
 
   const isBreeder =
     effectiveRole === 'Breeder' ||
