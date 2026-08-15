@@ -560,14 +560,6 @@ export default function UnifiedAccessControlClient({
                             <span>Edit</span>
                           </button>
                           <button
-                            onClick={() => setSelectedUserForDetails(u)}
-                            className="px-3 py-1.5 rounded-xl bg-purple-50 text-purple-700 hover:bg-purple-100 border border-purple-200 font-bold text-[11px] transition-all cursor-pointer flex items-center gap-1.5"
-                            title="View Details & Permissions"
-                          >
-                            <Eye className="h-3.5 w-3.5" />
-                            <span>Details</span>
-                          </button>
-                          <button
                             disabled={loadingId === u.id || u.email === 'admin@kaksedthan.com' || u.email === 'vannak@snrfarm.com'}
                             onClick={() => setUserConfirmState({ open: true, user: u })}
                             className="p-1.5 rounded-xl bg-rose-50 hover:bg-rose-100 text-rose-600 border border-rose-200 font-bold transition-all cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
